@@ -134,6 +134,12 @@ class TextBlock(BaseModel):
     content: str = Field(description="The text content (for equations, use LaTeX syntax)")
     style: Optional[str] = Field(default=None, description="CSS style hints (e.g., 'bold', 'italic', 'centered')")
     is_display_math: Optional[bool] = Field(default=False, description="For equations: True for display mode (\\[...\\]), False for inline (\\(...\\))")
+    # NEW: List hierarchy support
+    list_level: Optional[int] = Field(default=1, description="Nesting level for list items (1=top level, 2=nested, etc.)")
+    # NEW: Equation numbering support
+    equation_number: Optional[str] = Field(default=None, description="Equation number label if present (e.g., '(1)', '(2.3)')")
+    # NEW: Text direction for mixed RTL/LTR content
+    text_direction: Optional[Literal["ltr", "rtl", "auto"]] = Field(default="auto", description="Text direction: ltr, rtl, or auto")
     # Bounding box as percentages of page dimensions (0-100) - optional for backward compatibility
     bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage from top of page (0-100)")
     bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage from left of page (0-100)")
@@ -169,6 +175,8 @@ class PageContent(BaseModel):
     has_multi_column: bool = Field(default=False, description="Whether the page has multi-column layout")
     column_count: Optional[int] = Field(default=None, description="Number of columns if multi-column (2, 3, etc.)")
     reading_order_notes: Optional[str] = Field(default=None, description="Notes about reading order if complex")
+    # NEW: Primary text direction for the page
+    page_direction: Optional[Literal["ltr", "rtl"]] = Field(default="ltr", description="Primary text direction: ltr or rtl")
 
 
 class DocumentMetadata(BaseModel):
@@ -1348,11 +1356,16 @@ class PDFProcessor:
 1. The total number of pages
 2. Document metadata (title, author, language, document type)
 
-Do NOT extract page content, just count pages and identify metadata."""
+Do NOT extract page content, just count pages and identify metadata.
+
+IMPORTANT:
+- If unable to determine page count, return -1
+- If PDF is encrypted or corrupted, set total_pages to -1 and note in document_type"""
 
         # Try multiple times with different temperatures if JSON parsing fails
         # Start with low temperature for accurate transcription, increase slightly if it fails
-        temperatures = [0.3, 0.5, 0.7, 1.0]
+        # Temperature ceiling lowered to 0.7 (metadata should be factual, not creative)
+        temperatures = [0.3, 0.5, 0.7]
         last_error = None
         
         for attempt, temperature in enumerate(temperatures, 1):
@@ -1497,25 +1510,32 @@ For each page in this range:
      * bbox_width: width of the text block (REQUIRED, 0-100)
      * bbox_height: height of the text block (REQUIRED, 0-100)
    - These coordinates are MANDATORY for proper rendering, not optional
-3. For MATHEMATICAL EQUATIONS:
+5. For MATHEMATICAL EQUATIONS:
    - CRITICAL: TRANSCRIBE equations EXACTLY as they appear - do NOT solve, simplify, or manipulate them
    - Extract the equation as it is written in the PDF, preserving all notation and structure
    - Convert to LaTeX syntax in an 'equation' block
    - For inline equations: set is_display_math=false
    - For display equations (centered, standalone): set is_display_math=true
-   - Use standard LaTeX notation: \\frac{{}}{{}}, \\sum, \\int, \\sqrt{{}}, etc.
+   - For NUMBERED EQUATIONS (e.g., labeled (1), (2), (3)): Extract number in equation_number field
+   - Use standard LaTeX notation: \\frac{{}}{{}}, \\sum, \\int, \\sqrt{{}}, \\text{{}}, ^{{}}, _{{}}, etc.
+   - For superscripts/subscripts: Use ^{{}} and _{{}} syntax (e.g., x^{{2}}, H_{{2}}O)
    - Include bbox coordinates for equation blocks
    - Example: If PDF shows "س = د/ط" transcribe it as-is, don't simplify or solve
-4. For NUMBERS AND NUMERALS:
+6. For NUMBERS AND NUMERALS:
    - CRITICAL: Preserve the EXACT numeral system from the PDF
    - If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), transcribe them EXACTLY - do NOT convert to Western numerals (0123456789)
    - If PDF uses Western numerals (0123456789), keep them as Western numerals
    - Example: "٢.٥٠" must stay "٢.٥٠", NOT "2.50"
    - Example: "١٠.٠٠" must stay "١٠.٠٠", NOT "10.00"
    - This applies to ALL content: tables, text, equations, captions, page numbers
-5. For TABLES: OCR all text content and structure it with headers and rows. Do NOT treat tables as images.
+7. For LISTS (numbered, bulleted, nested):
+   - For NESTED LISTS: Set list_level field (1=top level, 2=first nesting, 3=deeper nesting, etc.)
+   - Preserve hierarchy and proper indentation structure
+8. For TABLES: OCR all text content and structure it with headers and rows. Do NOT treat tables as images.
+   - For MERGED CELLS: Set row_span and col_span values (default is 1 for regular cells)
+   - For table captions: Extract separately from table content
    - Provide BOUNDING BOX coordinates (bbox_top, bbox_left, bbox_width, bbox_height) as percentages (0-100) of the page.
-6. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos, logos):
+9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
    - Identify the image_type (chart, graph, diagram, figure, photo, logo, illustration, other)
    - Provide a description
    - Provide BOUNDING BOX coordinates as percentages (0-100) of the page:
@@ -1523,16 +1543,25 @@ For each page in this range:
      * bbox_left: distance from left of page  
      * bbox_width: width of the image
      * bbox_height: height of the image
-7. For MULTI-COLUMN LAYOUTS:
+10. For MULTI-COLUMN LAYOUTS:
    - Set has_multi_column=true and column_count (2 or 3)
-   - CRITICAL: Extract text in correct READING ORDER (top-to-bottom in first column, then second column)
+   - CRITICAL: For LTR documents, extract columns LEFT-TO-RIGHT (complete column 1, then column 2, etc.)
+   - CRITICAL: For RTL documents, extract columns RIGHT-TO-LEFT (complete rightmost column first)
    - Add reading_order_notes if the layout is complex or unusual
-8. Preserve natural reading flow
+11. For TEXT DIRECTION:
+   - Set page_direction='rtl' for Arabic/Hebrew pages, 'ltr' for English/Western
+   - For mixed RTL/LTR text blocks, set text_direction='rtl' or 'ltr' on individual text blocks
+12. For WATERMARKS and BACKGROUND TEXT:
+   - Ignore decorative watermarks (e.g., "DRAFT", "CONFIDENTIAL")
+   - Extract meaningful background text only if it's actual content
+13. Preserve natural reading flow and content accuracy
 
 REMEMBER: 
 - ALL elements (text blocks, images, tables) need bbox coordinates for proper ordering
 - Tables = OCR the text AND provide bounding box coordinates
-- Charts/Graphs/Figures = provide bounding box for extraction"""
+- Charts/Graphs/Figures = provide bounding box for extraction
+- Preserve numeral systems EXACTLY as they appear
+- TRANSCRIBE equations exactly, don't solve or simplify them"""
 
         for attempt in range(self.config.max_retries):
             try:
@@ -1547,12 +1576,19 @@ REMEMBER:
                         response_mime_type="application/json",
                         response_json_schema=ChunkExtraction.model_json_schema(),
                         system_instruction=(
-                            f"You are extracting pages {start_page}-{end_page} only. "
+                            f"You are an expert OCR and document analysis system extracting pages {start_page}-{end_page} only. "
                             "Extract page headers and footers (usually contain page numbers, titles, or citations). "
                             "OCR all text content including tables. "
                             "PRESERVE NUMERAL SYSTEMS: If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), keep them exactly - do NOT convert to Western numerals (0123456789). "
                             "TRANSCRIBE mathematical equations EXACTLY as written - do NOT solve, simplify, or manipulate them. "
                             "Extract equations as LaTeX in 'equation' blocks preserving the exact notation from the PDF. "
+                            "For SUPERSCRIPTS/SUBSCRIPTS: Use ^{} and _{} in LaTeX (e.g., x^{2}, H_{2}O). "
+                            "For NUMBERED EQUATIONS: Extract equation number in equation_number field. "
+                            "For NESTED LISTS: Set list_level (1=top, 2=nested, etc.) to preserve hierarchy. "
+                            "For MERGED TABLE CELLS: Set row_span and col_span appropriately. "
+                            "For MULTI-COLUMN LAYOUTS in LTR docs: Extract left-to-right column order. For RTL docs: right-to-left. "
+                            "For MIXED RTL/LTR TEXT: Set text_direction on individual text blocks. "
+                            "For WATERMARKS: Ignore decorative watermarks like 'DRAFT', 'CONFIDENTIAL'. "
                             "For EVERY element (text blocks, tables, images), provide bbox coordinates (top, left, width, height) as percentages. "
                             "CRITICAL BBOX RULES: ALWAYS measure bbox_left from the PHYSICAL LEFT EDGE of the page (0% = left edge, 100% = right edge). "
                             "This applies regardless of text direction (RTL or LTR). For Arabic/Hebrew RTL text that appears on the right side of the page, bbox_left should be 70-90%, NOT 10-30%. "
@@ -1737,30 +1773,47 @@ Instructions:
 1. Process EVERY page from start to finish - do not skip any pages
 2. Extract the HEADER text if present (usually at the top of the page - may contain page numbers, chapter titles, section names)
 3. Extract the FOOTER text if present (usually at the bottom of the page - may contain page numbers, citations, document info)
-4. For MULTI-COLUMN LAYOUTS: Extract text in proper reading order (complete first column top-to-bottom, then next column)
-5. CRITICAL: For EVERY text block, table, and image, you MUST provide bbox coordinates (bbox_top, bbox_left, bbox_width, bbox_height) as percentages (0-100). These are MANDATORY, not optional.
-6. Identify semantic structure: headings (with levels), paragraphs, lists, equations
-7. For MATHEMATICAL EQUATIONS:
+4. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
+   - CRITICAL: For EVERY text block, you MUST provide bbox coordinates as percentages (0-100)
+5. For MATHEMATICAL EQUATIONS:
    - CRITICAL: TRANSCRIBE equations EXACTLY as they appear - do NOT solve, simplify, or manipulate them
-   - Extract the equation as it is written in the PDF, preserving all notation and structure
    - Convert to LaTeX syntax in 'equation' blocks
-   - Use is_display_math=true for display equations, false for inline
-   - Standard LaTeX: \\frac{}{}, \\sum, \\int, \\sqrt{}, etc.
-   - Example: If PDF shows "س = د/ط" transcribe it as-is, don't calculate or simplify
-8. For TABLES: OCR all text content and structure with headers and rows. Do NOT treat tables as images.
-9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos, logos):
-   - Identify the image_type
-   - Provide a description
-   - Provide BOUNDING BOX coordinates as percentages (0-100) of the page:
-     * bbox_top: distance from top of page
-     * bbox_left: distance from left of page  
-     * bbox_width: width of the image
-     * bbox_height: height of the image
-10. For multi-column pages: set has_multi_column=true, column_count, and add reading_order_notes if needed
-11. OCR all text from scanned pages accurately
-12. Detect document metadata: title, author, language, document type
+   - For inline equations: set is_display_math=false
+   - For display equations: set is_display_math=true
+   - For NUMBERED EQUATIONS: Extract number in equation_number field
+   - Use LaTeX notation: \\frac{{}}{{}}, \\sum, \\int, \\sqrt{{}}, ^{{}}, _{{}}, etc.
+   - Example: If PDF shows "س = د/ط" transcribe it as-is, don't solve
+6. For NUMBERS AND NUMERALS:
+   - CRITICAL: Preserve EXACT numeral system from PDF
+   - If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), keep them EXACTLY
+   - Do NOT convert to Western numerals (0123456789)
+7. For LISTS (numbered, bulleted, nested):
+   - For NESTED LISTS: Set list_level field (1=top, 2=nested, etc.)
+   - Preserve hierarchy structure
+8. For TABLES: OCR all text content. Do NOT treat tables as images.
+   - For MERGED CELLS: Set row_span and col_span values
+   - For table captions: Extract separately
+   - Provide bbox coordinates
+9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
+   - Identify image_type and provide description
+   - Provide bbox coordinates as percentages (0-100)
+10. For MULTI-COLUMN LAYOUTS:
+    - Set has_multi_column=true and column_count
+    - For LTR docs: Extract columns LEFT-TO-RIGHT
+    - For RTL docs: Extract columns RIGHT-TO-LEFT
+    - Add reading_order_notes if complex
+11. For TEXT DIRECTION:
+    - Set page_direction='rtl' for Arabic/Hebrew, 'ltr' for Western
+    - For mixed RTL/LTR: Set text_direction on individual blocks
+12. For WATERMARKS: Ignore decorative watermarks
+13. OCR all scanned text accurately
+14. Detect document metadata: title, author, language, document type
 
-REMEMBER: Tables = OCR the text. Charts/Graphs/Figures = provide bounding box for image extraction."""
+REMEMBER:
+- Tables = OCR the text. Charts/Graphs = provide bbox for extraction
+- Preserve numeral systems EXACTLY
+- TRANSCRIBE equations exactly, don't solve them
+- If document is too large for context, prioritize first pages and set truncated=true"""
 
         for attempt in range(self.config.max_retries):
             try:
@@ -1775,12 +1828,20 @@ REMEMBER: Tables = OCR the text. Charts/Graphs/Figures = provide bounding box fo
                         response_mime_type="application/json",
                         response_json_schema=DocumentStructure.model_json_schema(),
                         system_instruction=(
-                            "You are an expert document analysis system. "
+                            "You are an expert OCR and document analysis system. "
                             "Extract complete, accurate structured data from documents. "
                             "Extract page headers and footers (usually contain page numbers, titles, or citations). "
+                            "OCR all text content including tables. "
                             "PRESERVE NUMERAL SYSTEMS: If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), keep them exactly - do NOT convert to Western numerals (0123456789). "
                             "TRANSCRIBE mathematical equations EXACTLY as written - do NOT solve, simplify, or manipulate them. "
                             "Extract equations as LaTeX in 'equation' blocks preserving the exact notation from the PDF. "
+                            "For SUPERSCRIPTS/SUBSCRIPTS: Use ^{} and _{} in LaTeX (e.g., x^{2}, H_{2}O). "
+                            "For NUMBERED EQUATIONS: Extract equation number in equation_number field. "
+                            "For NESTED LISTS: Set list_level (1=top, 2=nested, etc.) to preserve hierarchy. "
+                            "For MERGED TABLE CELLS: Set row_span and col_span appropriately. "
+                            "For MULTI-COLUMN LAYOUTS in LTR docs: Extract left-to-right column order. For RTL docs: right-to-left. "
+                            "For MIXED RTL/LTR TEXT: Set text_direction on individual text blocks. "
+                            "For WATERMARKS: Ignore decorative watermarks like 'DRAFT', 'CONFIDENTIAL'. "
                             "For ALL elements (text blocks, tables, images), provide bbox coordinates (top, left, width, height) as percentages. "
                             "CRITICAL BBOX RULES: ALWAYS measure bbox_left from the PHYSICAL LEFT EDGE of the page (0% = left edge, 100% = right edge). "
                             "This applies regardless of text direction (RTL or LTR). For Arabic/Hebrew RTL text that appears on the right side of the page, bbox_left should be 70-90%, NOT 10-30%. "
@@ -1816,8 +1877,8 @@ REMEMBER: Tables = OCR the text. Charts/Graphs/Figures = provide bounding box fo
                     raise RuntimeError(f"Failed to extract content after {self.config.max_retries} attempts") from e
     
     def _direct_html_extraction(self, uploaded_file: types.File) -> str:
-        """Request HTML directly from Gemini (for comparison/testing)."""
-        logger.info("Requesting HTML directly from Gemini")
+        """Request HTML directly from Gemini (fallback method when structured extraction fails)."""
+        logger.info("Using direct HTML extraction as fallback")
         
         prompt = """Convert this entire PDF document into a single self-contained HTML document.
 
@@ -1825,27 +1886,71 @@ Requirements:
 - Process ALL pages of the document completely - do not skip any
 - Output ONLY raw HTML (no Markdown fences, no explanations)
 - Preserve layout: headings, paragraphs, lists, tables with proper HTML tags
-- Maintain correct reading order for multi-column layouts  
-- Include inline CSS in a <style> tag for formatting
+- Maintain correct reading order for multi-column layouts
+- For MATHEMATICAL EQUATIONS: Preserve as LaTeX wrapped in <span class="equation">LaTeX code</span>
+  * Use LaTeX syntax: \\frac{}{}, \\sum, \\int, \\sqrt{}, ^{}, _{}, etc.
+  * TRANSCRIBE equations EXACTLY - do NOT solve, simplify, or manipulate them
+  * For display equations: wrap in <div class="equation">LaTeX</div>
+- For RTL text (Arabic, Hebrew): Add dir="rtl" to containing element (<p dir="rtl">, <div dir="rtl">)
+- PRESERVE NUMERAL SYSTEMS: Keep Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) exactly - do NOT convert to Western numerals
+- Include CSS in <head><style>...</style> for formatting and layout
+- Use .page-break { page-break-after: always; } for page breaks
+- Add <div class="page-break"></div> between pages
+- Use semantic HTML5 elements: <article>, <section>, <header>, <footer>, <figure>, <table>
 - OCR all scanned content accurately
-- Add page breaks between pages using CSS
-- Use semantic HTML5 elements where appropriate"""
+- Preserve all content, do not omit any text or tables"""
 
-        response = self.client.models.generate_content(
-            model=self.config.model,
-            contents=[uploaded_file, prompt],
-            config=types.GenerateContentConfig(
-                response_mime_type="text/plain",
-                system_instruction=(
-                    "You are an expert document transcription assistant. "
-                    "Convert documents to clean, semantic HTML preserving all content."
-                ),
-                media_resolution=self._get_media_resolution(),
-                max_output_tokens=self.config.max_output_tokens,
-            ),
-        )
+        # Use retry loop with temperature progression like other methods
+        for attempt in range(self.config.max_retries):
+            try:
+                # Start with low temperature for accurate transcription
+                temperature = 0.3 + (attempt * 0.2)  # 0.3 -> 0.5 -> 0.7 on retries
+                logger.info(f"Direct HTML extraction (attempt {attempt + 1}, temperature={temperature})")
+                
+                response = self.client.models.generate_content(
+                    model=self.config.model,
+                    contents=[uploaded_file, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="text/plain",
+                        system_instruction=(
+                            "You are an expert document transcription assistant. "
+                            "Convert documents to clean, semantic HTML5 preserving ALL content accurately. "
+                            "PRESERVE NUMERAL SYSTEMS: Keep Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) exactly - do NOT convert to Western numerals (0123456789). "
+                            "For EQUATIONS: Wrap in <span class=\"equation\">LaTeX</span> or <div class=\"equation\">LaTeX</div>. "
+                            "TRANSCRIBE equations EXACTLY - do NOT solve or simplify them. "
+                            "For RTL text: Use <p dir=\"rtl\">, <div dir=\"rtl\">, or <span dir=\"rtl\"> attributes. "
+                            "Use semantic elements: <article>, <section>, <header>, <footer>, <figure>, <table>. "
+                            "Include <style> tag in <head> with CSS for layout and formatting. "
+                            "Add CSS: .page-break { page-break-after: always; } and use <div class=\"page-break\"></div> between pages. "
+                            "Ensure proper HTML escaping of special characters. "
+                            "Be accurate and thorough - preserve all content."
+                        ),
+                        media_resolution=self._get_media_resolution(),
+                        max_output_tokens=self.config.max_output_tokens,
+                        temperature=temperature,
+                    ),
+                )
+                
+                html_content = response.text or ""
+                if not html_content.strip():
+                    raise ValueError("Empty HTML response from Gemini")
+                
+                logger.info(f"Direct HTML extraction successful ({len(html_content)} chars)")
+                return html_content
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Direct HTML attempt {attempt + 1} failed: {error_msg[:200]}")
+                
+                if attempt < self.config.max_retries - 1:
+                    delay = self.config.retry_delay * (attempt + 1)
+                    logger.info(f"Retrying in {delay}s with higher temperature...")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"All {self.config.max_retries} direct HTML attempts failed")
+                    raise RuntimeError(f"Direct HTML extraction failed after {self.config.max_retries} attempts") from e
         
-        return response.text or ""
+        return ""
     
     def process(self, pdf_path: str, output_path: Optional[str] = None) -> dict:
         """
