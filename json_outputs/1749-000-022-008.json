@@ -1,0 +1,2857 @@
+{
+  "metadata": {
+    "title": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+    "author": "أ. كلتوم محمد ابوراس، أ. ليلى علي القرازي، أ. منال عبد الكريم جليطة",
+    "total_pages": 23,
+    "language": "Arabic",
+    "document_type": "article",
+    "is_scanned": false
+  },
+  "pages": [
+    {
+      "page_number": 1,
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "المعادالت التفاضلية الجزئية وتطبيقاتها",
+          "style": "centered",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "أ. كلتوم محمد ابوراس أ. ليلى علي القرازي أ. منال عبد الكريم جليطة",
+          "style": "centered",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "كلية التقنية الهندسية - جنزور",
+          "style": "centered",
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "ملخص-:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "في هذا البحث قمنا بتعريف المعادلة التفاضلية الجزئية وكيفية استنتاجها وتصنيفها والتعرف على الحلول الخاصة والعامة لهذه المعادالت وكذلك طرق حل هذه المعادالت كفصل المتغيرات وسالسل فوريير وتحويل البالس ودوال لجندر التفاضلية والطرائق العددية والمعادالت التكاملية وتحويالتها وكذلك عرفنا القيم الحدية التي لها أهمية كبيرة عند الحل، وكذلك قمنا بسرد تطبيقات للمعادالت التفاضلية الجزئية المشهورة التي لها أهمية كبيرة في شتى العلوم.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "المقدمة-:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "تعد المعادالت التفاضلية الجزئية منشأ أوسع وأعم من منشأ المعادالت التفاضلية العادية ومن هذه المعادالت الجزئية ما ينتج عن حل مسائل ميكانيكية وهندسية وفيزيائية بحيث أصبحنا نجدها في كل فرع من فروع العلوم هذا وقد تشبعت هذه المعادالت بشكل خاص في جميع فروع الفيزياء لتشكل فرعا مهما هو المعادالت الرياضية الفيزيائية التي من أبرز أنماطها الرئيسية المعادلة التفاضلية الجزئية الزائدة والناقصية والمكافئة.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "أهداف البحث:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "تهدف هذه الورقة إلى التعرف على مفهوم المعادلة التفاضلية الجزئية وطرق حل هذا النوع من المعادالت التفاضلية والمعنى الهندسي لهذه الحلول سواء كان عام أو خاص وكيف يتم تصنيف هذه المعادالت والتعرف على التطبيقات الرياضية الفيزيائية للمعادالت التفاضلية الجزئية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "أهمية البحث:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "هذه الورقة البحثية ليس مرجعا نظريا من أجل المتخصصين في مجاالت الرياضيات المختلفة ولكن أعدت لتحقيق الآتي:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "1. أن يتوفر للطالب المتخصص في مجاالت العلوم النظرية والتطبيقية وخاصة طلبة الرياضيات والفيزياء تفهم معقول وبأسلوب سهل وبسيط للمعادالت التفاضلية الجزئية حيث استخدمنا الأمثلة والتطبيقات للتوضيح.",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "المعادالت التفاضلية الجزئية وتطبيقاتها\nأ. كلتوم محمد ابوراس أ. ليلى علي القرازي أ. منال عبد الكريم جليطة\nكلية التقنية الهندسية - جنزور\nملخص-:\nفي هذا البحث قمنا بتعريف المعادلة التفاضلية الجزئية وكيفية استنتاجها وتصنيفها والتعرف على الحلول الخاصة والعامة لهذه المعادالت وكذلك طرق حل هذه المعادالت كفصل المتغيرات وسالسل فوريير وتحويل البالس ودوال لجندر التفاضلية والطرائق العددية والمعادالت التكاملية وتحويالتها وكذلك عرفنا القيم الحدية التي لها أهمية كبيرة عند الحل، وكذلك قمنا بسرد تطبيقات للمعادالت التفاضلية الجزئية المشهورة التي لها أهمية كبيرة في شتى العلوم.\nالمقدمة-:\nتعد المعادالت التفاضلية الجزئية منشأ أوسع وأعم من منشأ المعادالت التفاضلية العادية ومن هذه المعادالت الجزئية ما ينتج عن حل مسائل ميكانيكية وهندسية وفيزيائية بحيث أصبحنا نجدها في كل فرع من فروع العلوم هذا وقد تشبعت هذه المعادالت بشكل خاص في جميع فروع الفيزياء لتشكل فرعا مهما هو المعادالت الرياضية الفيزيائية التي من أبرز أنماطها الرئيسية المعادلة التفاضلية الجزئية الزائدة والناقصية والمكافئة.\nأهداف البحث:\nتهدف هذه الورقة إلى التعرف على مفهوم المعادلة التفاضلية الجزئية وطرق حل هذا النوع من المعادالت التفاضلية والمعنى الهندسي لهذه الحلول سواء كان عام أو خاص وكيف يتم تصنيف هذه المعادالت والتعرف على التطبيقات الرياضية الفيزيائية للمعادالت التفاضلية الجزئية.\nأهمية البحث:\nهذه الورقة البحثية ليس مرجعا نظريا من أجل المتخصصين في مجاالت الرياضيات المختلفة ولكن أعدت لتحقيق الآتي:\n1. أن يتوفر للطالب المتخصص في مجاالت العلوم النظرية والتطبيقية وخاصة طلبة الرياضيات والفيزياء تفهم معقول وبأسلوب سهل وبسيط للمعادالت التفاضلية الجزئية حيث استخدمنا الأمثلة والتطبيقات للتوضيح.",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 2,
+      "text_blocks": [
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "2. أن نبين للطالب كيف تكون المعادالت التفاضلية الجزئية مفيدة في حل أنواع عديدة من المسائل وخاصة أن يعرف الطالب الآتي:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "أ) كيف يترجم المسائل إلى لغة المعادالت التفاضلية الجزئية أي الصيغة الرياضية لهذه المسائل.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "ب) حل المعادالت التفاضلية الجزئية الناتجة والخاضعة لشروط معطاة كالشروط الحدية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "ج) تفسير الحلول المتحصل عليها.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "3. تقديم عدد بسيط من طرق حل المعادالت التفاضلية الجزئية والتي نعرف أنها يمكن أن تطبق في مجموعات واسعة من الحاالت.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "4. فتح المجال أيضا أمام الطالب الذي يرغب في التعرف على طرق وأفكار أكثر تقدما أو مسائل وتطبيقات وأساليب أكثر تعقيدا وذلك من خالل مسائل وتطبيقات تندرج في صعوبتها وعمقها النظري.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "5. التعرف على طرق تصنيف المعادالت التفاضلية الجزئية وكيفية استخدامها في تطبيقات رياضية وفيزيائية واالستفادة منها في هذا المجال.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "مشكلة البحث:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "1. التعرف على المعادالت التفاضلية الجزئية وطرق حلها.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "2. ربط العلوم الرياضية بالفيزيائية باستخدام التطبيقات وحل المسائل باستخدام المعادالت التفاضلية الجزئية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "حدود البحث:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "1. بيان أهمية المعادالت التفاضلية الجزئية في حل الكثير من المسائل المعقدة.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "2. كيفية استخدام المعادالت التفاضلية الجزئية في حل بعض المسائل الرياضية الفيزيائية وتطبيقاتها.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "المعادالت التفاضلية الجزئية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "المعادالت التفاضلية الجزئية: هي معادلة تحتوي على دالة غير معلومة في متغيرين أو أكثر ومشتقاتها الجزئية بالنسبة إلى هذه المتغيرات. بمعنى أن المعادلة التفاضلية الجزئية تتضمن على متغير تابع واحد وأكثر من متغير مستقل وتعرف كذلك على أنها معادالت تفاضلية تحتوي على دالة واحدة وأكثر من الدوال المجهولة ومشتقاتها الجزئية وتكون على الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "f(x, y, u, u_x, u_y, u_{xy}, u_{xx}, u_{yy}, \\dots) = 0",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "2. ان نبين للطالب كيف تكون المعادالت التفاضلية الجزئية مفيدة في حل أنواع عديدة من المسائل وخاصة ان يعرف الطالب الآتي:\nأ ) كيف يترجم المسائل إلي لغة المعادالت التفاضلية الجزئية أي الصيغة الرياضية لهذه المسائل.\nب) حل المعادالت التفاضلية الجزئية الناتجة والخاضعة لشروط معطاة كالشروط الحدية.\nج) تفسير الحلول المتحصل عليها.\n3. تقديم عدد بسيط من طرق حل المعادالت التفاضلية الجزئية والتي نعرف أنها يمكن أن تطبق في مجموعات واسعة من الحاالت.\n4. فتح المجال أيضا أمام الطالب الذي يرغب في التعرف على طرق وأفكار اكثر تقدما أو مسائل وتطبيقات وأساليب أكثر تعقيدا وذلك من خالل مسائل وتطبيقات تندرج في صعوبتها وعمقها النظري.\n5. التعرف على طرق تصنيف المعادالت التفاضلية الجزئية وكيفية استخدامها في تطبيقات رياضية وفيزيائية واالستفادة منها في هذا المجال.\nمشكلة البحث:\n1. التعرف على المعادالت التفاضلية الجزئية وطرق حلها.\n2. ربط العلوم الرياضية بالفيزيائية باستخدام التطبيقات وحل المسائل باستخدام المعادالت التفاضلية الجزئية.\nحدود البحث:\n1. بيان أهمية المعادالت التفاضلية الجزئية في حل الكثير من المسائل المعقدة.\n2. كيفية استخدام المعادالت التفاضلية الجزئية في حل بعض المسائل الرياضية الفيزيائية وتطبيقاتها.\nالمعادالت التفاضلية الجزئية:\nالمعادالت التفاضلية الجزئية: هي معادلة تحتوي على داله غير معلومة في متغيرين أو أكثر ومشتقاتها الجزئية بالنسبة الى هذه المتغيرات.\nبمعنى أن المعادلة التفاضلية الجزئية تتضمن على متغير تابع واحد وأكثر من متغير مستقل وتعرف كذلك على أنها معادالت تفاضلية تحتوي على دالة واحدة وأكثر من الدوال المجهولة ومشتقاتها الجزئية وتكون على الصورة:\nf(x, y, u, u_x, u_y, u_{xy}, u_{xx}, u_{yy}, \\dots) = 0",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 3,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن أمثلتها",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "z_{xy} + 2z_x + 3z_y + 5z = 2x + \\cos(x - y) \\quad (1)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "z_{xx} + z_{yy} = x^2 y^2 \\quad (2)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "تصنيف المعادالت التفاضلية الجزئية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "تصنف المعادالت التفاضلية بناء على اعتبارات عدة والتصنيف ذو مفهوم مهم لأن النظرية العامة وطرائق الحل عادة تطبق على صنف معني من المعادالت وهي:-",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "1- رتبة ودرجة المعادلة التفاضلية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الرتبة وهي أعلى مشتقة جزئية في المعادلة مثل:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "$u_t = u_{xx}$ من الرتبة الثانية",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "$u_t = u_x$ من الرتبة الأولى",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "$u_t = u_{xxx} + \\sin x$ من الرتبة الثالثة",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الدرجة وهي أس أعلى مشتقة موجودة في المعادلة بشرط ان يكون ذلك األس عدد صحيح موجب مثل:-",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "$u_x = y$ من الدرجة األولى",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "$x(u_x) - y(u_{xy}) = 6x u_{xy}$ من الدرجة الثانية",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "2- عدد المتغيرات-:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهو عدد المتغيرات المستقلة مثل:-",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "$u_t = u_{xx}$ متغيران وهما x, t",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "$u_t = u_{rr} + \\frac{1}{r} u_{\\theta \\theta}$ متغيرات وهم t, r, $\\theta$",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "3- الخطية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "المعادلة التفاضلية الخطية هي معادلة يكون فيها المتغير التابع وكل مشتقاته الجزئية يظهر في الصورة الخطية (أي انها غير مضروبة في بعضها أو مرفوعة ألس خالف الواحد) بمعنى اذا كانت المتحوالت التابعة فيها المشتقات الجزئية من الدرجة الأولى تكون خطية مثل",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "ومن أمثلتها\nz_{xy} + 2z_x + 3z_y + 5z = 2x + \\cos(x - y) (1)\nz_{xx} + z_{yy} = x^2 y^2 (2)\nتصنيف المعادالت التفاضلية الجزئية:\nتصنف المعادالت التفاضلية بناء علي اعتبارات عدة والتصنيف ذو مفهوم مهم لأن النظرية العامة وطرائق الحل عادة تطبق على صنف معني من المعادالت وهي:-\n1- رتبة ودرجة المعادلة التفاضلية:\nالرتبة وهي اعلي مشتقة جزئية في المعادلة مثل:\nu_t = u_{xx} من الرتبة الثانية\nu_t = u_x من الرتبة الأولى\nu_t = u_{xxx} + \\sin x من الرتبة الثالثة\nالدرجة وهي اس اعلى مشتقة موجودة في المعادلة بشرط ان يكون ذلك الاس عدد صحيح موجب مثل:-\nu_x = y من الدرجة الاولى\nx(u_x) - y(u_{xy}) = 6x u_{xy} من الدرجة الثانية\n2- عدد المتغيرات-:\nوهو عدد المتغيرات المستقلة مثل:-\nu_t = u_{xx} متغيران وهما t,x\nu_t = u_{rr} + \\frac{1}{r} u_{\\theta \\theta} متغيرات وهم \\theta,r,t\n3- الخطية:\nالمعادلة التفاضلية الخطية هي معادلة يكون فيها المتغير التابع وكل مشتقاته الجزئية يظهر في الصورة الخطية ( اى انها غير مضروبة في بعضها أو مرفوعة لأس خلاف الواحد ) بمعنى اذا كانت المتحوالت التابعة فيها المشتقات الجزئية من الدرجة الأولى تكون خطية مثل",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 4,
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u_{tt} = e^{-t} u_{xx} + \\sin t \\quad \\text{خطية}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u u_x + y u_y + u^2 = 0 \\quad \\text{غير خطية}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وبصورة أدق فان المعادلة التفاضلية الجزئية الخطية من الرتبة الثانية ذات المتغيرين هي معادلة من الصيغة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "A u_{xx} + B u_{xy} + C u_{yy} + D u_x + E u_y + F u = G \\quad (1)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث أن x, y ثوابت أو دوال معلومة بداللة A, B, C, D, E, F.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "4- التجانس:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "المعادلة التفاضلية الجزئية (1) تكون متجانسة إذا كان الطرف الأيمن يساوي صفر اما اذا لم يكن يساوي الصفر فتسمى المعادلة غير متجانسة.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "5- أنواع المعامالت:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "في المعادلة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "A u_{xx} + B u_{xy} + C u_{yy} + D u_x + E u_y + F u = G",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "إذا كانت A, B, C, D, E, F ثوابت فعندئذ تسمى المعادلة ذات معامالت ثابتة (واذا لم تكن كذلك فتسمى المعادلة ذات معامالت متغيرة).",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "6- الأنماط الأساسية للمعادالت الخطية",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "أي معادلة تفاضلية جزئية خطية مثل:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "A u_{xx} + B u_{xy} + C u_{yy} + D u_x + E u_y + F u = G",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "لها ثالثة أنواع:-",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "أ- النوع المكافئ:- وهو النوع الذي يصف سريان الحرارة و عمليات االنتشار و تحقق الخاصية:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "B^2 - 4AC = 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن أمثلتها معادلة الحرارة",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u_t = u_{xx}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ب- النوع التزايدى:- وهو النوع الذي يصف حركات االهتزاز و حركات الموجة و يحقق الخاصية:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "B^2 - 4AC > 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن أمثلتها معادلة الموجة",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u_{tt} = u_{xx}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ج- النوع التناقصي:- وهذا النوع يصف ظواهر الحالة المستقرة و يحقق الخاصية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن أمثلتها معادلة البالس",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "B^2 - 4AC < 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u_{tt} + u_{xx} = 0",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "u_{tt} = e^{-t} u_{xx} + \\sin t خطية\nu u_x + y u_y + u^2 = 0 غير خطية\nوبصورة ادق فان المعادلة التفاضلية الجزئية الخطية من الرتبة الثانية ذات المتغيرين هي معادلة من الصيغه.\nA u_{xx} + B u_{xy} + C u_{yy} + D u_x + E u_y + F u = G (1)\nحيث أن x, y ثوابت أو دوال معلومه بداللة A, B, C, D, E, F .\n4- التجانس:\nالمعادلة التفاضلية الجزئية (1) تكون متجانسة إذا كان الطرف الأيمن يساوي صفر اما اذا لم يكن يساوي الصفر فتسمى المعادلة غير متجانسة.\n5- أنواع المعامالت:\nفي المعادلة:\nA u_{xx} + B u_{xy} + C u_{yy} + D u_x + E u_y + F u = G\nإذا كانت A, B, C, D, E, F ثوابت فعندئذ تسمى المعادلة ذات معامالت ثابته (\nواذا لم تكن كذلك فتسمى المعادلة ذات معامالت متغيرة ).\n6- الأنماط الأساسية للمعادالت الخطية\nاى معادلة تفاضلية جزئية خطية مثل:\nA u_{xx} + B u_{xy} + C u_{yy} + D u_x + E u_y + F u = G\nلها ثالثة أنواع:-\nأ- النوع المكافئ:- وهو النوع الذي يصف سريان الحرارة و عمليات االنتشار و تحقق الخاصية.\nB^2 - 4AC = 0 ومن أمثلتها معادلة الحرارة\nu_t = u_{xx}\nب- النوع التزايدى:- وهو النوع الذي يصف حركات الاهتزاز و حركات الموجة و يحقق الخاصية.\nB^2 - 4AC > 0 ومن أمثلتها معادلة الموجة\nu_{tt} = u_{xx}\nج- النوع التناقصي :- وهذا النوع يصف ظواهر الحالة المستقرة و يحقق الخاصية.\nB^2 - 4AC < 0 ومن أمثلتها معادلة البالس\nu_{tt} + u_{xx} = 0",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 5,
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "حلول المعادالت التفاضلية الجزئية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "إن معظم الظواهر الفيزيائية سواء كانت في حقل سريان الموائع الكهربائية، الميكانيكية، البصريات او سريان الحرارة يمكن ان توصف بصورة عامة بمعادالت تفاضلية جزئية وفي الحقيقة أن معظم الفيزياء الرياضية هي معادالت تفاضلية جزئية وعلى الرغم من التبسيطات تحول المعادالت قيد الدراسة على معادالت تفاضلية اعتيادية اال ان الوصف الكامل لهذه المنظومات يقع ضمن المجال العام للمعادالت التفاضلية الجزئية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "فحل المعادلة التفاضلية هو تلك الدالة او المتطابقة بين المتغير المعتمد والمتغيرات المستقلة وتكون خالية من المشتقات الجزئية وتحقق المعادلة التفاضلية الجزئية، بمعنى هو أي دالة تحقق المعادلة بالتطابق.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "لتكن عالقة",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "z = a x^3 + b y^3 \\quad (a)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث أن a, b ثابتان اختياريان، نحصل على معادلة تفاضلية جزئية من هذه العالقة",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الحل:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "نعتبر z متغير تابع لدينا",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "z_x = 3 a x^2, \\quad z_y = 3 b y^2",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وبذلك نجد أن",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "a = \\frac{1}{3x^2} z_x, \\quad b = \\frac{1}{3y^2} z_y \\quad (b)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "نعوض بهذه القيم في (a)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "z = \\frac{1}{3x^2} z_x x^3 + \\frac{1}{3y^2} z_y y^3",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "أو",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "3z = x z_x + y z_y \\quad (c)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهي المعادلة التفاضلية الجزئية المطلوبة",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وإذا أخذنا x كمتغير تابع فإننا نحصل باشتقاق a بالنسبة إلى y, z",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "0 = 3ax^2 x_y + 3by^2, \\quad 1 = 3ax^2 x_z \\quad (d)",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "حلول المعادالت التفاضلية الجزئية:\nإن معظم الظواهر الفيزيائية سواء كانت في حقل سريان الموائع الكهربائية، الميكانيكية، البصريات او سريان الحرارة يمكن ان توصف بصورة عامة بمعادالت تفاضلية جزئية وفي الحقيقة أن معظم الفيزياء الرياضية هي معادالت تفاضلية جزئية وعلى الرغم من التبسيطات تحول المعادالت قيد الدراسة على معادالت تفاضلية اعتيادية اال ان الوصف الكامل لهذه المنظومات يقع ضمن المجال العام للمعادالت التفاضلية الجزئية.\nفحل المعادلة التفاضلية هو تلك الدالة او المتطابقة بين المتغير المعتمد والمتغيرات المستقلة وتكون خالية من المشتقات الجزئية وتحقق المعادلة التفاضلية الجزئية، بمعنى هو أي دالة تحقق المعادلة بالتطابق.\nلتكن عالقة\nz = a x^3 + b y^3 (a)\nحيث أن a,b ثابتان اختياريان، نحصل على معادلة تفاضلية جزئية من هذه العالقة\nالحل:\nنعتبر z متغير تابع لدينا\nz_x = 3 a x^2, z_y = 3 b y^2\nوبذلك نجد أن\na = \\frac{1}{3x^2} z_x, b = \\frac{1}{3y^2} z_y (b)\nنعوض بهذه القيم في (a)\nz = \\frac{1}{3x^2} z_x x^3 + \\frac{1}{3y^2} z_y y^3\nأو\n3z = x z_x + y z_y (c)\nوهي المعادلة التفاضلية الجزئية المطلوبة\nوإذا أخذنا x كمتغير تابع فإننا نحصل باشتقاق a بالنسبة إلى z,y\n0 = 3ax^2 x_y + 3by^2, 1 = 3ax^2 x_z (d)",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 6,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "نحل المعادلتين من اجل a, b فنحصل",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "a = \\frac{1}{3x^2 x_z}, \\quad b = - \\frac{x_y}{3y^2 x_z} \\quad (e)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "نعوض في العالقة الأصلية a فنحصل",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y x_y + 3 x x_z = x \\quad (f)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهي معادلة تفاضلية جزئية تختلف في الشكل عن المعادلة (c).",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وبالتالي من المثال السابق نصل إلى أن حل معادلة تفاضلية هو عالقة تحول المعادلة إلى متطابقة ويكون الحل على انواع وهي:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "الحل العام:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "هو حل يحتوي على عدد من الدوال المستقلة االختيارية يساوي رتبة المعادلة بمعنى أن الحل العام لمعادلة تفاضلية من رتبة n هو حل يحتوي على n من الثوابت االختيارية وبالطبع يحقق المعادلة التفاضلية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "الحل الخاص:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "هو حل يمكن الحصول عليه من الحل العام باختيار خاص للدالة االختيارية بمعنى ان الحل الخاص هو اي حل يحقق المعادلة التفاضلية ال يشمل على اي ثوابت اختيارية وقد نحصل أحيانا بالتعويض على الثوابت االختيارية في الحل العام بقيم محددة.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "فمثال استخرج حلولا للمعادلة التفاضلية الجزئية االتية:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u_{xy} = 6x + 12y^2 \\quad (1)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "يعتمد المتغير التابع u في (1) على المتغيرين المستقلين x, y لإليجاد الحلول نحاول ان نحدد u.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "بداللة x و y أي u(x, y) اذا كتبنا (1) بالصيغة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{\\partial}{\\partial x} \\left( \\frac{\\partial u}{\\partial y} \\right) = 6x + 12y^2 \\quad (2)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "فاننا نستطيع ان نكامل بالنسبة الى x مع االحتفاظ بـ y ثابتا فنجد أن:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{\\partial u}{\\partial y} = 3x^2 + 12xy^2 + F(y) \\quad (3)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث اضفنا ثابت التكامل االختياري الذي يمكن ان يعتمد على y ولذلك فهو في الواقع دالة اختيارية",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "لـ y يرمز لها بـ F(y)، نكامل (3) بانسبة الى y مع االحتفاظ بـ x ثابتا.",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "نحل المعادلتين من اجل a, b فنحصل\na = \\frac{1}{3x^2 x_z}, b = - \\frac{x_y}{3y^2 x_z} (e)\nنعوض في العالقة الأصلية a فنحصل\ny x_y + 3 x x_z = x (f)\nوهي معادلة تفاضلية جزئية تختلف في الشكل عن المعادلة (c).\nوبالتالي من المثال السابق نصل إلى أن حل معادلة تفاضلية هو عالقة تحول المعادلة إلى متطابقة ويكون الحل على انواع وهي :\nالحل العام: هو حل يحتوي على عدد من الدوال المستقلة االختيارية يساوي رتبة المعادلة بمعنى أن الحل العام لمعادلة تفاضلية من رتبة n هو حل يحتوي على nمن الثوابت االختيارية وبالطبع يحقق المعادلة التفاضلية.\nالحل الخاص: هو حل يمكن الحصول عليه من الحل العام باختيار خاص للدالة االختيارية بمعنى ان الحل الخاص هو اى حل يحقق المعادلة التفاضلية ال يشمل على اى ثوابت اختيارية وقد نحصل أحيانا بالتعويض على الثوابت االختيارية في الحل العام بقيم محددة.\nفمثال استخرج حلولا للمعادلة التفاضلية الجزئية الاتية:\nu_{xy} = 6x + 12y^2 (1)\nيعتمد المتغير التابع u في (1) على المتغيرين المستقلين x,y لايجاد الحلول نحاول ان نحددu.\nبداللة x و y أي u(x,y) اذا كتبنا (1) بالصيغة:\n\\frac{\\partial}{\\partial x} ( \\frac{\\partial u}{\\partial y} ) = 6x + 12y^2 (2)\nفاننا نستطيع ان نكامل بالنسبة الى x مع الاحتفاظ ب y ثابتا فنجد أن:\n\\frac{\\partial u}{\\partial y} = 3x^2 + 12xy^2 + F(y) (3)\nحيث اضفنا ثابت التكامل الاختياري الذي يمكن ان يعتمد على y ولذلك فهو في الواقع دالة اختيارية\nل y يرمز لها بـ F(y) ، نكامل (3) بانسبة الى y مع الاحتفاظ بـ x ثابتا.",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 7,
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u = 3x^2 y + 4xy^3 + \\int F(y) dy + G(x) \\quad (4)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "في هذه المرة اضفنا دالة اختيارية لـ x معطاة بـ G(x) بما ان تكامل دالة اختيارية لـ y هو عبارة عن دالة اختيارية لـ y فاننا نستطيع ان نكتب (4) كالاتي:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u = 3x^2 y + 4xy^3 + H(y) + G(x) \\quad (5)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "يمكن التحقق من (5) بتعويضها في (1) والحصول على متطابقة، بما ان (1) هي معادلة تفاضلية جزئية من الرتبة الثانية بينما الحل (5) له دالتان اختياريتان فان هذا يقودنا مقارنة بالمعادالت التفاضلية العادية الى تسمية (5) بالحل العام لـ (1) وباستخدام نفس التشابه من الطبيعي ان نسمي أي حل مستخرج من الحل العام (5) بواسطة اختيارات خاصة للدوال االختيارية، فمثلا:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "G(x) = \\sin 2x, \\quad H(y) = y^3",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "بالحل الخاص، ففي الغالب نحتاج الى تحديد حلول للمعادالت التفاضلية الجزئية التي تحقق شروط معينه فمثال إذا افترضنا اننا نريد حل المعادلة (1) خاضعة للشرطين",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(1, y) = y^2 - 2y, \\quad u(x, 2) = 5x - 5 \\quad (6)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "بذلك يقودنا الحل العام (5) والشرط األول في (6) الى:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(1, y) = 3(1)^2 y + 4(1)y^3 + H(y) + G(1) = y^2 - 2y",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "H(y) = y^2 - 5y - 4y^3 - G(1)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "لذلك فان:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u = 3x^2 y + 4xy^3 + y^2 - 5y - 4y^3 - G(1) + G(x) \\quad (7)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "إذا استخدمنا الان الشرط الثاني في (6) فان:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, 2) = 3x^2(2) + 4x(2)^3 + (2)^2 - 5(2) - 4(2)^3 - G(1) + G(x) = 5x - 5",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "التي منها نحصل على:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "G(x) = 33 - 27x - 6x^2 + G(1)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وباستخدام هذه االخيرة في (7) نحصل على الحل المطلوب.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u = 3x^2 y + 4xy^3 + y^2 - 5y - 4y^3 - 27x - 6x^2 + 33 \\quad (8)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "طرق حل المعادالت التفاضلية الجزئية:",
+          "style": "bold",
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "u = 3x^2y + 4xy^3 + \\int F(y)dy + G(x) (4)\nفي هذه المرة اضفنا دالة اختيارية لـ x معطاة بـ G(x) بما ان تكامل دالة اختيارية\nلـ y هو عبارة عن دالة اختيارية لـ y فاننا نستطيع ان نكتب (4) كالاتي:\nu = 3x^2y + 4xy^3 + H(y) + G(x) (5)\nيمكن التحقق من (5) بتعويضها في (1) والحصول على متطابقة، بما ان (1) هي\nمعادلة تفاضلية جزئية من الرتبة الثانية بينما الحل (5) له دالتان اختياريتان فان هذا\nيقودنا مقارنة بالمعادالت التفاضلية العادية الى تسمية (5) بالحل العام ولـ (1)\nوباستخدام نفس التشابه من الطبيعي ان نسمي أي حل مستخرج من الحل العام (5)\nبواسطة اختيارات خاصة للدوال الاختيارية، فمثلا:\nG(x) = \\sin 2x , H(y) = y^3\nبالحل الخاص، ففي الغالب نحتاج الى تحديد حلول للمعادالت التفاضلية الجزئية التي\nتحقق شروط معينه فمثال إذا افترضنا اننا نريد حل المعادلة (1) خاضعة للشرطين\nu(1,y) = y^2 - 2y , u(x,2) = 5x - 5 (6)\nبذلك يقودنا الحل العام (5) والشرط الاول في (6) الى:\nu(1,y) = 3(1)^2y + 4(1)y^3 + H(y) + G(1) = y^2 - 2y\nH(y) = y^2 - 5y - 4y^3 - G(1)\nلذلك فان:\nu = 3x^2y + 4xy^3 + y^2 - 5y - 4y^3 - G(1) + G(x) (7)\nإذا استخدمنا الان الشرط الثاني في (6) فان:\nu(x,2) = 3x^2(2) + 4x(2)^3 + (2)^2 - 5(2) - 4(2)^3 - G(1) + G(x) = 5x - 5\nالتي منها نحصل على:\nG(x) = 33 - 27x - 6x^2 + G(1)\nوباستخدام هذه الاخيرة في (7) نحصل على الحل المطلوب.\nu = 3x^2y + 4xy^3 + y^2 - 5y - 4y^3 - 27x - 6x^2 + 33 (8)\nطرق حل المعادالت التفاضلية الجزئية:",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 8,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "هناك عدة طرق مطبقة علميا وأعظمها أهمية تلك الطرق التي بأتباعها تتحول المعادلة التفاضلية الجزئية إلى معادالت تفاضلية اعتيادية ومنها.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "1 - فصل المتغيرات:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "بهذه الطريقة يتم تحويل المعادلة التفاضلية الجزئية ذات n المتغيرات المستقلة إلى n من المعادالت التفاضلية الاعتيادية. ففي هذه الطريقة يكون من المفروض إمكانية التعبير عن الحل كحاصل ضرب دوال مجهولة كل منها يعتمد على متغير واحد فقط من المتغيرات. ونجاح هذه الطريقة يعتمد على إمكانية كتابة المعادلة الناتجة بحيث يعتمد أحد الطرفين على متغير واحد بينما يعتمد الطرف اآلخر على باقي المتغيرات وبذلك يجب أن يكون كل طرف مساويا مقدار ثابتا وبتكرار هذه العملية يمكن تتعين الدوال المجهولة.\nوتستخدم هذه الطريقة عادة متسلسالت فوريير وتكامالت فوريير ومتسلسالت لجندر.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "2- سالسل فوريير:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "إن أهمية سالسل فوريير في نظرية المعادالت التفاضلية الجزئية هي أن الدوال الدورية f(x) المعرفة على $(-\\infty, \\infty)$ أو الدوال المعرفة على فترة منتهية يمكن تمثيلها بلسلسلة لانهاية من الجيوب و جيوب التمام و بهذه الطريقة يمكن تجزئة المسائل إلى أخرى مبسطة و يتعين بالصيغة....",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "f(x) = \\frac{a_0}{2} + \\sum_{n=1}^{\\infty} a_n \\cos n\\pi x + b_n \\sin(n\\pi x)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث أن:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "a_n = \\frac{1}{L} \\int_{-L}^{L} f(x) \\cos \\frac{n}{L} x dx",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "b_n = \\frac{1}{L} \\int_{-L}^{L} f(x) \\sin \\frac{n}{L} x dx",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "3- دوال لجندر التفاضلية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "تنشا دوال لجندر كحلول للمعادلة التفاضلية:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "(1 - x^2) y'' - 2xy' + n(n + 1) y = 0",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "هناك عدة طرق مطبقة علميا وأعظمها أهمية تلك الطرق التي بأتباعها تتحول\nالمعادلة التفاضلية الجزئية إلى معادالت تفاضلية اعتيادية ومنها.\n1 – فصل المتغيرات:\nبهذه الطريقة يتم تحويل المعادلة التفاضلية الجزئية ذات n المتغيرات المستقلة إلى n\nمن المعادالت التفاضلية الاعتيادية. ففي هذه الطريقة يكون من المفروض إمكانية\nالتعبير عن الحل كحاصل ضرب دوال مجهولة كل منها يعتمد على متغير واحد فقط\nمن المتغيرات. ونجاح هذه الطريقة يعتمد على إمكانية كتابة المعادلة الناتجة بحيث\nيعتمد أحد الطرفين على متغير واحد بينما يعتمد الطرف اآلخر على باقي المتغيرات\nوبذلك يجب أن يكون كل طرف مساويا مقدار ثابتا وبتكرار هذه العملية يمكن تتعين\nالدوال المجهولة.\nوتستخدم هذه الطريقة عادة متسلسالت فوريير وتكامالت فوريير ومتسلسالت لجندر.\n2- سالسل فوريير:\nإن أهمية سالسل فوريير في نظرية المعادالت التفاضلية الجزئية هي أن الدوال\nالدورية f(x) المعرفة على (∞, ∞−) أو الدوال المعرفة على فترة منتهية يمكن\nتمثيلها بلسلسلة لانهاية من الجيوب و جيوب التمام و بهذه الطريقة يمكن تجزئة المسائل\nإلى أخرى مبسطة و يتعين بالصيغة....\nf(x) = \\frac{a0}{2} + \\sum_{n=1}^{\\infty} a_n \\cos n\\pi x + b_n \\sin(n\\pi x)\nحيث أن:\na_n = \\frac{1}{L} \\int_{-L}^L f(x) \\cos \\frac{n}{L} x dx\nb_n = \\frac{1}{L} \\int_{-L}^L f(x) \\sin \\frac{n}{L} x dx\n3- دوال لجندر التفاضلية:\nتنشا دوال لجندر كحلول للمعادلة التفاضلية:\n(1 - x^2)y'' - 2xy' + n(n+1)y = 0",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 9,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "والتي تسمى بمعادلة لجندر التفاضلية حيث إن الحل العام للمعادلة أعاله في الحالة التي فيها تعطى بالعالقة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y = c_1 p_n(x) + c_2 q_n(x)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث $p_n(x)$ كثيرات حدود تسمى كثيرات حدود لجندر، $q_n(x)$ تسمى دوال لجندر من النوع الثاني و هي غير محددة عندما $x = \\pm 1$.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "4- الطرائق العددية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "تتم في هذه الطريقة عمليه تحويل للمعادلة التفاضلية الجزئية إلى مجموعه من المعادالت الفرقيه التي يمكن حلها بعمليات حسابيه متكررة بواسطة الحاسبة االلكترونية ومنها .",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "طريقة العناصر المنتهية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهي طريقة تحليل عددي اليجاد الحلول التقريبية للمعادالت التفاضلية الجزئية، باالضافة الى الحلول التكاملية ويعتمد الحل على الغاء المعادالت التفاضلية الجزئية نهائيا او تقريب المعادالت التفاضلية الجزئية الى معادالت تفاضلية عادية والتي يمكن حلها باستخدام عدة طرق كطريقة اويلر او رونكه كوتا.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "5- المعادالت التكاملية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث تحول المعادلة الجزئية المطلوبة إلى معادله تفاضلية تكاملية تم تحل المعادلة التكاملية بطريقه مختلفة ومن انواع المعادالت التكاملية:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "1 – معادله فريدهولم التكامليه",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x) = f(x) + \\lambda \\int_a^b k(x, t) u(t) dt",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث $t \\le b, a \\le x$، $a, b$ ثوابت",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "2 – معادلة فولتير التكاملية",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x) = f(x) + \\lambda \\int_a^x k(x, t) u(t) dt",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "والتي تسمى بمعادلة لجندر التفاضلية حيث إن الحل العام للمعادلة أعاله في الحالة التي فيها تعطى بالعالقة:\ny = c_1 p_n (x) + c_2 q_n (x)\nحيث p_n(x) كثيرات حدود تسمى كثيرات حدود لجندر، q_n(x) تسمى دوال لجندر من النوع الثاني و هي غير محددة عندما x= ±1.\n4- الطرائق العددية:\nتتم في هذه الطريقة عمليه تحويل للمعادلة التفاضلية الجزئية إلى مجموعه من المعادالت الفرقيه التي يمكن حلها بعمليات حسابيه متكررة بواسطة الحاسبة االلكترونية ومنها .\nطريقة العناصر المنتهية:\nوهي طريقة تحليل عددي اليجاد الحلول التقريبية للمعادالت التفاضلية الجزئية، باالضافة الى الحلول التكاملية ويعتمد الحل على الغاء المعادالت التفاضلية الجزئية نهائيا او تقريب المعادالت التفاضلية الجزئية الى معادالت تفاضلية عادية والتي يمكن حلها باستخدام عدة طرق كطريقة اويلر او رونكه كوتا.\n5- المعادالت التكاملية:\nحيث تحول المعادلة الجزئية المطلوبة إلى معادله تفاضلية تكاملية تم تحل المعادلة التكاملية بطريقه مختلفة ومن انواع المعادالت التكاملية:\n1 – معادله فريدهولم التكامليه\nu(x) = f(x) + \\lambda \\int_a^b k(x,t)u(t)dt\nحيث t \\le b, a \\le x, a, b ثوابت\n2 – معادلة فولتير التكاملية\nu(x) = f(x) + \\lambda \\int_a^x k(x,t)u(t)dt",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 10,
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "8- التحويالت التكاملية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث تحول المعادلة التفاضلية الجزئية ذات n من المتغيرات المستقلة الى معادله جزئيه ذات n-1 من المتغيرات المستقلة، وبالتالي تتحول المعادلة التفاضلية الجزئية ذات المتغيرين إلى معادله تفاضلية اعتيادية، وملخص القول ان التحويالت التكاملية تغير التفاضل الى ضرب وعليه تتحول المشتقات الجزئية الى مقادير جبرية، ويعرف التحويل التكاملي بانه تحويل يقرن لكل دالة $f(t)$ داله جديدة $F(s)$ بموجب صيغة معينه مثل:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "F(s) = \\int_A^B K(s, t) f(t) dt",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن هذه التحويالت:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "1- تحويل فوريير",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "في متسلسلة فوريير إذا كانت $L \\to \\infty$ في هذه الحالة تتحول متسلسلة فوريير إلى تحويالت فوريير حيث إن تحويالت فوريير هي:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "F(\\epsilon) = \\frac{1}{\\sqrt{2\\pi}} \\int_{-\\infty}^{\\infty} f(x) e^{i\\epsilon x} dx",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وتكمن أهمية تحويل فوريير في تحويل التفاضل إلى ضرب وعليه تتحول المعادلة التفاضلية الى معادلة جبرية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "مثال:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "اوجد جواب المعادلة التفاضلية التالية مستعينا بتحويالت فوريير",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{\\partial u}{\\partial t} = K \\frac{\\partial^2 u}{\\partial x^2}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الشرائط الحدية",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "|u(x, t)| < m, \\quad u(x, u) = f(x)",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "8- التحويالت التكاملية:\nحيث تحول المعادلة التفاضلية الجزئية ذات n من المتغيرات المستقلة الى معادله جزئيه ذات n-1 من المتغيرات المستقلة، وبالتالي تتحول المعادلة التفاضلية الجزئية ذات المتغيرين إلى معادله تفاضلية اعتيادية، وملخص القول ان التحويالت التكاملية تغير التفاضل الى ضرب وعليه تتحول المشتقات الجزئية الى مقادير جبرية، ويعرف التحويل التكاملي بانه تحويل يقرن لكل دالة f(t) داله جديدة F(s) بموجب صيغة معينه مثل:\nF(s) = \\int_A^B K(s,t)f(t)dt\nومن هذه التحويالت:\n1- تحويل فوريير\nفي متسلسلة فوريير إذا كانت L → ∞ في هذه الحالة تتحول متسلسلة فوريير إلى تحويالت فوريير حيث إن تحويالت فوريير هي:\nF(\\epsilon) = \\frac{1}{\\sqrt{2\\pi}} \\int_{-\\infty}^{\\infty} f(x) e^{i\\epsilon x} dx\nوتكمن أهمية تحويل فوريير في تحويل التفاضل إلى ضرب وعليه تتحول المعادلة التفاضلية الى معادلة جبرية.\nمثال:\nاوجد جواب المعادلة التفاضلية التالية مستعينا بتحويالت فوريير\n\\frac{\\partial u}{\\partial t} = K \\frac{\\partial^2 u}{\\partial x^2}\nالشرائط الحدية\n|u(x, t)| < m, u(x, u) = f(x)",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 11,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "بحيث",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "-\\infty < x < \\infty, \\quad t > 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "الحل:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\begin{cases} \\frac{\\partial u}{\\partial t} = \\frac{d}{dt} F(u) \\\\ K \\frac{\\partial^2 u}{\\partial x^2} = -K \\lambda^2 F(u) \\end{cases} \\to \\frac{d}{dt} F(u) = -K \\lambda^2 F(u)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "هذه المعادلة التفاضلية هو",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "F(u) = C e^{-k\\lambda^2 t}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "F\\{u(x, t)\\} = C e^{-k\\lambda^2 t}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = f(x) \\to F\\{f(x)\\} = C",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "F(u) = F\\{f(x)\\} e^{-k\\lambda^2 t}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "e^{-k\\lambda^2 t} = F \\left\\{ \\sqrt{\\frac{1}{4\\pi kt}} e^{-(\\frac{x^2}{4kt})} \\right\\}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = f(x) * \\sqrt{\\frac{1}{4\\pi kt}} e^{-(\\frac{x^2}{4kt})}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = \\int_{-\\infty}^{\\infty} f(w) \\sqrt{\\frac{1}{4\\pi kt}} e^{-(\\frac{(x-w)^2}{4kt})} dw",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "نستعين بتغيير المتغير هذا",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{(x - w)^2}{4kt} = Z^2 \\to \\frac{x - w}{2\\sqrt{kt}} = Z",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "بحيث\n-\\infty < x < \\infty, t > 0\nالحل:\n\\begin{cases} \\frac{\\partial u}{\\partial t} = \\frac{d}{dt} F(u) \\\\ K \\frac{\\partial^2 u}{\\partial x^2} = -K \\lambda^2 F(u) \\end{cases} \\to \\frac{d}{dt} F(u) = -K \\lambda^2 F(u)\nهذه المعادلة التفاضلية هو\nF(u) = C e^{-k\\lambda^2 t}\nF\\{u(x,t)\\} = C e^{-k\\lambda^2 t}\nu(x,t) = f(x) \\to F\\{f(x)\\} = C\nF(u) = F\\{f(x)\\} e^{-k\\lambda^2 t}\ne^{-k\\lambda^2 t} = F \\{ \\sqrt{\\frac{1}{4\\pi kt}} e^{-(\\frac{x^2}{4kt})} \\}\nu(x,t) = f(x) * \\sqrt{\\frac{1}{4\\pi kt}} e^{-(\\frac{x^2}{4kt})}\nu(x,t) = \\int_{-\\infty}^{\\infty} f(w) \\sqrt{\\frac{1}{4\\pi kt}} e^{-(\\frac{(x-w)^2}{4kt})} dw\nنستعين بتغيير المتغير هذا\n\\frac{(x - w)^2}{4kt} = Z^2 \\to \\frac{x - w}{2\\sqrt{kt}} = Z",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 12,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "إذن :",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = \\frac{1}{\\sqrt{\\pi}} \\int_{-\\infty}^{\\infty} e^{-z^2} f(x - 2z\\sqrt{kt}) dz",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "2 - تحويل الباس:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "تحويل البالس له فائدة يمتاز بها على تحويل فوريير باحتوائه على عامل التفاضل $e^{-st}$ الذي يتيح لنا تحويل صنف أوسع من الدوال ويتعين بالصيغة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\mathcal{L}[f] = \\int_0^{\\infty} f(t) e^{-st} dt",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ففي هذه الطريقة نحصل أولا على تحويل البالس للمعادالت التفاضلية الجزئية والشروط الحدية المرافقة بالنسبة إلى أحد المتغيرات المستقلة بعد ذلك نحل المعادلة الناتجة للحصول على تحويل البالس للحل المطلوب الذي نحصل عليه باخذ تحويل البالس العكسي.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "تحويل الباس العكسي: إذا كانت",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\mathcal{L}\\{f(t)\\} = F(s)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "فان $f(t)$ تسمى تحويل البالس العكسي للدالة $F(s)$ و تكتب",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\mathcal{L}^{-1}\\{F(s)\\} = f(t)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "مثال:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "باستخدام تحويل البالس حل المعادلة التالية:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u_x = u_{xx} + u + B \\cos x",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(0, y) = A e^{-3y}, \\quad u_x(0, y) = 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "0 < x < \\infty, \\quad 0 < y < \\infty",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "الحل:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "باخذ تحويل البالس للطرفين بالنسبة الى x",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\bar{u}(s, y) = \\int_0^{\\infty} e^{-sx} u(x, y) dx",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\bar{u}_y(s, y) = [s^2 \\bar{u} - su(0, y) - u_x(0, y)] + \\bar{u} + \\frac{Bs}{1 + s^2}",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "إذن :\nu(x, t) = \\frac{1}{\\sqrt{\\pi}} \\int_{-\\infty}^{\\infty} e^{-z^2} f(x - 2z\\sqrt{kt}) dz\n2 - تحويل الباس:\nتحويل البالس له فائدة يمتاز بها على تحويل فوريير باحتوائه على عامل التفاضل e^{-st} الذي يتيح لنا تحويل صنف أوسع من الدوال ويتعين بالصيغة:\n\\mathcal{L}[f] = \\int_0^{\\infty} f(t) e^{-st} dt\nففي هذه الطريقة نحصل أولا على تحويل البالس للمعادالت التفاضلية الجزئية والشروط الحدية المرافقة بالنسبة إلى أحد المتغيرات المستقلة بعد ذلك نحل المعادلة الناتجة للحصول على تحويل البالس للحل المطلوب الذي نحصل عليه باخذ تحويل البالس العكسي.\nتحويل الباس العكسي: إذا كانت\n\\mathcal{L}\\{f(t)\\} = F(s)\nفان f(t) تسمى تحويل البالس العكسي للدالة F(s) و تكتب\n\\mathcal{L}^{-1}\\{F(s)\\} = f(t)\nمثال:\nباستخدام تحويل البالس حل المعادلة التالية:\nu_x = u_{xx} + u + B \\cos x\nu(0, y) = A e^{-3y}, u_x(0, y) = 0\n0 < x < \\infty, 0 < y < \\infty\nالحل:\nباخذ تحويل البالس للطرفين بالنسبة الى x\n\\bar{u}(s, y) = \\int_0^{\\infty} e^{-sx} u(x, y) dx\n\\bar{u}_y(s, y) = [s^2 \\bar{u} - su(0, y) - u_x(0, y)] + \\bar{u} + \\frac{Bs}{1 + s^2}",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 13,
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\bar{u}_y(s, y) = (s^2 + 1) \\bar{u} + \\frac{Bs}{s^2 + 1} - sA e^{-3y}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\bar{u}_y - (s^2 + 1) \\bar{u} = \\frac{Bs}{s^2 + 1} - sA e^{-3y}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\bar{u}(s, y) = C e^{(s^2 + 1)y} - \\frac{Bs}{(s^2 + 1)^2} + \\frac{As}{(s^2 + 4)} e^{-3y}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ولكي يكون",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\lim_{y \\to \\infty} \\bar{u}(s, y) = 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "فان",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "C = 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\bar{u}(s, y) = \\frac{-Bs}{(s^2 + 1)^2} + \\frac{A s e^{-3y}}{s^2 + 4}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وباخذه تحويل البالس العكسي",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\bar{u}(s, y) = \\frac{1}{2} B \\frac{d}{ds} \\left( \\frac{1}{s^2 + 1} \\right) + A \\frac{s}{s^2 + 4} e^{-3y}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, y) = - \\frac{1}{2} B x \\sin x + A \\cos 2x e^{-3y}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "القيم الحدية-:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "نحتاج غالبا ان يحقق الحل شروطا معينة تعطى باالضافة الى المعادالت التفاضلية، فمثال في المسائل المشتملة على متغير مستقل كالزمن من االفضل أن نعطي المتغير التابع عند زمن االبتداء او اية شروط أخرى يمكن اعطاءها في البداية. هنا في مثل هذه المسألة يطلق عليها عادة مسائل القيم االبتدائية.\nأما عندما يكون الحل المطلوب معرفا في نطاق معين فيه قيم الحل تكون قد وصفت على حدود النطاق فهذه المسائل يطلق عليها مسائل القيم الحدية.\nويجب ان نلاحظ انه في المعادالت التفاضلية العادية مسألة القيمة االبتدائية او الحدية يمكن حلها بايجاد الحل العام ثم تحديد الثوابت االختيارية حتى تكون الشروط المعطاه محققة اما الحل لمسائل القيم االبتدائية أو الحدية في المعادالت التفاضلية الجزئية يكون أكثر تعقيدا لانه ليس باالمكان دائما ايجاد الحل العام للمعادلة التفاضلية الجزئية.",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "\\bar{u}_y(s, y) = (s^2 + 1)\\bar{u} + \\frac{Bs}{s^2 + 1} - sAe^{-3y}\n\\bar{u}_y - (s^2 + 1)\\bar{u} = \\frac{Bs}{s^2 + 1} - sAe^{-3y}\n\\bar{u}(s, y) = Ce^{(s^2+1)y} - \\frac{Bs}{(s^2+1)^2} + \\frac{As}{(s^2+4)}e^{-3y}\nولكي يكون\n\\lim_{y \\to \\infty} \\bar{u}(s, y) = 0\nفان\nC = 0\n\\bar{u}(s, y) = \\frac{-Bs}{(s^2 + 1)^2} + \\frac{Ase^{-3y}}{s^2 + 4}\nوباخده تحويل البالس العكسي\n\\bar{u}(s, y) = \\frac{1}{2}B \\frac{d}{ds} (\\frac{1}{s^2 + 1}) + A \\frac{s}{s^2 + 4} e^{-3y} *\nu(x, y) = - \\frac{1}{2} Bx \\sin x + A \\cos 2x e^{-3y}\nالقيم الحدية-:\nنحتاج غالبا ان يحقق الحل شروطا معينة تعطى باالضافة الى المعادالت التفاضلية، فمثلا في المسائل المشتملة على متغير مستقل كالزمن من الافضل أن نعطي المتغير التابع عند زمن الابتداء او اية شروط أخرى يمكن اعطاءها في البداية.\nهنا في مثل هذه المسألة يطلق عليها عادة مسائل القيم الابتدائية.\nأما عندما يكون الحل المطلوب معرفا في نطاق معين فيه قيم الحل تكون قد وصفت على حدود النطاق فهذه المسائل يطلق عليها مسائل القيم الحدية.\nويجب ان نلاحظ انه في المعادالت التفاضلية العادية مسألة القيمة الابتدائية او الحدية يمكن حلها بايجاد الحل العام ثم تحديد الثوابت الاختيارية حتى تكون الشروط المعطاه محققة اما الحل لمسائل القيم الابتدائية أو الحدية في المعادالت التفاضلية الجزئية يكون أكثر تعقيدا لانه ليس باالامكان دائما ايجاد الحل العام للمعادلة التفاضلية الجزئية.",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 14,
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "مثال-: حل المسألة الحدية",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{du}{dx} = 4 \\frac{du}{dy}, \\quad u(0, y) = 8 e^{-3y}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الحل: بطريقة فصل المتغيرات :",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ضع $u = XY$ في المعادلة المعطاة نحصل على $X'Y = 4XY'$ أو $\\frac{X'}{4X} = \\frac{Y'}{Y}$ وبما أن X تعتمد فقط على x، و Y تعتمد فقط على y وبما أن x, y متغيرين مستقلين فإن كل طرف يجب أن يساوي مقدارا ثابتا c.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "إذن $X' - 4cX = 0$, $Y' - cY = 0$ وهذه حلولها هي $X = A e^{4cx}, Y = B e^{cy}$",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وعلى ذلك فإن الحل يعطى بالعالقة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, y) = XY = AB e^{c(4x + y)} = K e^{c(4x + y)}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن الشرط الحدي",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(0, y) = K e^{cy} = 8 e^{-3y}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهذا ممكن إذا كانت $c = -3$, $K = 8$ وعلى ذلك يكون هو الحل المطلوب $u(x, y) = 8 e^{-3(4x+y)} = 8 e^{-12x-3y}$",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "مثال-: حل باستخدام تحويالت البالس مسألة القيمة الحدية",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{du}{dt} = 4 \\frac{d^2 u}{dx^2}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, 0) = 10 \\sin 2\\pi x - 6 \\sin 4\\pi x, \\quad u(0, t) = 0, u(3, t) = 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الحل-: بأخذ تحويل البالس للمعادلة التفاضلية المعطاة بالنسبة إلى t يكون لدينا",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\int_0^{\\infty} e^{-st} \\left( \\frac{du}{dt} \\right) dt = \\int_0^{\\infty} e^{-st} \\left( 4 \\frac{d^2 u}{dx^2} \\right) dt",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهذه يمكن كتابتها على الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "s \\int_0^{\\infty} e^{-st} u dt - u(x, 0) = 4 \\frac{d^2}{dx^2} \\int_0^{\\infty} e^{-st} u dt",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "مثال-: حل المسألة الحدية\n\\frac{du}{dx} = 4 \\frac{du}{dy} , u(0,y) = 8e^{-3y}\nالحل: بطريقة فصل المتغيرات :\nضع u=XY في المعادلة المعطاة نحصل على X'Y = 4XY' أو \\frac{X'}{4X} = \\frac{Y'}{Y} وبما\nأن X تعتمد فقط علىx ، و Y تعتمد فقط على y وبما أن x,y متغيرين مستقلين فإن\nكل طرف يجب أن يساوي مقدارا ثابتا c.\nإذن X' - 4cX = 0 ، Y' - cY = 0 وهذه حلولها هي X = Ae^{4cx}, Y = Be^{cy}\nوعلى ذلك فإن الحل يعطى بالعالقة:\nu(x,y) = XY = ABe^{c(4x+y)} = Ke^{c(4x+y)}\nومن الشرط الحدي\nu(0,y) = Ke^{cy} = 8e^{-3y}\nK=8 و c= -3وهذا ممكن إذا كانت\nيكون هو الحل المطلوب u(x,y) = 8e^{-3(4x+y)} = 8e^{-12x-3y}وعلى ذلك\nمثال-: حل باستخدام تحويالت البالس مسألة القيمة الحدية\n\\frac{du}{dt} = 4 \\frac{d^2u}{dx^2}\nu(x,0) = 10\\sin 2\\pi x - 6\\sin 4\\pi x ، u(0,t)=0,u(3,t)=0\nالحل-: بأخذ تحويل البالس للمعادلة التفاضلية المعطاة بالنسبة إلى t يكون لدينا\n\\int_0^{\\infty} e^{-st} (\\frac{du}{dt}) dt = \\int_0^{\\infty} e^{-st} (4 \\frac{d^2u}{dx^2}) dt\nوهذه يمكن كتابتها على الصورة:\ns \\int_0^{\\infty} e^{-st} u dt - u(x,0) = 4 \\frac{d^2}{dx^2} \\int_0^{\\infty} e^{-st} u dt",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 15,
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "sU - u(x, 0) = 4 \\frac{d^2 U}{dx^2} \\quad (1) \\quad \\text{أو}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث $U = U(x, s) = \\mathcal{L}\\{u(x, t)\\} = \\int_0^{\\infty} e^{-st} u dt$",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وباستخدام الشرط المعطى أن $u(x, 0) = 10 \\sin 2\\pi x - 6 \\sin 4\\pi x$ تصبح (1) في الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "4 \\frac{d^2 U}{dx^2} - sU = 6 \\sin 4\\pi x - 10 \\sin 2\\pi x \\quad (2)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "بأخذ تحويل البالس للشروط $u(0, t) = 0, u(3, t) = 0$ نحصل على $\\mathcal{L}\\{u(0, t)\\} = 0, \\mathcal{L}\\{u(3, t)\\} = 0$ أو",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "U(0, s) = 0, \\quad U(3, s) = 0 \\quad (3)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "بحل المعادلة التفاضلية العادية (2) تحت الشروط (3) بالطرق االبتدائية المعتادة نجد أن:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "U(x, s) = \\frac{10 \\sin 2\\pi x}{s + 16\\pi^2} - \\frac{6 \\sin 4\\pi x}{s + 64\\pi^2}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وعلى ذلك بأخذ تحويل البالس العكسي نجد أن",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = \\mathcal{L}^{-1}\\{U(x, s)\\} = \\mathcal{L}^{-1} \\left\\{ \\frac{10}{s + 16\\pi^2} \\right\\} \\sin 2\\pi x - \\mathcal{L}^{-1} \\left\\{ \\frac{6}{s + 64\\pi^2} \\right\\} \\sin 4\\pi x",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = 10 e^{-16\\pi^2 t} \\sin 2\\pi x - 6 e^{-64\\pi^2 t} \\sin 4\\pi x",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهذا هو الحل المطلوب.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "لاحظ أنه من الناحية النظرية كان من الممكن أن نأخذ تحويل البالس للمعادلة التفاضلية المعطاة بالنسبة إلى x بدال من t. ولكن هذا يمكن أن يؤدي إلى صعوبات متعددة كما هو واضح عندما نتقدم في طريقة الحل. وعمليا فإننا نأخذ تحويل البالس بالنسبة إلى مختلف المتغيرات المستقلة ومن ثم نختار المتغير الذي يؤدي إلى أكثر الطرق تبسيطا.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "تطبيقات المعادالت التفاضلية الجزئية:",
+          "style": "bold",
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "يوجد عدد من المعادالت التفاضلية الجزئية المشهورة والتي لها أهمية كبيرة لما لها من تطبيقات في شتى العلوم، على سبيل المثال نذكر بعض هذه المعادالت:",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "sU - u(x, 0) = 4 \\frac{d^2U}{dx^2} (1) أو\nحيث U = U(x, s) = \\mathcal{L}\\{u(x, t)\\} = \\int_0^{\\infty} e^{-st} u dt\nوباستخدام الشرط المعطى أن u(x, 0) = 10 \\sin 2\\pi x - 6 \\sin 4\\pi x تصبح (1) في الصورة:\n4 \\frac{d^2 U}{dx^2} - sU = 6 \\sin 4\\pi x - 10 \\sin 2\\pi x (2)\nبأخذ تحويل البالس للشروط u(0, t) = 0, u(3, t) = 0 نحصل على\n\\mathcal{L}\\{u(0, t)\\} = 0, \\mathcal{L}\\{u(3, t)\\} = 0\nأو U(0, s) = 0, U(3, s) = 0 (3)\nبحل المعادلة التفاضلية العادية (2) تحت الشروط (3) بالطرق الابتدائية المعتادة نجد أن:\nU(x, s) = \\frac{10 \\sin 2\\pi x}{s + 16\\pi^2} - \\frac{6 \\sin 4\\pi x}{s + 64\\pi^2}\nوعلى ذلك بأخذ تحويل البالس العكسي نجد أن\nu(x, t) = \\mathcal{L}^{-1}\\{U(x, s)\\} = \\mathcal{L}^{-1} \\left\\{ \\frac{10}{s + 16\\pi^2} \\right\\} \\sin 2\\pi x - \\mathcal{L}^{-1} \\left\\{ \\frac{6}{s + 64\\pi^2} \\right\\} \\sin 4\\pi x\nu(x, t) = 10 e^{-16\\pi^2 t} \\sin 2\\pi x - 6 e^{-64\\pi^2 t} \\sin 4\\pi x\nوهذا هو الحل المطلوب.\nلاحظ أنه من الناحية النظرية كان من الممكن أن نأخذ تحويل البالس للمعادلة التفاضلية المعطاة بالنسبة إلى x بدال من t. ولكن هذا يمكن أن يؤدي إلى صعوبات متعددة كما هو واضح عندما نتقدم في طريقة الحل. وعمليا فإننا نأخذ تحويل البالس بالنسبة إلى مختلف المتغيرات المستقلة ومن ثم نختار المتغير الذي يؤدي إلى أكثر الطرق تبسيطا.\nتطبيقات المعادالت التفاضلية الجزئية:\nيوجد عدد من المعادالت التفاضلية الجزئية المشهورة والتي لها أهمية كبيرة لما لها من تطبيقات في شتى العلوم، على سبيل المثال نذكر بعض هذه المعادالت:",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 16,
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "1- معادلة الموجة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "معادلة الموجة هي النموذج الاصلي للمعادلات التفاضلية الجزئية الزائدية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{d^2 y}{dt^2} = a^2 \\frac{d^2 y}{dx^2} \\quad (1)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وللمعادلات التفاضلية الجزئية الزائدية مميزات وهي خطوط للثابت (x-ct) وتلك الثوابت من الثابت (x+ct) وهذا يعني أن ذلك الحل العام للمعادلة السابقة يأخذ الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y(x, t) = f(x-ct) + g(x+ct) \\quad (2)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "عندما تكون f,g اختيارية تامة، والدالة y(x, t) هي الازاحة عند أي نقطة x عند الزمن t.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وبالنظر الى أن x كمتغير موضعي و t كزمن نستطيع أن نفسر f(x-ct) كموجة متحركة بسرعة c في الاتجاه (+x)، وبهذا نعني أن الصورة الكلية للدالة f كدالة في x عندما t=0 سوف تنزاح بانتظام نحو (x) الموجب بمقدار c عندما t=1 كما بالشكل التالي:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "caption",
+          "level": null,
+          "content": "شكل (1) يوضح الموجة المتحركة f(x-ct). الخط المنقط يكون عند t=0، الخط الكامل يكون عند t>0.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وبالمثل g(x+ct) تصف موجة تتحرك بسرعة c في الاتجاه (-x)، عندما تكون f, g اختيارية فان الموجات المتنقلة هي التي تصف أنه ليس بحاجة أن تكون جيبية أو دورية ولكن ربما غير منتظمة كليا إضافة إلى هذا لا يوجد لزوم لان تكون f, g لها علاقة خاصة ببعضها.",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [
+        {
+          "image_type": "figure",
+          "description": "Diagram showing the propagation and shift of a wave profile over time.",
+          "caption": "شكل (1) يوضح الموجة المتحركة f(x-ct). الخط المنقط يكون عند t=0، الخط الكامل يكون عند t>0.",
+          "bbox_top": 50.1,
+          "bbox_left": 19.3,
+          "bbox_width": 61.2,
+          "bbox_height": 12.5,
+          "image_data": "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"
+        }
+      ],
+      "raw_text": "المعادلات التفاضلية الجزئية وتطبيقاتها\n1- معادلة الموجة:\nمعادلة الموجة هي النموذج الاصلي للمعادلات التفاضلية الجزئية الزائدية.\nd^2y/dt^2 = a^2 d^2y/dx^2 (1)\nوللمعادلات التفاضلية الجزئية الزائدية مميزات وهي خطوط للثابت (x-ct) وتلك الثوابت من الثابت (x+ct) وهذا يعني أن ذلك الحل العام للمعادلة السابقة يأخذ الصورة:\ny(x, t) = f(x-ct) + g(x+ct) (2)\nعندما تكون f,g اختيارية تامة، والدالة y(x, t) هي الازاحة عند أي نقطة x عند الزمن t.\nوبالنظر الى أن x كمتغير موضعي و t كزمن نستطيع أن نفسر f(x-ct) كموجة متحركة بسرعة c في الاتجاه (+x)، وبهذا نعني أن الصورة الكلية للدالة f كدالة في x عندما t=0 سوف تنزاح بانتظام نحو (x) الموجب بمقدار c عندما t=1 كما بالشكل التالي:\nشكل (1) يوضح الموجة المتحركة f(x-ct). الخط المنقط يكون عند t=0، الخط الكامل يكون عند t>0.\nوبالمثل g(x+ct) تصف موجة تتحرك بسرعة c في الاتجاه (-x)، عندما تكون f, g اختيارية فان الموجات المتنقلة هي التي تصف أنه ليس بحاجة أن تكون جيبية أو دورية ولكن ربما غير منتظمة كليا إضافة إلى هذا لا يوجد لزوم لان تكون f, g لها علاقة خاصة ببعضها.",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 17,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "يمكن تطبيق المعادلة (1) في حالة الذبذبات الصغيرة لسلك مرن عندما يكون موضوعا في وضع ابتدائي على محور x تم أطلق للحركة والثابت \\( a^2 = \\frac{T}{\\mu} \\) حيث T هو الشد في السلك، \\( \\mu \\) هي الكتلة الثابتة لوحدة الطول من السلك.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "مثال:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "سلك طوله L مشدود بين النقطتين (0,0)، (L,0) الواقعتين علي محور x عند الزمن t=0 كان له شكل الدالة f(x) حيث \\( 0 < x < L \\) وترك ليتحرك من حالة سكون. أوجد إزاحة السلك عند أي زمن لاحق.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الحل معادلة السلك المتذبذب",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{d^2 y}{dt^2} = a^2 \\frac{d^2 y}{dx^2}, \\quad 0 < x < L, t > 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث y(x, t) تساوي الازاحة من محور x عند الزمن t، بما أن نهايتي السلك مثبتة عند x=0, x=L فإن \\( y(0, t) = y(L, t) = 0 \\) لـ t > 0 وبما أن الشكل الابتدائي للسلك معطى بالدالة f(x) فإن",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y(x, 0) = f(x), \\quad 0 < x < L",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "caption",
+          "level": null,
+          "content": "شكل (2) يوضح سلك طوله L مشدود بين نقطتين",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وبما أن السرعة الابتدائية للسلك تساوي صفرا فإن \\( y_t(0, x) = 0 \\) لـ \\( 0 < x < L \\) ولحل مسألة القيمة الحدية هذه، دع y=XT كالمعتاد",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "XT'' = a^2 X''T \\quad \\text{أو} \\quad \\frac{T''}{a^2 T} = \\frac{X''}{X}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "إذن وبفرض ثابت الفصل \\( -\\lambda^2 \\) نجد أن:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "X'' + \\lambda^2 X = 0, \\quad T'' + \\lambda^2 a^2 T = 0",
+          "style": null,
+          "is_display_math": true
+        }
+      ],
+      "tables": [],
+      "images": [
+        {
+          "image_type": "diagram",
+          "description": "Graph showing a displacement y(x,t) of a string of length L fixed at both ends.",
+          "caption": "شكل (2) يوضح سلك طوله L مشدود بين نقطتين",
+          "bbox_top": 52.8,
+          "bbox_left": 31.5,
+          "bbox_width": 38.2,
+          "bbox_height": 12.1,
+          "image_data": "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"
+        }
+      ],
+      "raw_text": "المعادلات التفاضلية الجزئية وتطبيقاتها\nيمكن تطبيق المعادلة (1) في حالة الذبذبات الصغيرة لسلك مرن عندما يكون موضوعا في وضع ابتدائي على محور x تم أطلق للحركة والثابت a^2 = T/u حيث T هو الشد في السلك، u هي الكتلة الثابتة لوحدة الطول من السلك.\nمثال:\nسلك طوله L مشدود بين النقطتين (0,0)، (L,0) الواقعتين علي محور x عند الزمن t=0 كان له شكل الدالة f(x) حيث 0 < x < L وترك ليتحرك من حالة سكون. أوجد إزاحة السلك عند أي زمن لاحق.\nالحل معادلة السلك المتذبذب\nd^2y/dt^2 = a^2 d^2y/dx^2, 0 < x < L, t > 0\nحيث y(x, t) تساوي الازاحة من محور x عند الزمن t، بما أن نهايتي السلك مثبتة عند x=0, x=L فإن y(0, t) = y(L, t) = 0 لـ t > 0 وبما أن الشكل الابتدائي للسلك معطى بالدالة f(x) فإن\ny(x, 0) = f(x), 0 < x < L\nشكل (2) يوضح سلك طوله L مشدود بين نقطتين\nوبما أن السرعة الابتدائية للسلك تساوي صفرا فإن yt(0, x) = 0 لـ 0 < x < L ولحل مسألة القيمة الحدية هذه، دع y=XT كالمعتاد\nXT'' = a^2 X''T أو T''/a^2T = X''/X\nإذن وبفرض ثابت الفصل -λ^2 نجد أن:\nX'' + λ^2X = 0, T'' + λ^2a^2T = 0",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 18,
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "X = A_2 \\sin \\lambda x + B_2 \\cos \\lambda x \\quad ، \\quad T = A_1 \\sin \\lambda at + B_1 \\cos \\lambda at",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وحينئذ وعلى ذلك فإن الحل يعطى بالعلاقة",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y(x, t) = XT = (A_2 \\sin \\lambda x + B_2 \\cos \\lambda x)(A_1 \\sin \\lambda at + B_1 \\cos \\lambda at)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن \\( y(0, t) = 0 \\) ، ومن \\( A_2 = 0 \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "إذن \\( y(x, t) = \\sin \\lambda x (A \\sin \\lambda at + B \\cos \\lambda at) \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن \\( y(L, t) = 0 \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "يكون لدينا \\( \\sin \\lambda L (A \\sin \\lambda at + B \\cos \\lambda at) = 0 \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وعلى ذلك \\( \\sin \\lambda L = 0 \\) أي \\( \\lambda L = m\\pi \\) أو \\( \\lambda = \\frac{m\\pi}{L} \\) نظرا لأن العامل الثاني لا يجب أن يساوي الصفر. الآن",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y_t(x, t) = \\sin \\lambda x (A \\lambda a \\cos \\lambda at - B \\lambda a \\sin \\lambda at)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وعلى ذلك \\( y_t(x, 0) = 0 \\) ومنها \\( A=0 \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y(x, t) = B \\sin \\frac{m\\pi x}{L} \\cos \\frac{m\\pi at}{L}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "لتحقيق الشرط \\( y(x, 0) = f(x) \\) فإنه من الضروري أن تراكب الحلول. وهذا يؤدي إلى",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y(x, t) = \\sum_{m=1}^\\infty B_m \\sin \\frac{m\\pi x}{L} \\cos \\frac{m\\pi at}{L}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وإذن \\( y(x, 0) = f(x) = \\sum_{m=1}^\\infty B_m \\sin \\frac{m\\pi x}{L} \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ومن نظرية متسلسلة فورييه \\( B_m = \\frac{2}{L} \\int_0^L f(x) \\sin \\frac{m\\pi x}{L} dx \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "والنتيجة هي",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "y(x, t) = \\sum_{m=1}^\\infty \\left( \\frac{2}{L} \\int_0^L f(x) \\sin \\frac{m\\pi x}{L} dx \\right) \\sin \\frac{m\\pi x}{L} \\cos \\frac{m\\pi at}{L}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "والتي يمكن أن نتحقق من كونها حلا.",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "المعادلات التفاضلية الجزئية وتطبيقاتها\nX = A2 sin λx + B2 cos λx , T = A1 sin λat + B1 cos λat\nوحينئذ وعلى ذلك فإن الحل يعطى بالعلاقة\ny(x, t) = XT = (A2 sin λx + B2 cos λx)(A1 sin λat + B1 cos λat)\nومن y(0, t) = 0 ، ومن A2 = 0\nإذن y(x, t) = sin λx (A sin λat + B cos λat)\nومن y(L, t) = 0\nيكون لدينا sin λL (A sin λat + B cos λat) = 0\nوعلى ذلك sin λL = 0 أي λL = mπ أو λ = mπ/L نظرا لأن العامل الثاني لا يجب أن يساوي الصفر. الآن\nyt(x, t) = sin λx (A λa cos λat - B λa sin λat)\nوعلى ذلك yt(x, 0) = 0 ومنها A=0\ny(x, t) = B sin (mπx/L) cos (mπat/L)\nلتحقيق الشرط y(x, 0) = f(x) فإنه من الضروري أن تراكب الحلول. وهذا يؤدي إلى\ny(x, t) = Σ Bm sin (mπx/L) cos (mπat/L)\nوإذن y(x, 0) = f(x) = Σ Bm sin (mπx/L)\nومن نظرية متسلسلة فورييه Bm = 2/L ∫ f(x) sin (mπx/L) dx\nوالنتيجة هي\ny(x, t) = Σ (2/L ∫ f(x) sin (mπx/L) dx) sin (mπx/L) cos (mπat/L)\nوالتي يمكن أن نتحقق من كونها حلا.",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 19,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الحدود في هذه المتسلسلة تمثل النسق العادي، أو الطبيعي للذبذبات ونحصل على تردد النسق العادي \\( f_m \\) الذي ترتيبه m من الحد الذي يحتوي \\( \\cos \\frac{m\\pi at}{L} \\) وتعطى بالعلاقة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "f_m = \\frac{ma}{2L} = \\frac{m}{2L} \\sqrt{\frac{T}{\\mu}} \\quad \\text{أو} \\quad 2\\pi f_m = \\frac{m \\pi a}{L}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وبما أن كل الترددات هي مضاعفات صحيحة لأقل تردد \\( f_1 \\) فإن تذبذب السلك ينتج نغمة موسيقية كما في حالة سلك الكمان أو البيانو.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "2 - سريان الحرارة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهنا نعود إلى المعادلات التفاضلية الجزئية المكافئة لتطوير الطرق التي تكيف حل خاص للمعادلات التفاضلية الجزئية بشروط حدية وذلك بتقديم بارامترات والطرق العامة واضحة وتطبق في المعادلات التفاضلية الجزئية من الرتبة الثانية بمعاملات ثابتة بشكل جيد.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ولبعض التمديد فإنها تكون مكملة للطريقة الاساسية للفصل بين المتغيرات السابقة الذكر لايجاد الحلول بطريقة منظمة.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وللتبسيط نحل المعادلة التفاضلية الجزئية المعتمدة على الزمن والمتجانسة في وسط ذو محور واحد خلال قضيب معدني في اتجاه محور (x) والذي تكون فيه المعادلة التفاضلية الجزئية هي:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{du}{dt} = k \\frac{d^2 u}{dx^2}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث u هي درجة حرارة جسم مصمت عند الموضع (x) والزمن (t) الثابت k يسمى الانتشارية وهو يساوي \\( \\frac{K}{\\sigma \\rho} \\) حيث من المفروض أن تكون k معامل التوصيل الحراري، \\( \\sigma \\) الحرارة النوعية، \\( \\rho \\) الكثافة (كتلة وحدة الحجوم).",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "مثال:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "قضيب رفيع نصف لانهائي \\( x \\ge 0 \\) سطحه معزول حيث درجة الحرارة الابتدائية تساوي f(x) أثر فجأة على الطرف x=0 بدرجة حرارة تساوي صفرا واحتفظ بها.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "(أ) أوجد مسألة القيمة الحدية لدرجة الحرارة u(x, t) عند النقطة x والزمن t",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "(ب) بين أن \\( u(x, t) = \\frac{1}{\\pi} \\int_0^\\infty f(v) e^{-k \\lambda^2 t} \\sin \\lambda v \\sin \\lambda x dx d\\lambda dv \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "الحل: (أ) مسألة القيمة الحدية هي:",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "المعادلات التفاضلية الجزئية وتطبيقاتها\nالحدود في هذه المتسلسلة تمثل النسق العادي، أو الطبيعي للذبذبات ونحصل على تردد النسق العادي fm الذي ترتيبه m من الحد الذي يحتوي cos (mπat/L) وتعطى بالعلاقة:\nfm = ma/2L = m/2L sqrt(T/u) أو 2πfm = mπa/L\nوبما أن كل الترددات هي مضاعفات صحيحة لأقل تردد f1 فإن تذبذب السلك ينتج نغمة موسيقية كما في حالة سلك الكمان أو البيانو.\n2 - سريان الحرارة:\nوهنا نعود إلى المعادلات التفاضلية الجزئية المكافئة لتطوير الطرق التي تكيف حل خاص للمعادلات التفاضلية الجزئية بشروط حدية وذلك بتقديم بارامترات والطرق العامة واضحة وتطبق في المعادلات التفاضلية الجزئية من الرتبة الثانية بمعاملات ثابتة بشكل جيد.\nولبعض التمديد فإنها تكون مكملة للطريقة الاساسية للفصل بين المتغيرات السابقة الذكر لايجاد الحلول بطريقة منظمة.\nوللتبسيط نحل المعادلة التفاضلية الجزئية المعتمدة على الزمن والمتجانسة في وسط ذو محور واحد خلال قضيب معدني في اتجاه محور (x) والذي تكون فيه المعادلة التفاضلية الجزئية هي:\ndu/dt = k d^2u/dx^2\nحيث u هي درجة حرارة جسم مصمت عند الموضع (x) والزمن (t) الثابت k يسمى الانتشارية وهو يساوي K/(σρ) حيث من المفروض أن تكون k معامل التوصيل الحراري، σ الحرارة النوعية، ρ الكثافة (كتلة وحدة الحجوم).\nمثال:\nقضيب رفيع نصف لانهائي x ≥ 0 سطحه معزول حيث درجة الحرارة الابتدائية تساوي f(x) أثر فجأة على الطرف x=0 بدرجة حرارة تساوي صفرا واحتفظ بها.\n(أ) أوجد مسألة القيمة الحدية لدرجة الحرارة u(x, t) عند النقطة x والزمن t\n(ب) بين أن u(x, t) = 1/π ∫ f(v) e^(-kλ^2t) sin λv sin λx dx dλ dv\nالحل: (أ) مسألة القيمة الحدية هي:",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 20,
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{du}{dt} = k \\frac{d^2 u}{dx^2}, \\quad t > 0, \\quad x > 0 \\quad (1)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "|u(x, t)| < M, \\quad u(0, t) = 0, \\quad u(x, 0) = f(x) \\quad (2)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الشرط الاخير لازم حيث أن درجة الحرارة يجب أن تكون محددة لأسباب طبيعية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "(ب) إن حل المعادلة (1) بفصل المتغيرات هو:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = e^{-k \\lambda^2 t} (A \\cos \\lambda x + B \\sin \\lambda x)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "من الشرط الثاني من الشروط الحدية (2) نجد أن A=0 وعلى ذلك:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = B e^{-k \\lambda^2 t} \\sin \\lambda x \\quad (3)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "بما أنه لا توجد أي قيود على \\( \\lambda \\) فيمكننا أن نستبدل B في (3) بالدالة \\( B(\\lambda) \\) وهذا لا يؤثر في الحل. أكثر من ذلك فإنه يمكننا أن نجري التكامل بالنسبة الى \\( \\lambda \\) من 0 الى \\( \\infty \\) ولايزال الناتج حل هذا يقابل نظرية التراكيب لقيم متناثرة تأخذها \\( \\lambda \\) المستخدمة عند الكلام عن متسلسلات فورييه. وعلى ذلك نصل الى الحل الممكن.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = \\int_0^\\infty B(\\lambda) e^{-k \\lambda^2 t} \\sin \\lambda x d\\lambda \\quad (4)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "من الشرط الحدي الأول في (2) نجد أن:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "f(x) = \\int_0^\\infty B(\\lambda) \\sin \\lambda x d\\lambda",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهذه معادلة تكاملية لتعيين \\( B(\\lambda) \\) ، f(x) يجب أن تكون فردية لذلك يكون لدينا:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "B(\\lambda) = \\frac{2}{\\pi} \\int_0^\\infty f(x) \\sin \\lambda x dx = \\frac{2}{\\pi} \\int_0^\\infty f(v) \\sin \\lambda v dv",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وباستخدام هذا في (4) نجد أن:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u(x, t) = \\frac{2}{\\pi} \\int_0^\\infty \\int_0^\\infty f(v) e^{-k \\lambda^2 t} \\sin \\lambda v \\sin \\lambda x dx d\\lambda dv",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "3- معادلة لابلاس:",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "المعادلات التفاضلية الجزئية وتطبيقاتها\ndu/dt = k d^2u/dx^2, t > 0, x > 0 (1)\n|u(x, t)| < M, u(0, t) = 0, u(x, 0) = f(x) (2)\nالشرط الاخير لازم حيث أن درجة الحرارة يجب أن تكون محددة لأسباب طبيعية.\n(ب) إن حل المعادلة (1) بفصل المتغيرات هو:\nu(x, t) = e^(-kλ^2t) (A cos λx + B sin λx)\nمن الشرط الثاني من الشروط الحدية (2) نجد أن A=0 وعلى ذلك:\nu(x, t) = B e^(-kλ^2t) sin λx (3)\nبما أنه لا توجد أي قيود على λ فيمكننا أن نستبدل B في (3) بالدالة B(λ) وهذا لا يؤثر في الحل. أكثر من ذلك فإنه يمكننا أن نجري التكامل بالنسبة الى λ من 0 الى ∞ ولايزال الناتج حل هذا يقابل نظرية التراكيب لقيم متناثرة تأخذها λ المستخدمة عند الكلام عن متسلسلات فورييه. وعلى ذلك نصل الى الحل الممكن.\nu(x, t) = ∫ B(λ) e^(-kλ^2t) sin λx dλ (4)\nمن الشرط الحدي الأول في (2) نجد أن:\nf(x) = ∫ B(λ) sin λx dλ\nوهذه معادلة تكاملية لتعيين B(λ) ، f(x) يجب أن تكون فردية لذلك يكون لدينا:\nB(λ) = 2/π ∫ f(x) sin λx dx = 2/π ∫ f(v) sin λv dv\nوباستخدام هذا في (4) نجد أن:\nu(x, t) = 2/π ∫ ∫ f(v) e^(-kλ^2t) sin λv sin λx dx dλ dv\n3- معادلة لابلاس:",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 21,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "معادلة لابلاس يمكن افتراضها النموذج الاصلي أو الاساسي للمعادلات التفاضلية الجزئية وترجع اهمية معادلة لابلاس في الكهربية الساكنة في تحفيز التطور الحادث في التغير الكبير في طرق الحل بوجود شروط حدية تتراوح من البساطة والتماثل للتعقيد والالتفاف.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الخواص الاساسية لمعادلة لابلاس تكون مستقلة عن نظام الاحداثيات في التعبير عنها ونفرض لحظيا أننا سوف نستخدم الاحداثيات الكارتيزية حيث المعادلات التفاضلية الجزئية تعطي بمجاميع التفاضلات الثانية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{d^2 u}{dx^2} = 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "تحدث هذه المعادلة في مجالات متعددة فمثلا في نظرية التوصيل الحراري تكون u هي درجة الحرارة في حالة الاستقرار، أي درجة الحرارة بعد مرور وقت كاف وهي تعادل \\( \\frac{du}{dt} = 0 \\) في معادلة التوصيل الحراري السابقة، وفي الكهرباء تمثل الجهد الكهربائي لهذا تسمى المعادلة بمعادلة الجهد.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "مثال:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "أوجد حلول معادلة لابلاس في إحداثيات كروية عندما لا تعتمد على \\( \\Phi \\).",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "يمكن كتابة معادلة لابلاس \\( \\nabla^2 v = 0 \\) بإحداثيات كروية إذا لم يكن هناك اعتماد على \\( \\Phi \\) في الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "r \\frac{d}{dr} \\left( r \\frac{dv}{dr} \\right) + \\frac{1}{\\sin \\theta} \\frac{d}{d\\theta} \\left( \\sin \\theta \\frac{dv}{d\\theta} \\right) = 0 \\quad (1)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "ضع \\( v = R(r)\\Theta(\\theta) = R\\Theta \\) في (1) ثم بعد القسمة على \\( R\\Theta \\) تصبح المعادلة بعد فصل المتغيرات على الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{r}{R} \\frac{d}{dr} \\left( r \\frac{dR}{dr} \\right) = -\\frac{1}{\\Theta \\sin \\theta} \\frac{d}{d\\theta} \\left( \\sin \\theta \\frac{d\\Theta}{d\\theta} \\right) = -\\lambda^2",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهذه تعطي",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "r \\frac{d}{dr} \\left( r \\frac{dR}{dr} \\right) + \\lambda^2 R = 0 \\quad (2)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{d}{d\\theta} \\left( \\sin \\theta \\frac{d\\Theta}{d\\theta} \\right) - \\lambda^2 \\sin \\theta \\Theta = 0 \\quad (3)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "المعادلة (2) يمكن كتابتها في الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "r^2 R'' + 2r R' + \\lambda^2 R = 0 \\quad (4)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهذه هي معادلة كوشي التي حلها هو:",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "المعادلات التفاضلية الجزئية وتطبيقاتها\nمعادلة لابلاس يمكن افتراضها النموذج الاصلي أو الاساسي للمعادلات التفاضلية الجزئية وترجع اهمية معادلة لابلاس في الكهربية الساكنة في تحفيز التطور الحادث في التغير الكبير في طرق الحل بوجود شروط حدية تتراوح من البساطة والتماثل للتعقيد والالتفاف.\nالخواص الاساسية لمعادلة لابلاس تكون مستقلة عن نظام الاحداثيات في التعبير عنها ونفرض لحظيا أننا سوف نستخدم الاحداثيات الكارتيزية حيث المعادلات التفاضلية الجزئية تعطي بمجاميع التفاضلات الثانية.\nd^2u/dx^2 = 0\nتحدث هذه المعادلة في مجالات متعددة فمثلا في نظرية التوصيل الحراري تكون u هي درجة الحرارة في حالة الاستقرار، أي درجة الحرارة بعد مرور وقت كاف وهي تعادل du/dt = 0 في معادلة التوصيل الحراري السابقة، وفي الكهرباء تمثل الجهد الكهربائي لهذا تسمى المعادلة بمعادلة الجهد.\nمثال:\nأوجد حلول معادلة لابلاس في إحداثيات كروية عندما لا تعتمد على Φ.\nيمكن كتابة معادلة لابلاس ∇^2v = 0 بإحداثيات كروية إذا لم يكن هناك اعتماد على Φ في الصورة:\nr d/dr (r dv/dr) + 1/sinθ d/dθ (sinθ dv/dθ) = 0 (1)\nضع v = R(r)θ(θ) = Rθ في (1) ثم بعد القسمة على Rθ تصبح المعادلة بعد فصل المتغيرات على الصورة:\nr/R d/dr (r dR/dr) = -1/(θsinθ) d/dθ (sinθ dθ/dθ) = -λ^2\nوهذه تعطي\nr d/dr (r dR/dr) + λ^2R = 0 (2)\nd/dθ (sinθ dθ/dθ) - λ^2sinθθ = 0 (3)\nالمعادلة (2) يمكن كتابتها في الصورة:\nr^2R'' + 2rR' + λ^2R = 0 (4)\nوهذه هي معادلة كوشي التي حلها هو:",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 22,
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "R = A_1 r^n + \\frac{B_1}{r^{n+1}} \\quad (5)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث وضعنا \\( n = -\\frac{1}{2} + \\sqrt{\\frac{1}{4} - \\lambda^2} \\) أو \\( \\lambda^2 = -n(n+1) \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "يمكن كتابة المعادلة (3) بعد وضع \\( \\lambda^2 = -n(n+1) \\) في الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{d}{d\\theta} \\left( \\sin \\theta \\frac{d\\Theta}{d\\theta} \\right) + n(n+1) \\sin \\theta \\Theta = 0 \\quad (6)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "الآن إذا وضعنا \\( x = \\cos \\theta \\) فإن:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\sin \\theta \\frac{d\\Theta}{d\\theta} = -\\sin^2 \\theta \\frac{d\\Theta}{dx} = -(1-x^2) \\frac{d\\Theta}{dx}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{d\\Theta}{dx} = \\frac{d\\Theta / d\\theta}{dx / d\\theta} = \\frac{1}{-\\sin \\theta} \\frac{d\\Theta}{d\\theta} \\quad \\text{أو}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وعلى ذلك",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{d}{d\\theta} \\left( \\sin \\theta \\frac{d\\Theta}{d\\theta} \\right) = \\frac{d}{d\\theta} \\left[ -(1-x^2) \\frac{d\\Theta}{dx} \\right] = \\frac{d}{dx} \\left[ -(1-x^2) \\frac{d\\Theta}{dx} \\right] \\frac{dx}{d\\theta}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "= \\frac{d}{dx} \\left[ (1-x^2) \\frac{d\\Theta}{dx} \\right] \\sin \\theta",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وبهذا تأخذ (6) الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\frac{d}{dx} \\left[ (1-x^2) \\frac{d\\Theta}{dx} \\right] + n(n+1)\\Theta = 0",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "(1-x^2) \\frac{d^2\\Theta}{dx^2} - 2x \\frac{d\\Theta}{dx} + n(n+1)\\Theta = 0 \\quad (7) \\quad \\text{أو}",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وهذه هي معادلة لجندر التفاضلية والتي حلها هو",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\Theta = A_2 P_n(x) + B_2 Q_n(x) \\quad (8)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "وعلى ذلك فإن حل المعادلة (6) هو",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "\\Theta = A_2 P_n(\\cos \\theta) + B_2 Q_n(\\cos \\theta) \\quad (9)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "باستخدام (5)، (8) أو (9) يمكن أن نستنتج حل المعادلة (1) في الصورة:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "equation",
+          "level": null,
+          "content": "u = R\\Theta = \\left[ A_1 r^n + \\frac{B_1}{r^{n+1}} \\right] [A_2 P_n(x) + B_2 Q_n(x)] \\quad (10)",
+          "style": null,
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "حيث \\( x = \\cos \\theta \\)",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "النتائج-:",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "المعادلات التفاضلية الجزئية وتطبيقاتها\nR = A1rn + B1/rn+1 (5)\nحيث وضعنا n = -1/2 + sqrt(1/4 - λ^2) أو λ^2 = -n(n+1)\nيمكن كتابة المعادلة (3) بعد وضع λ^2 = -n(n+1) في الصورة:\nd/dθ (sinθ dθ/dθ) + n(n+1)sinθθ = 0 (6)\nالآن إذا وضعنا x = cosθ فإن:\nsinθ dθ/dθ = -sin^2θ dθ/dx = -(1-x^2) dθ/dx\ndθ/dx = (dθ/dθ)/(dx/dθ) = -1/sinθ dθ/dθ أو\nوعلى ذلك\nd/dθ (sinθ dθ/dθ) = d/dθ [-(1-x^2) dθ/dx] = d/dx [-(1-x^2) dθ/dx] dx/dθ\n= d/dx [(1-x^2) dθ/dx] sinθ\nوبهذا تأخذ (6) الصورة:\nd/dx [(1-x^2) dθ/dx] + n(n+1)θ = 0\n(1-x^2) d^2θ/dx^2 - 2x dθ/dx + n(n+1)θ = 0 (7) أو\nوهذه هي معادلة لجندر التفاضلية والتي حلها هو\nθ = A2Pn(x) + B2Qn(x) (8)\nوعلى ذلك فإن حل المعادلة (6) هو\nθ = A2Pn(cosθ) + B2Qn(cosθ) (9)\nباستخدام (5)، (8) أو (9) يمكن أن نستنتج حل المعادلة (1) في الصورة:\nu = Rθ = [A1rn + B1/rn+1][A2Pn(x) + B2Qn(x)] (10)\nحيث x = cosθ\nالنتائج-:",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    },
+    {
+      "page_number": 23,
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "level": null,
+          "content": "في هذه الورقة تم التوصل الى النتائج الاتية:-",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "1- تؤكد الدراسة أنه بإمكان الطالب أن يكون معادلات تفاضلية جزئية في حل وترجمة أنواع عديدة من المسائل والصيغ الرياضية الخاضعة لشروط معطاة كالشروط الحدية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "2- من خلال معالجة بعض الأمثلة والتطبيقات استطاعت هذه الدراسة ربط العلوم الرياضية بالفيزيائية باستخدام التطبيقات وحلها، باستخدام المعادلات التفاضلية الجزئية.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "3- قمنا باستخدام المعادلات التفاضلية الجزئية المكافئة لتطوير الطرق التي تكيف حل خاص للمعادلات التفاضلية الجزئية، بشروط حدية وذلك بتقديم بارامترات والطرق العامة واضحة وتطبق في المعادلات التفاضلية الجزئية من الرتبة الثانية بمعاملات تابة بشكل جيد.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "المراجع-:",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "1- الرياضيات المتقدمة للمهندسين والعلميين، مواري. ر. شبيجل، الدار الدولية للنشر والتوزيع، لبنان، 1991.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "2- المعادلات التفاضلية الجزئية للاقسام العلمية والهندسية، الزوام أحمد دلة، ادارة المطبوعات والنشر جامعة الفاتح، ليبيا، 1998.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "3- المعادلات التفاضلية الجزئية، اس فارلو، ترجمة: مها عواض الكبيسي، منشورات جامعة عمر المختار البيضاء، ليبيا، 2005.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "4- مبادئ المعادلات التفاضلية الجزئية وبعض تطبيقاتها، عمر الخليل عثمان اسحق، السودان، 2015.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "5- المعادلات التفاضلية الجزئية، ناجي بن صالح، شعبان بن رسلان، السعودية، 2007.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "6- المعادلات التفاضلية، محمد رجب الجزيري، ادارة المطبوعات والنشر جامعة الفاتح، ليبيا، 2010.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "7- المعادلة التفاضلية مقاربة تطبيقية، علي مصطفى بن الاشهر، منشورات اكاديمية الدراسات العليا، ليبيا، 2005.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "8- المعادلات التفاضلية، حسن مصطفى العويضي، عبد الوهاب عباس رجب، سناء علي زارع، السعودية، 2005.",
+          "style": null,
+          "is_display_math": false
+        },
+        {
+          "block_type": "list_item",
+          "level": null,
+          "content": "9- Hans, George B. Arfken, Mathematical Methods For Physicists, USA, Frank E. Haris, J. Weber, 2013.",
+          "style": null,
+          "is_display_math": false
+        }
+      ],
+      "tables": [],
+      "images": [],
+      "raw_text": "المعادلات التفاضلية الجزئية وتطبيقاتها\nفي هذه الورقة تم التوصل الى النتائج الاتية:-\n1- تؤكد الدراسة أنه بإمكان الطالب أن يكون معادلات تفاضلية جزئية في حل وترجمة أنواع عديدة من المسائل والصيغ الرياضية الخاضعة لشروط معطاة كالشروط الحدية.\n2- من خلال معالجة بعض الأمثلة والتطبيقات استطاعت هذه الدراسة ربط العلوم الرياضية بالفيزيائية باستخدام التطبيقات وحلها، باستخدام المعادلات التفاضلية الجزئية.\n3- قمنا باستخدام المعادلات التفاضلية الجزئية المكافئة لتطوير الطرق التي تكيف حل خاص للمعادلات التفاضلية الجزئية، بشروط حدية وذلك بتقديم بارامترات والطرق العامة واضحة وتطبق في المعادلات التفاضلية الجزئية من الرتبة الثانية بمعاملات تابة بشكل جيد.\nالمراجع-:\n1- الرياضيات المتقدمة للمهندسين والعلميين، مواري. ر. شبيجل، الدار الدولية للنشر والتوزيع، لبنان، 1991.\n2- المعادلات التفاضلية الجزئية للاقسام العلمية والهندسية، الزوام أحمد دلة، ادارة المطبوعات والنشر جامعة الفاتح، ليبيا، 1998.\n3- المعادلات التفاضلية الجزئية، اس فارلو، ترجمة: مها عواض الكبيسي، منشورات جامعة عمر المختار البيضاء، ليبيا، 2005.\n4- مبادئ المعادلات التفاضلية الجزئية وبعض تطبيقاتها، عمر الخليل عثمان اسحق، السودان، 2015.\n5- المعادلات التفاضلية الجزئية، ناجي بن صالح، شعبان بن رسلان، السعودية، 2007.\n6- المعادلات التفاضلية، محمد رجب الجزيري، ادارة المطبوعات والنشر جامعة الفاتح، ليبيا، 2010.\n7- المعادلة التفاضلية مقاربة تطبيقية، علي مصطفى بن الاشهر، منشورات اكاديمية الدراسات العليا، ليبيا، 2005.\n8- المعادلات التفاضلية، حسن مصطفى العويضي، عبد الوهاب عباس رجب، سناء علي زارع، السعودية، 2005.\n9- Hans, George B. Arfken, Mathematical Methods For Physicists, USA, Frank E. Haris, J. Weber, 2013.",
+      "has_multi_column": false,
+      "column_count": 1,
+      "reading_order_notes": null
+    }
+  ],
+  "extraction_notes": "Extracted in 2 chunks of 15 pages. Processing time: 277.1s. Content: 28,709 chars, 367 text blocks, 0 tables, 2 images. Pages with content: 23/23."
+}
