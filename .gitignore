@@ -44,6 +44,8 @@ logs/
 examples/output/*.html
 output/
 *.html
+outputs_2_prompt_audit/
+
 
 # Testing
 .pytest_cache/
