@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
-const PDFS_DIR = path.join(process.cwd(), "../pdfs");
+// Use environment variable with fallback
+const PDFS_DIR = path.resolve(
+  process.cwd(),
+  process.env.PDFS_DIR || "../pdfs"
+);
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +14,17 @@ export async function GET(
 ) {
   try {
     const fileName = params.fileName;
-    const pdfPath = path.join(PDFS_DIR, `${fileName}.pdf`);
+
+    // Sanitize fileName to prevent path traversal attacks
+    const sanitizedFileName = path.basename(fileName);
+    if (sanitizedFileName !== fileName || fileName.includes("..")) {
+      return NextResponse.json(
+        { error: "Invalid fileName" },
+        { status: 400 }
+      );
+    }
+
+    const pdfPath = path.join(PDFS_DIR, `${sanitizedFileName}.pdf`);
 
     // Check if file exists
     await fs.access(pdfPath);
@@ -22,7 +36,7 @@ export async function GET(
     return new NextResponse(pdfBuffer, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${fileName}.pdf"`,
+        "Content-Disposition": `inline; filename="${sanitizedFileName}.pdf"`,
       },
     });
   } catch (error) {

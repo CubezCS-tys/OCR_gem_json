@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
-const OUTPUTS_DIR = path.join(process.cwd(), "../outputs");
+// Use environment variable with fallback
+const OUTPUTS_DIR = path.resolve(
+  process.cwd(),
+  process.env.OUTPUTS_DIR || "../outputs"
+);
 
 export async function GET(
   request: NextRequest,
@@ -10,7 +14,17 @@ export async function GET(
 ) {
   try {
     const fileName = params.fileName;
-    const jsonPath = path.join(OUTPUTS_DIR, `${fileName}.json`);
+
+    // Sanitize fileName to prevent path traversal attacks
+    const sanitizedFileName = path.basename(fileName);
+    if (sanitizedFileName !== fileName || fileName.includes("..")) {
+      return NextResponse.json(
+        { error: "Invalid fileName" },
+        { status: 400 }
+      );
+    }
+
+    const jsonPath = path.join(OUTPUTS_DIR, `${sanitizedFileName}.json`);
 
     // Check if file exists
     await fs.access(jsonPath);

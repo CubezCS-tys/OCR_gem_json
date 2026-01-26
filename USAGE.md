@@ -77,6 +77,39 @@ python3 pdf_to_html.py document.pdf -v
 python3 pdf_to_html.py document.pdf --retries 5 --max-tokens 100000
 ```
 
+### Theme and Minification
+```bash
+python3 pdf_to_html.py document.pdf --theme dark --minify-html
+```
+
+### Validation and Quality Controls
+```bash
+python3 pdf_to_html.py document.pdf --validation-level strict --quality-threshold 80
+```
+Disable validation:
+```bash
+python3 pdf_to_html.py document.pdf --no-validation
+```
+
+### Caching and Parallel Processing
+```bash
+python3 pdf_to_html.py document.pdf --parallel --max-workers 4
+```
+Disable caching:
+```bash
+python3 pdf_to_html.py document.pdf --no-cache
+```
+
+### Debug Info Block in HTML
+```bash
+python3 pdf_to_html.py document.pdf --debug-info
+```
+
+### Fail Fast / Disable Text Fallback
+```bash
+python3 pdf_to_html.py document.pdf --fail-fast --no-text-fallback
+```
+
 ---
 
 ## Common Use Cases
