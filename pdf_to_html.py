@@ -813,8 +813,12 @@ window.addEventListener('load', () => {
         parts = []
         page_class = "page"
         
-        # Check if entire page is English by analyzing all text content
-        page_text = " ".join(block.content for block in page.text_blocks)
+        # Check if entire page is English by analyzing non-equation text content
+        page_text = " ".join(
+            block.content
+            for block in page.text_blocks
+            if block.block_type != "equation"
+        )
         is_english_page = HTMLRenderer._detect_english_content(page_text)
         
         # Override RTL for English pages
@@ -1016,10 +1020,46 @@ window.addEventListener('load', () => {
         """Render a group of consecutive list items as a proper HTML list."""
         parts = ['<ul class="list-wrapper">']
         for item in list_items:
-            content = HTMLRenderer._escape(item.content)
+            content = HTMLRenderer._render_list_item_content(item)
             parts.append(f"<li>{content}</li>")
         parts.append('</ul>')
         return "\n".join(parts)
+
+    @staticmethod
+    def _looks_like_math(text: str) -> bool:
+        """Heuristic check for LaTeX/math-like content."""
+        if not text:
+            return False
+        # Strong math signals: LaTeX commands or subscripts/superscripts
+        if re.search(r'\\[a-zA-Z]+', text):
+            return True
+        if "_" in text or "^" in text:
+            return True
+        return False
+
+    @staticmethod
+    def _render_list_item_content(item: TextBlock) -> str:
+        """Render list item content, preserving inline equations when detected."""
+        raw = item.content.strip()
+        if not raw:
+            return ""
+
+        if not HTMLRenderer._looks_like_math(raw):
+            return HTMLRenderer._escape(raw)
+
+        # If Arabic exists, try to split: math first, Arabic caption after
+        if HTMLRenderer._has_arabic(raw):
+            m = re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', raw)
+            if m:
+                math_part = raw[:m.start()].strip()
+                rest = raw[m.start():].strip()
+                if math_part and HTMLRenderer._looks_like_math(math_part):
+                    math_html = f'<span class="equation-inline">\\({math_part}\\)</span>'
+                    rest_html = HTMLRenderer._escape(rest)
+                    return f"{math_html} {rest_html}".strip()
+
+        # Default: treat whole item as inline math
+        return f'<span class="equation-inline">\\({raw}\\)</span>'
     
     @staticmethod
     def _detect_english_content(text: str) -> bool:
