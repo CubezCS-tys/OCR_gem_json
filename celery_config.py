@@ -10,6 +10,9 @@ REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
 REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
 REDIS_DB = int(os.getenv('REDIS_DB', 0))
 REDIS_PASSWORD = os.getenv('REDIS_PASSWORD', None)
+WORKER_CONCURRENCY = os.getenv('WORKER_CONCURRENCY')
+if WORKER_CONCURRENCY:
+    WORKER_CONCURRENCY = int(WORKER_CONCURRENCY)
 
 # Build Redis URL
 if REDIS_PASSWORD:
@@ -68,6 +71,9 @@ app.conf.update(
     worker_send_task_events=True,
     task_send_sent_event=True,
 )
+
+if WORKER_CONCURRENCY:
+    app.conf.worker_concurrency = WORKER_CONCURRENCY
 
 # Task priorities
 PRIORITY_URGENT = 9

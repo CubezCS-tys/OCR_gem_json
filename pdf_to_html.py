@@ -79,6 +79,8 @@ class ProcessingConfig:
     image_dpi: int = 150  # DPI for rendering pages when extracting images
     request_timeout: int = 300  # Timeout for API requests in seconds (5 minutes)
     experimental_gemini_html: bool = False  # Also request HTML directly from Gemini for comparison
+    use_gemini_title_page_html: bool = True  # Use Gemini HTML for title/cover pages
+    gemini_title_pages: int = 1  # Number of leading pages to render via Gemini for title/cover fidelity
     
     def __post_init__(self):
         """Validate configuration parameters."""
@@ -187,6 +189,10 @@ class DocumentMetadata(BaseModel):
     language: Optional[str] = Field(default=None, description="Primary language of the document")
     document_type: Optional[str] = Field(default=None, description="Type: report, form, article, letter, etc.")
     is_scanned: bool = Field(default=False, description="Whether the document appears to be scanned/OCR'd")
+
+
+class MetadataExtractionError(RuntimeError):
+    """Raised when document metadata extraction fails after retries."""
 
 
 class DocumentStructure(BaseModel):
@@ -438,6 +444,38 @@ window.addEventListener('load', () => {
     
     .page:last-child {{
         border-bottom: none;
+    }}
+
+    /* Title/Cover page styling */
+    .title-page {{
+        padding-top: 80px;
+    }}
+
+    .title-page .page-header {{
+        margin-bottom: 10px;
+        opacity: 0.7;
+    }}
+
+    .title-page .page-footer {{
+        margin-top: 10px;
+        opacity: 0.7;
+    }}
+
+    .title-block {{
+        text-align: center;
+        margin: 1.5rem auto 2rem;
+        max-width: 85%;
+    }}
+
+    .title-block h1, .title-block h2, .title-block h3 {{
+        text-align: center;
+        margin-left: auto;
+        margin-right: auto;
+    }}
+
+    .title-block p {{
+        text-align: center;
+        margin: 0.5rem 0;
     }}
     
     .page-header {{
@@ -718,18 +756,17 @@ window.addEventListener('load', () => {
     
     /* Multi-column layout using flexbox - respects reading order */
     .multi-column {{
-        display: block;
-        /* Don't use CSS column-count - it breaks our reading order sorting */
+        display: flex;
+        gap: 2rem;
+        align-items: flex-start;
     }}
     
-    .multi-column-3 {{
-        display: block;
+    .multi-column .column {{
+        flex: 1 1 0;
+        min-width: 0;
     }}
     
-    /* For RTL multi-column, use column-fill and direction */
-    [dir="rtl"] .multi-column {{
-        direction: rtl;
-    }}
+    /* In RTL context, flex row is already right-to-left via direction */
     
     @media print {{
         body {{ background: white; padding: 0; }}
@@ -740,7 +777,8 @@ window.addEventListener('load', () => {
     @media (max-width: 600px) {{
         body {{ padding: 10px; }}
         .page {{ padding: 20px; }}
-        .multi-column, .multi-column-3 {{ column-count: 1; }}
+        .multi-column {{ flex-direction: column; }}
+        .multi-column .column {{ width: 100%; }}
     }}
 </style>"""
     
@@ -782,13 +820,26 @@ window.addEventListener('load', () => {
         # Override RTL for English pages
         page_dir = "ltr" if is_english_page else ("rtl" if is_rtl else "ltr")
         
+        # Infer columns if metadata is missing or wrong
+        inferred_columns = None
+        if not page.has_multi_column or not page.column_count:
+            inferred_columns = HTMLRenderer._infer_column_count(page, page_dir=page_dir)
+        
+        use_multi_column = page.has_multi_column or (inferred_columns is not None and inferred_columns > 1)
+        column_count = page.column_count or inferred_columns
+        
         # Add multi-column indicator for debugging if needed
-        if page.has_multi_column:
+        if use_multi_column:
             page_class += " has-multi-column"
         
         # Add english-text class for English pages
         if is_english_page:
             page_class += " english-text"
+
+        # Title/Cover page detection
+        is_title_page = HTMLRenderer._is_title_page(page)
+        if is_title_page:
+            page_class += " title-page"
         
         parts.append(f'<div class="{page_class}" id="page-{page.page_number}" style="position: relative;" dir="{page_dir}">')
         
@@ -845,29 +896,81 @@ window.addEventListener('load', () => {
             })
             insertion_order += 1
         
-        # Sort by position for correct reading flow
-        # For multi-column: group by column (x), then sort by y within column
-        # For single column: just sort by y, then x
-        if page.has_multi_column and page.column_count and page.column_count > 1:
-            # Multi-column: sort by column then y-position
-            column_width = 100.0 / page.column_count
+        # Render elements in order, grouping consecutive list items
+        footnotes = []  # Collect footnotes for end of page
+        
+        if use_multi_column and column_count and column_count > 1:
+            column_width = 100.0 / column_count
+            default_column = (column_count - 1) if page_dir == "rtl" else 0
             
-            def get_column(x_pos: float) -> int:
+            def get_column(x_pos: Optional[float]) -> int:
                 """Determine column based on x position."""
+                if x_pos is None:
+                    return default_column
                 col = int(x_pos / column_width)
-                return min(max(col, 0), page.column_count - 1)
+                return min(max(col, 0), column_count - 1)
             
-            # For RTL (Arabic), rightmost column comes first
-            if is_rtl:
-                elements.sort(key=lambda e: (-(get_column(e['x'])), e['y'], e['order']))
-            else:
-                elements.sort(key=lambda e: (get_column(e['x']), e['y'], e['order']))
+            columns: list[list[dict]] = [[] for _ in range(column_count)]
+            for element in elements:
+                col = get_column(element.get('x'))
+                columns[col].append(element)
+            
+            # Sort each column top-to-bottom
+            for col_elements in columns:
+                col_elements.sort(key=lambda e: (e['y'], e['x'], e['order']))
+            
+            parts.append(f'<div class="multi-column columns-{column_count}">')
+            column_order = list(range(column_count))
+            if page_dir == "rtl":
+                column_order = list(reversed(column_order))
+            for col_index in column_order:
+                col_elements = columns[col_index]
+                parts.append(f'<div class="column column-{col_index + 1}">')
+                col_parts, col_footnotes = HTMLRenderer._render_elements(col_elements, column_count=column_count)
+                parts.extend(col_parts)
+                footnotes.extend(col_footnotes)
+                parts.append('</div>')
+            parts.append('</div>')
         else:
             # Single column: sort top to bottom, left to right
             elements.sort(key=lambda e: (e['y'], e['x'], e['order']))
+            if is_title_page:
+                title_elements, body_elements = HTMLRenderer._split_title_elements(elements)
+                if title_elements:
+                    parts.append('<div class="title-block">')
+                    title_parts, title_footnotes = HTMLRenderer._render_elements(title_elements, column_count=None)
+                    parts.extend(title_parts)
+                    footnotes.extend(title_footnotes)
+                    parts.append('</div>')
+                    elements = body_elements
+            col_parts, col_footnotes = HTMLRenderer._render_elements(elements, column_count=None)
+            parts.extend(col_parts)
+            footnotes.extend(col_footnotes)
         
-        # Render elements in order, grouping consecutive list items
-        footnotes = []  # Collect footnotes for end of page
+        # Render footnotes at the end if any
+        if footnotes:
+            parts.append('<div class="footnotes-section">')
+            for footnote in footnotes:
+                content = HTMLRenderer._escape(footnote.content)
+                parts.append(f'<div class="footnote">{content}</div>')
+            parts.append('</div>')
+        
+        parts.append('</div>')  # Close page-content
+        
+        # Display actual footer from PDF if available
+        if page.footer:
+            parts.append(f'<div class="page-footer">{HTMLRenderer._escape(page.footer)}</div>')
+        
+        # Reading order notes removed - no longer needed for single-column flow
+        
+        parts.append("</div>")
+        return "\n".join(parts)
+
+    @staticmethod
+    def _render_elements(elements: list[dict], column_count: Optional[int] = None) -> tuple[list[str], list[TextBlock]]:
+        """Render a list of ordered elements to HTML parts and collect footnotes."""
+        parts: list[str] = []
+        footnotes: list[TextBlock] = []
         i = 0
         while i < len(elements):
             element = elements[i]
@@ -901,29 +1004,12 @@ window.addEventListener('load', () => {
                 parts.append(HTMLRenderer._render_table(element['content']))
                 i += 1
             elif element['type'] == 'image':
-                parts.append(HTMLRenderer._render_image(element['content']))
+                parts.append(HTMLRenderer._render_image(element['content'], column_count=column_count))
                 i += 1
             else:
                 i += 1
         
-        # Render footnotes at the end if any
-        if footnotes:
-            parts.append('<div class="footnotes-section">')
-            for footnote in footnotes:
-                content = HTMLRenderer._escape(footnote.content)
-                parts.append(f'<div class="footnote">{content}</div>')
-            parts.append('</div>')
-        
-        parts.append('</div>')  # Close page-content
-        
-        # Display actual footer from PDF if available
-        if page.footer:
-            parts.append(f'<div class="page-footer">{HTMLRenderer._escape(page.footer)}</div>')
-        
-        # Reading order notes removed - no longer needed for single-column flow
-        
-        parts.append("</div>")
-        return "\n".join(parts)
+        return parts, footnotes
     
     @staticmethod
     def _render_list(list_items: list[TextBlock]) -> str:
@@ -950,6 +1036,125 @@ window.addEventListener('load', () => {
         
         # If more than 70% Latin characters, it's English
         return (latin_chars / total_alpha) > 0.7
+
+    @staticmethod
+    def _is_title_page(page: PageContent) -> bool:
+        """Heuristic detection for title/cover pages."""
+        if page.page_number > 2:
+            return False
+        if page.has_multi_column:
+            return False
+        if page.tables:
+            return False
+        blocks = page.text_blocks
+        if not blocks:
+            return False
+        total_blocks = len(blocks)
+        total_chars = sum(len(b.content) for b in blocks)
+        headings = sum(1 for b in blocks if b.block_type == "heading")
+        centered = sum(1 for b in blocks if b.style and "center" in b.style.lower())
+        paragraphs = [b for b in blocks if b.block_type == "paragraph"]
+        long_paras = sum(1 for b in paragraphs if len(b.content.strip()) > 200)
+
+        # Strong signals: centered/heading-heavy, short body
+        if total_blocks <= 14 and (headings >= 1) and (centered >= 1 or total_chars < 2200):
+            return True
+        if total_blocks <= 10 and centered >= 2:
+            return True
+        # Avoid marking normal pages with long body text
+        if long_paras >= 2 and total_chars > 2600:
+            return False
+
+        return False
+
+    @staticmethod
+    def _split_title_elements(elements: list[dict]) -> tuple[list[dict], list[dict]]:
+        """Split elements into title block and body based on position/content."""
+        title_elements: list[dict] = []
+        body_elements: list[dict] = []
+        in_title = True
+
+        for element in elements:
+            if not in_title:
+                body_elements.append(element)
+                continue
+
+            y_pos = element.get("y", 50)
+            if y_pos is not None and y_pos > 35:
+                in_title = False
+                body_elements.append(element)
+                continue
+
+            if element["type"] == "text":
+                block: TextBlock = element["content"]
+                content = block.content.strip()
+                is_heading = block.block_type == "heading"
+                is_centered = bool(block.style and "center" in block.style.lower())
+                is_short = len(content) <= 140
+                is_titleish = is_heading or is_centered or (is_short and block.block_type == "paragraph")
+                if is_titleish:
+                    title_elements.append(element)
+                    continue
+            elif element["type"] == "image":
+                if y_pos is not None and y_pos <= 25:
+                    title_elements.append(element)
+                    continue
+
+            in_title = False
+            body_elements.append(element)
+
+        return title_elements, body_elements
+
+    @staticmethod
+    def _infer_column_count(page: PageContent, page_dir: Optional[str] = None) -> Optional[int]:
+        """
+        Infer column count from text block x-positions when metadata is missing.
+        
+        Returns:
+            2 or 3 if columns are detected, otherwise None
+        """
+        dir_hint = (page_dir or page.page_direction or "ltr").lower()
+        use_rtl = dir_hint == "rtl"
+
+        xs = []
+        for block in page.text_blocks:
+            if block.bbox_left is None or block.bbox_width is None:
+                continue
+            # Ignore full-width blocks (likely titles/headers spanning columns)
+            if block.bbox_width >= 70:
+                continue
+            # Skip display math blocks which are often centered and can skew clustering
+            if block.block_type == "equation" or block.is_display_math:
+                continue
+            # Skip tiny fragments that can be indented or centered
+            if block.bbox_width < 12:
+                continue
+
+            # Use right edge for RTL to avoid false columns from right-aligned text
+            pos = (block.bbox_left + block.bbox_width) if use_rtl else block.bbox_left
+            xs.append(pos)
+        
+        if len(xs) < 8:
+            return None
+        
+        xs.sort()
+        # Detect a strong gap between two clusters
+        max_gap = 0.0
+        max_i = 0
+        for i in range(len(xs) - 1):
+            gap = xs[i + 1] - xs[i]
+            if gap > max_gap:
+                max_gap = gap
+                max_i = i
+        
+        # Heuristic threshold: large horizontal gap implies column break
+        if max_gap >= 15:
+            left_count = max_i + 1
+            right_count = len(xs) - left_count
+            if left_count >= 3 and right_count >= 3:
+                return 2
+        
+        return None
     
     @staticmethod
     def _has_arabic(text: str) -> bool:
@@ -980,16 +1185,18 @@ window.addEventListener('load', () => {
         
         for text_block in text_blocks:
             if HTMLRenderer._has_arabic(text_block):
-                # This is likely a caption, not part of the equation
+                # Heuristic: keep short Arabic tokens (likely variables) inside the equation
+                is_short_token = (len(text_block.strip()) <= 3 and " " not in text_block.strip())
+                if is_short_token:
+                    continue
+                # Otherwise treat as caption-like text
                 arabic_parts.append(text_block)
-                # Remove this \text{...} block
                 cleaned = cleaned.replace(f'\\text{{{text_block}}}', '', 1)
         
         # Clean up any remaining spacing issues
         cleaned = re.sub(r'\s+', ' ', cleaned).strip()
         
         # If equation is now empty or very short (just Arabic caption, no real math)
-        # Return empty equation and full arabic caption
         if len(cleaned.strip()) < 5:
             # This is probably just an Arabic label, not a real equation
             # Return the original content as caption
@@ -997,6 +1204,11 @@ window.addEventListener('load', () => {
             # Remove \text{} wrappers from caption
             arabic_caption = re.sub(r'\\text\{([^}]+)\}', r'\1', arabic_caption)
             return "", arabic_caption
+
+        # If cleaned equation has no real symbols/letters/digits, fallback to original
+        has_alnum = bool(re.search(r'[A-Za-z0-9\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', cleaned))
+        if not has_alnum:
+            return content, ""
         
         arabic_caption = ' '.join(arabic_parts).strip()
         return cleaned, arabic_caption
@@ -1125,15 +1337,19 @@ window.addEventListener('load', () => {
         return "\n".join(parts)
     
     @staticmethod
-    def _render_image(image: Image) -> str:
+    def _render_image(image: Image, column_count: Optional[int] = None) -> str:
         """Render an image to HTML - as normal in-flow block to prevent overlaps."""
         # Use bbox dimensions for better sizing
-        # For wide images (>70% page width), show at full bbox width
-        # For smaller images, cap at reasonable size
-        if image.bbox_width > 70:
-            width = min(95, image.bbox_width)
+        # For multi-column layout, scale page-relative width to column-relative width
+        if column_count and column_count > 1:
+            width = min(100, image.bbox_width * column_count)
         else:
-            width = max(30, min(80, image.bbox_width))
+            # For wide images (>70% page width), show at full bbox width
+            # For smaller images, cap at reasonable size
+            if image.bbox_width > 70:
+                width = min(95, image.bbox_width)
+            else:
+                width = max(30, min(80, image.bbox_width))
         
         # Build inline style for sizing (no horizontal positioning)
         style = f"max-width: {width}%; margin: 1rem auto;"
@@ -1360,7 +1576,11 @@ Do NOT extract page content, just count pages and identify metadata.
 
 IMPORTANT:
 - If unable to determine page count, return -1
-- If PDF is encrypted or corrupted, set total_pages to -1 and note in document_type"""
+- If PDF is encrypted or corrupted, set total_pages to -1 and note in document_type
+
+OUTPUT FORMAT:
+- Return ONLY a single valid JSON object matching the schema.
+- No Markdown, no code fences, no extra text before or after the JSON."""
 
         # Try multiple times with different temperatures if JSON parsing fails
         # Start with low temperature for accurate transcription, increase slightly if it fails
@@ -1378,9 +1598,14 @@ IMPORTANT:
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                         response_json_schema=DocumentMetadata.model_json_schema(),
-                        system_instruction="You are a document analyzer. Count pages and extract metadata only. Ensure ALL JSON strings are properly escaped.",
+                        system_instruction=(
+                            "You are a document analyzer. Count pages and extract metadata only. "
+                            "Return ONLY valid JSON that matches the schema. "
+                            "No Markdown, no code fences, no explanations. "
+                            "Ensure ALL JSON strings are properly escaped."
+                        ),
                         media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,  # Low res for counting
-                        max_output_tokens=1024,
+                        max_output_tokens=self.config.max_output_tokens,
                         temperature=temperature,
                     ),
                 )
@@ -1406,7 +1631,7 @@ IMPORTANT:
         
         # All retries exhausted
         logger.error(f"Failed to extract valid metadata after {len(temperatures)} attempts")
-        raise RuntimeError(f"Metadata extraction failed: {last_error}")
+        raise MetadataExtractionError(f"Metadata extraction failed: {last_error}")
     
     def _estimate_cost(self, total_pages: int) -> dict:
         """Estimate processing cost based on page count.
@@ -1534,6 +1759,7 @@ For each page in this range:
 8. For TABLES: OCR all text content and structure it with headers and rows. Do NOT treat tables as images.
    - For MERGED CELLS: Set row_span and col_span values (default is 1 for regular cells)
    - For table captions: Extract separately from table content
+   - CRITICAL: Also extract any source lines / notes directly below or above tables as caption or footnote blocks (even if small text)
    - Provide BOUNDING BOX coordinates (bbox_top, bbox_left, bbox_width, bbox_height) as percentages (0-100) of the page.
 9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
    - Identify the image_type (chart, graph, diagram, figure, photo, logo, illustration, other)
@@ -1547,6 +1773,7 @@ For each page in this range:
    - Set has_multi_column=true and column_count (2 or 3)
    - CRITICAL: For LTR documents, extract columns LEFT-TO-RIGHT (complete column 1, then column 2, etc.)
    - CRITICAL: For RTL documents, extract columns RIGHT-TO-LEFT (complete rightmost column first)
+   - CRITICAL: Do NOT merge text across columns. Keep each column’s paragraphs separate even if sentences wrap.
    - Add reading_order_notes if the layout is complex or unusual
 11. For TEXT DIRECTION:
    - Set page_direction='rtl' for Arabic/Hebrew pages, 'ltr' for English/Western
@@ -1565,8 +1792,8 @@ REMEMBER:
 
         for attempt in range(self.config.max_retries):
             try:
-                # Start with low temperature for accurate transcription (not creative writing)
-                temperature = 0.3 + (attempt * 0.2)  # 0.3 -> 0.5 -> 0.7 on retries
+                # Fixed low temperature for accurate transcription (avoid merging across columns)
+                temperature = 0.3
                 logger.info(f"Extracting pages {start_page}-{end_page} (attempt {attempt + 1}, temperature={temperature})")
                 
                 response = self.client.models.generate_content(
@@ -1586,7 +1813,9 @@ REMEMBER:
                             "For NUMBERED EQUATIONS: Extract equation number in equation_number field. "
                             "For NESTED LISTS: Set list_level (1=top, 2=nested, etc.) to preserve hierarchy. "
                             "For MERGED TABLE CELLS: Set row_span and col_span appropriately. "
+                            "CRITICAL: Extract table captions and any source lines/notes directly below or above tables as caption/footnote blocks, even if small. "
                             "For MULTI-COLUMN LAYOUTS in LTR docs: Extract left-to-right column order. For RTL docs: right-to-left. "
+                            "CRITICAL: Do NOT merge text across columns. Keep each column’s paragraphs separate even if sentences wrap. "
                             "For MIXED RTL/LTR TEXT: Set text_direction on individual text blocks. "
                             "For WATERMARKS: Ignore decorative watermarks like 'DRAFT', 'CONFIDENTIAL'. "
                             "For EVERY element (text blocks, tables, images), provide bbox coordinates (top, left, width, height) as percentages. "
@@ -1793,6 +2022,7 @@ Instructions:
 8. For TABLES: OCR all text content. Do NOT treat tables as images.
    - For MERGED CELLS: Set row_span and col_span values
    - For table captions: Extract separately
+   - CRITICAL: Also extract any source lines / notes directly below or above tables as caption or footnote blocks (even if small text)
    - Provide bbox coordinates
 9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
    - Identify image_type and provide description
@@ -1801,6 +2031,7 @@ Instructions:
     - Set has_multi_column=true and column_count
     - For LTR docs: Extract columns LEFT-TO-RIGHT
     - For RTL docs: Extract columns RIGHT-TO-LEFT
+    - CRITICAL: Do NOT merge text across columns. Keep each column’s paragraphs separate even if sentences wrap.
     - Add reading_order_notes if complex
 11. For TEXT DIRECTION:
     - Set page_direction='rtl' for Arabic/Hebrew, 'ltr' for Western
@@ -1817,8 +2048,8 @@ REMEMBER:
 
         for attempt in range(self.config.max_retries):
             try:
-                # Start with low temperature for accurate transcription (not creative writing)
-                temperature = 0.3 + (attempt * 0.2)  # 0.3 -> 0.5 -> 0.7 on retries
+                # Fixed low temperature for accurate transcription (avoid merging across columns)
+                temperature = 0.3
                 logger.info(f"Extracting structured content (attempt {attempt + 1}, temperature={temperature})")
                 
                 response = self.client.models.generate_content(
@@ -1839,7 +2070,9 @@ REMEMBER:
                             "For NUMBERED EQUATIONS: Extract equation number in equation_number field. "
                             "For NESTED LISTS: Set list_level (1=top, 2=nested, etc.) to preserve hierarchy. "
                             "For MERGED TABLE CELLS: Set row_span and col_span appropriately. "
+                            "CRITICAL: Extract table captions and any source lines/notes directly below or above tables as caption/footnote blocks, even if small. "
                             "For MULTI-COLUMN LAYOUTS in LTR docs: Extract left-to-right column order. For RTL docs: right-to-left. "
+                            "CRITICAL: Do NOT merge text across columns. Keep each column’s paragraphs separate even if sentences wrap. "
                             "For MIXED RTL/LTR TEXT: Set text_direction on individual text blocks. "
                             "For WATERMARKS: Ignore decorative watermarks like 'DRAFT', 'CONFIDENTIAL'. "
                             "For ALL elements (text blocks, tables, images), provide bbox coordinates (top, left, width, height) as percentages. "
@@ -1951,6 +2184,134 @@ Requirements:
                     raise RuntimeError(f"Direct HTML extraction failed after {self.config.max_retries} attempts") from e
         
         return ""
+
+    def _extract_title_page_html(self, uploaded_file: types.File, pages: int = 1) -> str:
+        """Extract HTML fragments for the first N pages (title/cover) using Gemini."""
+        pages = max(1, min(pages, 3))
+        page_range = f"pages 1 to {pages}" if pages > 1 else "page 1"
+
+        prompt = f"""Convert ONLY {page_range} of this PDF into HTML fragments.
+
+Requirements:
+- Output ONLY the <div class=\\"page\\"> ... </div> blocks for the requested pages
+- Do NOT include <html>, <head>, or <body>
+- Preserve layout fidelity for the title/cover page(s)
+- Use semantic HTML: headings, paragraphs, lists, tables, figures as appropriate
+- Preserve RTL direction with dir=\\"rtl\\" on the page container when needed
+- For equations: preserve LaTeX inside <span class=\\"equation-inline\\"> or <div class=\\"equation\\">
+- Preserve numeral systems exactly (Arabic-Indic vs Western)
+- For images/figures: include a data-bbox attribute with bbox_left,bbox_top,bbox_width,bbox_height percentages
+  Example: <figure class=\\"image-block\\" data-bbox=\\"12.5,18.0,30.0,22.0\\">...</figure>
+"""
+
+        for attempt in range(self.config.max_retries):
+            try:
+                temperature = 0.3 + (attempt * 0.2)
+                logger.info(f"Title page HTML extraction ({page_range}) attempt {attempt + 1}, temperature={temperature}")
+
+                response = self.client.models.generate_content(
+                    model=self.config.model,
+                    contents=[uploaded_file, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="text/plain",
+                        system_instruction=(
+                            "You are an expert document transcription assistant. "
+                            "Return ONLY HTML page fragments for the requested pages. "
+                            "Do NOT wrap with full HTML document structure. "
+                            "Preserve layout and typography for title/cover fidelity. "
+                            "PRESERVE NUMERAL SYSTEMS exactly. "
+                            "For RTL text: use dir='rtl' on the page container when appropriate."
+                        ),
+                        media_resolution=self._get_media_resolution(),
+                        max_output_tokens=min(self.config.max_output_tokens, 16384),
+                        temperature=temperature,
+                    ),
+                )
+
+                html_fragment = (response.text or "").strip()
+                if not html_fragment:
+                    raise ValueError("Empty title page HTML response from Gemini")
+                return html_fragment
+
+            except Exception as e:
+                logger.warning(f"Title page HTML attempt {attempt + 1} failed: {str(e)[:200]}")
+                if attempt < self.config.max_retries - 1:
+                    time.sleep(self.config.retry_delay * (attempt + 1))
+                else:
+                    raise RuntimeError("Title page HTML extraction failed") from e
+
+    def _inject_title_images(self, title_html: str, doc: DocumentStructure, title_pages: int) -> str:
+        """Inject base64 images into Gemini title HTML using bbox matching."""
+        images = []
+        for page in doc.pages[:title_pages]:
+            for img in page.images:
+                if img.image_data and img.bbox_left is not None:
+                    images.append(img)
+        if not images:
+            return title_html
+
+        figure_re = re.compile(
+            r'(<figure[^>]*data-bbox="([^"]+)"[^>]*>)(.*?)(</figure>)',
+            re.IGNORECASE | re.DOTALL
+        )
+
+        def parse_bbox(bbox_str: str) -> Optional[tuple[float, float, float, float]]:
+            try:
+                parts = [float(p.strip()) for p in bbox_str.split(",")]
+                if len(parts) != 4:
+                    return None
+                return parts[0], parts[1], parts[2], parts[3]
+            except Exception:
+                return None
+
+        def bbox_distance(a, b) -> float:
+            return abs(a[0] - b[0]) + abs(a[1] - b[1]) + abs(a[2] - b[2]) + abs(a[3] - b[3])
+
+        def repl(match):
+            open_tag = match.group(1)
+            bbox_str = match.group(2)
+            inner = match.group(3)
+            close_tag = match.group(4)
+
+            if "data:image" in inner:
+                return match.group(0)
+
+            bbox = parse_bbox(bbox_str)
+            if not bbox:
+                return match.group(0)
+
+            best = None
+            best_score = 1e9
+            for img in images:
+                img_bbox = (img.bbox_left, img.bbox_top, img.bbox_width, img.bbox_height)
+                score = bbox_distance(bbox, img_bbox)
+                if score < best_score:
+                    best_score = score
+                    best = img
+
+            if not best or best_score > 12:
+                return match.group(0)
+
+            img_tag = (
+                f'<img src="data:image/png;base64,{best.image_data}" '
+                f'alt="{HTMLRenderer._escape(best.description)}" '
+                f'title="{HTMLRenderer._escape(best.description)}" />'
+            )
+
+            if "image-placeholder" in inner:
+                inner = re.sub(
+                    r'<div class="image-placeholder">.*?</div>',
+                    img_tag,
+                    inner,
+                    count=1,
+                    flags=re.DOTALL
+                )
+            else:
+                inner = img_tag + inner
+
+            return open_tag + inner + close_tag
+
+        return figure_re.sub(repl, title_html)
     
     def process(self, pdf_path: str, output_path: Optional[str] = None) -> dict:
         """
@@ -2010,6 +2371,41 @@ Requirements:
                 
                 # Render to HTML from structured data
                 html_content = HTMLRenderer.render(doc)
+
+                # OPTIONAL: Replace title/cover page(s) with Gemini HTML fragments
+                if self.config.use_gemini_title_page_html:
+                    try:
+                        title_pages = max(1, min(self.config.gemini_title_pages, len(doc.pages)))
+                        logger.info(f"Extracting Gemini title page HTML for first {title_pages} page(s)")
+                        title_html = self._extract_title_page_html(uploaded_file, pages=title_pages)
+                        title_html = self._inject_title_images(title_html, doc, title_pages)
+                        logger.info("Gemini title page HTML extracted successfully")
+
+                        # Render remaining pages without the title pages
+                        remaining_pages = doc.pages[title_pages:]
+                        if remaining_pages:
+                            doc_remaining = DocumentStructure(
+                                metadata=doc.metadata,
+                                pages=remaining_pages,
+                                extraction_notes=doc.extraction_notes
+                            )
+                            html_content = HTMLRenderer.render(doc_remaining)
+                        else:
+                            # If only title pages exist, build a minimal shell
+                            html_content = HTMLRenderer.render(
+                                DocumentStructure(metadata=doc.metadata, pages=[], extraction_notes=doc.extraction_notes)
+                            )
+
+                        # Insert Gemini title HTML at the top of the document container
+                        marker = '<div class="document-container">'
+                        if marker in html_content:
+                            html_content = html_content.replace(marker, f"{marker}\n{title_html}", 1)
+                        else:
+                            # Fallback: prepend if marker missing
+                            html_content = title_html + "\n" + html_content
+
+                    except Exception as gemini_title_err:
+                        logger.warning(f"Gemini title page HTML extraction failed: {gemini_title_err}")
                 
                 # EXPERIMENTAL: Also get HTML directly from Gemini if enabled
                 if self.config.experimental_gemini_html:
@@ -2026,6 +2422,9 @@ Requirements:
                     except Exception as gemini_err:
                         logger.warning(f"Gemini direct HTML extraction failed: {gemini_err}")
                 
+            except MetadataExtractionError as e:
+                logger.error(f"Metadata extraction failed: {e}. Skipping fallback so it can be rerun later.")
+                raise
             except Exception as e:
                 logger.warning(f"Structured extraction failed: {e}. Falling back to direct HTML.")
                 html_content = self._direct_html_extraction(uploaded_file)
@@ -2214,6 +2613,11 @@ Examples:
                         help="DPI for extracted images (default: 150)")
     parser.add_argument("--experimental-gemini-html", action="store_true",
                         help="[EXPERIMENTAL] Also request HTML directly from Gemini for comparison")
+    parser.add_argument("--no-gemini-title-page", action="store_false", dest="gemini_title_page",
+                        help="[EXPERIMENTAL] Disable Gemini HTML for title/cover page(s)")
+    parser.add_argument("--title-pages", type=int, default=1,
+                        help="Number of leading pages to render via Gemini for title/cover (default: 1)")
+    parser.set_defaults(gemini_title_page=True)
     
     args = parser.parse_args()
     
@@ -2241,6 +2645,8 @@ Examples:
         extract_images=not args.no_images,
         image_dpi=args.image_dpi,
         experimental_gemini_html=args.experimental_gemini_html,
+        use_gemini_title_page_html=args.gemini_title_page,
+        gemini_title_pages=args.title_pages,
     )
     
     processor = PDFProcessor(config)
