@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
-
-const OUTPUTS_DIR = path.join(process.cwd(), "../output_batch");
+import { OUTPUTS_DIR } from "@/lib/config";
 
 export async function GET(
   request: NextRequest,

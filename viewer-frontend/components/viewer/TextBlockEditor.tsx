@@ -2,24 +2,29 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useViewerStore } from "@/lib/store";
-import { TextBlock, TextBlockType } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Edit3, Check, X, CornerDownLeft, Type, Hash } from "lucide-react";
 
 interface TextBlockEditorProps {
-  block: TextBlock;
+  block: any; // Using any to handle varying JSON structures
   pageNumber: number;
   blockIndex: number;
 }
 
+type BlockType = 'heading' | 'paragraph' | 'list_item' | 'equation' | 'caption' | 'footnote' | 'quote' | 'code';
+
 export function TextBlockEditor({ block, pageNumber, blockIndex }: TextBlockEditorProps) {
   const { updateTextBlock, setEditingBlockId, editingBlockId } = useViewerStore();
-  const [editedContent, setEditedContent] = useState(block.content);
+  const [editedContent, setEditedContent] = useState(block.content || '');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const isEditing = editingBlockId === block.id;
+  // Support both 'type' and 'block_type' field names
+  const blockType = (block.type || block.block_type || 'paragraph') as BlockType;
+  const blockId = block.id || `block-${pageNumber}-${blockIndex}`;
+
+  const isEditing = editingBlockId === blockId;
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -43,21 +48,21 @@ export function TextBlockEditor({ block, pageNumber, blockIndex }: TextBlockEdit
 
   // Reset content when block changes
   useEffect(() => {
-    setEditedContent(block.content);
+    setEditedContent(block.content || '');
   }, [block.content]);
 
   const handleEdit = () => {
-    setEditingBlockId(block.id);
-    setEditedContent(block.content);
+    setEditingBlockId(blockId);
+    setEditedContent(block.content || '');
   };
 
   const handleSave = () => {
-    updateTextBlock(pageNumber - 1, block.id, editedContent);
+    updateTextBlock(pageNumber - 1, blockIndex, editedContent);
     setEditingBlockId(null);
   };
 
   const handleCancel = () => {
-    setEditedContent(block.content);
+    setEditedContent(block.content || '');
     setEditingBlockId(null);
   };
 
@@ -74,8 +79,8 @@ export function TextBlockEditor({ block, pageNumber, blockIndex }: TextBlockEdit
     }
   };
 
-  const getBlockTypeColor = (type: TextBlockType) => {
-    const colors: Record<TextBlockType, string> = {
+  const getBlockTypeColor = (type: BlockType) => {
+    const colors: Record<BlockType, string> = {
       heading: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
       paragraph: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
       list_item: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
@@ -85,10 +90,10 @@ export function TextBlockEditor({ block, pageNumber, blockIndex }: TextBlockEdit
       quote: "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
       code: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
     };
-    return colors[type] || "";
+    return colors[type] || "bg-gray-100 text-gray-800";
   };
 
-  const getBlockTypeIcon = (type: TextBlockType) => {
+  const getBlockTypeIcon = (type: BlockType) => {
     if (type === 'heading') return <Type className="h-3 w-3" />;
     if (type === 'equation') return <Hash className="h-3 w-3" />;
     return null;
@@ -101,9 +106,9 @@ export function TextBlockEditor({ block, pageNumber, blockIndex }: TextBlockEdit
     <div className="space-y-2 group/block">
       {/* Metadata Header */}
       <div className="flex items-center gap-2 flex-wrap">
-        <Badge className={`${getBlockTypeColor(block.block_type)} flex items-center gap-1`}>
-          {getBlockTypeIcon(block.block_type)}
-          {block.block_type}
+        <Badge className={`${getBlockTypeColor(blockType)} flex items-center gap-1`}>
+          {getBlockTypeIcon(blockType)}
+          {blockType}
           {block.level && ` (H${block.level})`}
         </Badge>
 
@@ -119,97 +124,71 @@ export function TextBlockEditor({ block, pageNumber, blockIndex }: TextBlockEdit
           <Badge variant="secondary">{block.text_direction.toUpperCase()}</Badge>
         )}
 
-        {block.is_display_math && (
-          <Badge variant="secondary">Display Math</Badge>
+        {/* Edit button - visible on hover */}
+        {!isEditing && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto opacity-0 group-hover/block:opacity-100 transition-opacity"
+            onClick={handleEdit}
+          >
+            <Edit3 className="h-4 w-4 mr-1" />
+            Edit
+          </Button>
         )}
-
-        {block.is_bold && <Badge variant="outline">Bold</Badge>}
-        {block.is_italic && <Badge variant="outline">Italic</Badge>}
-        {block.is_centered && <Badge variant="outline">Centered</Badge>}
       </div>
 
-      {/* Content Editor */}
+      {/* Content */}
       {isEditing ? (
-        <div className="space-y-2">
-          <div className="relative">
-            <Textarea
-              ref={textareaRef}
-              value={editedContent}
-              onChange={(e) => {
-                setEditedContent(e.target.value);
-                adjustTextareaHeight();
-              }}
-              onKeyDown={handleKeyDown}
-              className="min-h-[100px] text-sm resize-none"
-              dir={block.text_direction === "rtl" ? "rtl" : "ltr"}
-              lang={block.text_direction === "rtl" ? "ar" : "en"}
-              style={{
-                textAlign: block.text_direction === "rtl" ? "right" : "left",
-                fontFamily: block.text_direction === "rtl"
-                  ? "'Noto Sans Arabic', 'Arial', sans-serif"
-                  : block.block_type === 'code' || block.block_type === 'equation'
-                    ? "'Fira Code', 'Consolas', monospace"
-                    : "inherit"
-              }}
-              placeholder="Enter text content..."
-            />
+        <div className="space-y-3">
+          <Textarea
+            ref={textareaRef}
+            value={editedContent}
+            onChange={(e) => {
+              setEditedContent(e.target.value);
+              adjustTextareaHeight();
+            }}
+            onKeyDown={handleKeyDown}
+            className="min-h-[100px] resize-none font-mono text-sm leading-relaxed"
+            dir={block.text_direction === 'rtl' ? 'rtl' : 'ltr'}
+          />
 
-            {/* Character & word count */}
-            <div className="absolute bottom-2 right-2 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded">
-              {characterCount} chars • {wordCount} words
+          {/* Stats and Actions */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>{characterCount} chars</span>
+              <span>{wordCount} words</span>
+              <span className="flex items-center gap-1">
+                <CornerDownLeft className="h-3 w-3" />
+                <span className="hidden sm:inline">Ctrl+Enter to save, Esc to cancel</span>
+              </span>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 justify-between">
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleSave}>
-                <Check className="h-4 w-4 mr-1" />
-                Save
-              </Button>
-              <Button size="sm" variant="outline" onClick={handleCancel}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+              >
                 <X className="h-4 w-4 mr-1" />
                 Cancel
               </Button>
-            </div>
-            <div className="text-xs text-muted-foreground flex items-center gap-1">
-              <CornerDownLeft className="h-3 w-3" />
-              Ctrl+Enter to save • Esc to cancel
+              <Button
+                size="sm"
+                onClick={handleSave}
+              >
+                <Check className="h-4 w-4 mr-1" />
+                Save
+              </Button>
             </div>
           </div>
         </div>
       ) : (
-        <div className="relative">
-          <div
-            className={`p-3 rounded-lg border bg-muted/30 transition-colors hover:bg-muted/50 ${block.text_direction === "rtl" ? "text-right" : "text-left"
-              }`}
-            dir={block.text_direction === "rtl" ? "rtl" : "ltr"}
-            onClick={handleEdit}
-          >
-            {block.block_type === "equation" || block.block_type === "code" ? (
-              <code className="text-sm font-mono whitespace-pre-wrap">{block.content}</code>
-            ) : (
-              <p className={`text-sm whitespace-pre-wrap ${block.is_bold ? 'font-bold' : ''} ${block.is_italic ? 'italic' : ''}`}>
-                {block.content || <span className="text-muted-foreground italic">Empty block</span>}
-              </p>
-            )}
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="absolute top-2 right-2 opacity-0 group-hover/block:opacity-100 transition-opacity"
-            onClick={handleEdit}
-          >
-            <Edit3 className="h-3 w-3 mr-1" />
-            Edit
-          </Button>
-        </div>
-      )}
-
-      {/* Position Info (Read-only) */}
-      {block.bbox_top !== undefined && (
-        <div className="text-xs text-muted-foreground opacity-60 group-hover/block:opacity-100 transition-opacity">
-          Position: {block.bbox_top.toFixed(1)}% from top, {block.bbox_left?.toFixed(1)}% from left
-          {block.bbox_width && ` • Size: ${block.bbox_width.toFixed(1)}% × ${block.bbox_height?.toFixed(1)}%`}
+        <div
+          className="p-3 bg-muted/50 rounded-md text-sm leading-relaxed cursor-pointer hover:bg-muted/70 transition-colors"
+          dir={block.text_direction === 'rtl' ? 'rtl' : 'ltr'}
+          onClick={handleEdit}
+        >
+          <p className="whitespace-pre-wrap">{block.content || '(empty)'}</p>
         </div>
       )}
     </div>

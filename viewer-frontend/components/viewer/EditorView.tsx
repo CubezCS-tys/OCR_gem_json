@@ -106,13 +106,13 @@ export function EditorView() {
             </div>
 
             {/* Text Blocks */}
-            {page.text_blocks.length > 0 && (
+            {(page.blocks?.length || 0) > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Text Blocks ({page.text_blocks.length})</CardTitle>
+                  <CardTitle>Text Blocks ({page.blocks?.length || 0})</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {page.text_blocks.map((block, index) => (
+                  {page.blocks?.map((block: any, index: number) => (
                     <div key={index}>
                       {index > 0 && <Separator className="my-4" />}
                       <TextBlockEditor
@@ -127,13 +127,13 @@ export function EditorView() {
             )}
 
             {/* Tables */}
-            {page.tables.length > 0 && (
+            {(page.tables?.length || 0) > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Tables ({page.tables.length})</CardTitle>
+                  <CardTitle>Tables ({page.tables?.length || 0})</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {page.tables.map((table, index) => (
+                  {page.tables?.map((table, index) => (
                     <div key={index}>
                       {index > 0 && <Separator className="my-6" />}
                       <TableEditor
@@ -148,13 +148,13 @@ export function EditorView() {
             )}
 
             {/* Images (Read-only info) */}
-            {page.images.length > 0 && (
+            {(page.images?.length || 0) > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Images ({page.images.length})</CardTitle>
+                  <CardTitle>Images ({page.images?.length || 0})</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {page.images.map((image, index) => (
+                  {page.images?.map((image, index) => (
                     <div
                       key={index}
                       className="p-3 border rounded-lg bg-muted/50"
@@ -162,7 +162,7 @@ export function EditorView() {
                       <div className="flex items-start justify-between mb-2">
                         <Badge variant="outline">{image.image_type}</Badge>
                         <span className="text-xs text-muted-foreground">
-                          Position: {image.bbox_top.toFixed(1)}%, {image.bbox_left.toFixed(1)}%
+                          Position: {image.bbox_top?.toFixed(1)}%, {image.bbox_left?.toFixed(1)}%
                         </span>
                       </div>
                       <p className="text-sm">{image.description}</p>

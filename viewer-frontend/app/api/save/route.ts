@@ -3,9 +3,9 @@ import fs from "fs/promises";
 import path from "path";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { OUTPUTS_DIR, REBUILD_SCRIPT } from "@/lib/config";
 
 const execAsync = promisify(exec);
-const OUTPUTS_DIR = path.join(process.cwd(), "../output_batch");
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,38 +23,47 @@ export async function POST(request: NextRequest) {
     const jsonPath = path.join(OUTPUTS_DIR, `${fileName}.json`);
     await fs.writeFile(jsonPath, JSON.stringify(documentData, null, 2), "utf-8");
 
-    // Call Python script to regenerate HTML
-    // The rebuild_html_simple.py script accepts JSON path and output HTML path
+    console.log(`JSON saved successfully: ${jsonPath}`);
+
+    // Try to regenerate HTML (but don't fail if it doesn't work)
     const htmlPath = path.join(OUTPUTS_DIR, `${fileName}.html`);
-    const pythonScript = path.join(process.cwd(), "../rebuild_html_simple.py");
+    let htmlRegenerated = false;
+    let htmlError = null;
 
     try {
+      // Check if the script exists
+      await fs.access(REBUILD_SCRIPT);
+
       const { stdout, stderr } = await execAsync(
-        `python3 "${pythonScript}" "${jsonPath}" "${htmlPath}"`
+        `python3 "${REBUILD_SCRIPT}" "${jsonPath}" "${htmlPath}"`,
+        { timeout: 30000 } // 30 second timeout
       );
 
-      if (stderr) {
+      if (stderr && !stderr.includes('WARNING')) {
         console.error("Python stderr:", stderr);
       }
 
       console.log("HTML regeneration output:", stdout);
-    } catch (error) {
-      console.error("Error running Python script:", error);
-      return NextResponse.json(
-        { error: "Failed to regenerate HTML" },
-        { status: 500 }
-      );
+      htmlRegenerated = true;
+    } catch (error: any) {
+      console.error("Error running Python script (non-fatal):", error.message || error);
+      htmlError = error.message || "Failed to regenerate HTML";
+      // Don't fail the request - JSON was saved successfully
     }
 
     return NextResponse.json({
       success: true,
-      message: "Document saved and HTML regenerated",
-      htmlPath: `${fileName}.html`,
+      message: htmlRegenerated
+        ? "Document saved and HTML regenerated"
+        : "Document saved (HTML regeneration skipped)",
+      jsonPath: `${fileName}.json`,
+      htmlPath: htmlRegenerated ? `${fileName}.html` : undefined,
+      warning: htmlError ? `HTML regeneration failed: ${htmlError.split('\n')[0]}` : undefined,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error saving document:", error);
     return NextResponse.json(
-      { error: "Failed to save document" },
+      { error: error.message || "Failed to save document" },
       { status: 500 }
     );
   }

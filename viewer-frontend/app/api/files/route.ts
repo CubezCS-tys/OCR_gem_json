@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
+import { OUTPUTS_DIR, PDFS_DIR, CACHE_DURATION } from "@/lib/config";
 import path from "path";
-
-// Use environment variables with fallbacks
-const OUTPUTS_DIR = process.env.OUTPUTS_DIR || path.join(process.cwd(), "../output_batch");
-const PDFS_DIR = process.env.PDFS_DIR || path.join(process.cwd(), "../pdfs");
-
-// Cache duration in seconds (5 minutes by default)
-const CACHE_DURATION = 300;
 
 interface FileInfo {
   name: string;
