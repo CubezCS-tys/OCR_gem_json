@@ -22,9 +22,10 @@ import time
 import base64
 import io
 import re
-from typing import Optional, Literal
+from typing import Optional, Literal, Union, List, Annotated
 from dataclasses import dataclass, field
 from enum import Enum
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import fitz  # PyMuPDF
@@ -102,65 +103,209 @@ class ProcessingConfig:
 
 
 # =============================================================================
-# PYDANTIC SCHEMAS FOR STRUCTURED OUTPUT
+# PYDANTIC SCHEMAS FOR STRUCTURED OUTPUT - POLYMORPHIC APPROACH
 # =============================================================================
+
+# --- Sub-components ---
+
+class Span(BaseModel):
+    """Inline formatting span within a text block."""
+    start: int = Field(description="Start character index (0-based)")
+    end: int = Field(description="End character index (exclusive)")
+    style: Literal["bold", "italic", "underline", "code", "link", "superscript", "subscript"] = Field(
+        description="Style type"
+    )
+    url: Optional[str] = Field(default=None, description="URL for link spans")
+
+
+class ColumnLayout(BaseModel):
+    """Detailed column layout information for multi-column pages."""
+    column_count: int = Field(ge=1, le=5, description="Number of columns (1-5)")
+    column_boundaries: list[float] = Field(
+        description="X-coordinates (%) of column dividers. For 2 columns: [50.0], for 3: [33.3, 66.7]"
+    )
+    column_gaps: list[float] = Field(
+        default_factory=list,
+        description="Gap widths (%) between columns. Length = column_count - 1"
+    )
+    reading_order: Literal["ltr", "rtl", "top-to-bottom", "zigzag"] = Field(
+        default="ltr",
+        description="Reading order: ltr (left-to-right), rtl (right-to-left), top-to-bottom, zigzag"
+    )
+
 
 class TableCell(BaseModel):
     """Represents a cell in a table."""
     content: str = Field(description="Text content of the cell")
-    row_span: int = Field(default=1, description="Number of rows this cell spans")
-    col_span: int = Field(default=1, description="Number of columns this cell spans")
+    row_span: int = Field(default=1, description="Number of rows this cell spans (1 for standard)")
+    col_span: int = Field(default=1, description="Number of columns this cell spans (1 for standard)")
     is_header: bool = Field(default=False, description="Whether this is a header cell")
+    # Optional styling metadata
+    alignment: Optional[Literal["left", "center", "right", "justify"]] = Field(default=None, description="Horizontal alignment")
+    vertical_alignment: Optional[Literal["top", "middle", "bottom"]] = Field(default=None, description="Vertical alignment")
+    background_color: Optional[str] = Field(default=None, description="Background color as hex (#RRGGBB)")
+    text_color: Optional[str] = Field(default=None, description="Text color as hex (#RRGGBB)")
+    font_weight: Optional[Literal["normal", "bold", "light"]] = Field(default=None, description="Font weight")
 
 
-class Table(BaseModel):
-    """Represents a table extracted from the document."""
+class ListItem(BaseModel):
+    """An item in a list, which can contain content AND a nested list."""
+    content: str = Field(description="Text content of the list item")
+    # RECURSION: A list item can contain another list
+    sub_list: Optional["ListBlock"] = Field(default=None, description="Nested sub-list if present")
+
+
+# --- Main Block Types (Polymorphic) ---
+
+class HeadingBlock(BaseModel):
+    """A heading block (H1-H6)."""
+    type: Literal["heading"] = "heading"
+    level: int = Field(ge=1, le=6, description="Heading level (1-6 for HTML H1-H6)")
+    content: str = Field(description="The heading text")
+    id: Optional[str] = Field(default=None, description="Slug for anchor links (auto-generated if needed)")
+    text_direction: Literal["ltr", "rtl", "auto"] = Field(default="auto", description="Text direction")
+    # Optional styling metadata
+    font_size_pt: Optional[float] = Field(default=None, description="Font size in points")
+    font_weight: Optional[Literal["normal", "bold", "light", "black"]] = Field(default=None, description="Font weight")
+    font_family: Optional[str] = Field(default=None, description="Font family name")
+    text_color: Optional[str] = Field(default=None, description="Text color as hex (#RRGGBB)")
+    background_color: Optional[str] = Field(default=None, description="Background color as hex (#RRGGBB)")
+    alignment: Optional[Literal["left", "center", "right", "justify"]] = Field(default=None, description="Text alignment")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
+
+
+class ParagraphBlock(BaseModel):
+    """A paragraph of text."""
+    type: Literal["paragraph"] = "paragraph"
+    content: str = Field(description="The paragraph text")
+    spans: list[Span] = Field(default_factory=list, description="Inline formatting spans (bold, italic, links, etc.)")
+    text_direction: Literal["ltr", "rtl", "auto"] = Field(default="auto", description="Text direction")
+    # Optional styling metadata
+    font_size_pt: Optional[float] = Field(default=None, description="Font size in points")
+    font_weight: Optional[Literal["normal", "bold", "light", "black"]] = Field(default=None, description="Font weight")
+    font_family: Optional[str] = Field(default=None, description="Font family name")
+    text_color: Optional[str] = Field(default=None, description="Text color as hex (#RRGGBB)")
+    background_color: Optional[str] = Field(default=None, description="Background color as hex (#RRGGBB)")
+    alignment: Optional[Literal["left", "center", "right", "justify"]] = Field(default=None, description="Text alignment")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
+
+
+class ListBlock(BaseModel):
+    """A list (ordered or unordered) with support for nesting."""
+    type: Literal["list"] = "list"
+    style: Literal["unordered", "ordered"] = Field(description="List style: unordered (bullets) or ordered (numbers)")
+    items: list[ListItem] = Field(description="List items, each can contain nested sub-lists")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
+
+
+class TableBlock(BaseModel):
+    """A table with support for merged cells (rowspan/colspan)."""
+    type: Literal["table"] = "table"
     caption: Optional[str] = Field(default=None, description="Table caption if present")
     headers: list[str] = Field(default_factory=list, description="Column headers")
-    rows: list[list[str]] = Field(default_factory=list, description="Table rows with cell contents")
-    # Bounding box as percentages of page dimensions (0-100) - for proper ordering
-    bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage from top of page (0-100)")
-    bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage from left of page (0-100)")
-    bbox_width: Optional[float] = Field(default=None, description="Width as percentage of page width (0-100)")
-    bbox_height: Optional[float] = Field(default=None, description="Height as percentage of page height (0-100)")
+    rows: list[list[TableCell]] = Field(description="Table rows with TableCell objects supporting rowspan/colspan")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
 
 
-class TextBlock(BaseModel):
-    """Represents a block of text with semantic meaning."""
-    block_type: Literal["heading", "paragraph", "list_item", "caption", "footnote", "quote", "code", "equation"] = Field(
-        description="Semantic type of the text block"
-    )
-    level: Optional[int] = Field(default=None, description="Heading level (1-6) if block_type is heading")
-    content: str = Field(description="The text content (for equations, use LaTeX syntax)")
-    style: Optional[str] = Field(default=None, description="CSS style hints (e.g., 'bold', 'italic', 'centered')")
-    is_display_math: Optional[bool] = Field(default=False, description="For equations: True for display mode (\\[...\\]), False for inline (\\(...\\))")
-    # NEW: List hierarchy support
-    list_level: Optional[int] = Field(default=1, description="Nesting level for list items (1=top level, 2=nested, etc.)")
-    # NEW: Equation numbering support
-    equation_number: Optional[str] = Field(default=None, description="Equation number label if present (e.g., '(1)', '(2.3)')")
-    # NEW: Text direction for mixed RTL/LTR content
-    text_direction: Optional[Literal["ltr", "rtl", "auto"]] = Field(default="auto", description="Text direction: ltr, rtl, or auto")
-    # Bounding box as percentages of page dimensions (0-100) - optional for backward compatibility
-    bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage from top of page (0-100)")
-    bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage from left of page (0-100)")
-    bbox_width: Optional[float] = Field(default=None, description="Width as percentage of page width (0-100)")
-    bbox_height: Optional[float] = Field(default=None, description="Height as percentage of page height (0-100)")
+class EquationBlock(BaseModel):
+    """A mathematical equation in LaTeX format."""
+    type: Literal["equation"] = "equation"
+    latex: str = Field(description="LaTeX representation of the equation")
+    is_display: bool = Field(default=True, description="True for display mode (\\[...\\]), False for inline (\\(...\\))")
+    number: Optional[str] = Field(default=None, description="Equation number label if present (e.g., '(1)', '(2.3)')")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
 
 
-class Image(BaseModel):
-    """Represents a visual element (chart, graph, diagram, figure) - NOT tables."""
+class ImageBlock(BaseModel):
+    """A visual element (chart, graph, diagram, figure, photo)."""
+    type: Literal["image"] = "image"
     image_type: Literal["chart", "graph", "diagram", "figure", "photo", "logo", "illustration", "other"] = Field(
-        description="Type of visual: chart, graph, diagram, figure, photo, logo, illustration, or other. NOT for tables."
+        description="Type of visual element"
     )
     description: str = Field(description="Description or alt text for the image")
     caption: Optional[str] = Field(default=None, description="Image caption if present")
-    # Bounding box as percentages of page dimensions (0-100)
-    bbox_top: float = Field(description="Top edge of image as percentage from top of page (0-100)")
-    bbox_left: float = Field(description="Left edge of image as percentage from left of page (0-100)")
-    bbox_width: float = Field(description="Width of image as percentage of page width (0-100)")
-    bbox_height: float = Field(description="Height of image as percentage of page height (0-100)")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
     # Runtime field for extracted image data (not from Gemini)
     image_data: Optional[str] = Field(default=None, description="Base64 encoded image data (populated at runtime)")
+
+
+class CodeBlock(BaseModel):
+    """A code block."""
+    type: Literal["code"] = "code"
+    content: str = Field(description="The code content")
+    language: Optional[str] = Field(default=None, description="Programming language (e.g., 'python', 'javascript')")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
+
+
+class QuoteBlock(BaseModel):
+    """A block quote."""
+    type: Literal["quote"] = "quote"
+    content: str = Field(description="The quoted text")
+    attribution: Optional[str] = Field(default=None, description="Quote attribution/source if present")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
+
+
+class FootnoteBlock(BaseModel):
+    """A footnote."""
+    type: Literal["footnote"] = "footnote"
+    content: str = Field(description="The footnote text")
+    reference_number: Optional[str] = Field(default=None, description="Footnote number/marker (e.g., '1', 'a', '*')")
+    # REQUIRED bounding box
+    bbox_top: float = Field(description="REQUIRED: Top edge as percentage from top of page (0-100)")
+    bbox_left: float = Field(description="REQUIRED: Left edge as percentage from left of page (0-100)")
+    bbox_width: float = Field(description="REQUIRED: Width as percentage of page width (0-100)")
+    bbox_height: float = Field(description="REQUIRED: Height as percentage of page height (0-100)")
+
+
+# --- The Union Type ---
+# This forces the model to pick exactly ONE of these types per block
+# Using discriminated union with 'type' field for proper Pydantic validation
+ContentBlock = Annotated[
+    Union[
+        HeadingBlock,
+        ParagraphBlock,
+        ListBlock,
+        TableBlock,
+        EquationBlock,
+        ImageBlock,
+        CodeBlock,
+        QuoteBlock,
+        FootnoteBlock
+    ],
+    Field(discriminator='type')
+]
 
 
 class PageContent(BaseModel):
@@ -168,15 +313,28 @@ class PageContent(BaseModel):
     page_number: int = Field(description="1-based page number")
     header: Optional[str] = Field(default=None, description="Header text from the page (e.g., page numbers, chapter titles)")
     footer: Optional[str] = Field(default=None, description="Footer text from the page (e.g., page numbers, citations)")
-    text_blocks: list[TextBlock] = Field(default_factory=list, description="Ordered list of text blocks")
-    tables: list[Table] = Field(default_factory=list, description="Tables found on this page")
-    images: list[Image] = Field(default_factory=list, description="Images/figures found on this page")
+    blocks: list[ContentBlock] = Field(description="Ordered list of content blocks (polymorphic)")
     raw_text: Optional[str] = Field(default=None, description="Raw OCR text for the page")
-    has_multi_column: bool = Field(default=False, description="Whether the page has multi-column layout")
-    column_count: Optional[int] = Field(default=None, description="Number of columns if multi-column (2, 3, etc.)")
+    column_layout: Optional[ColumnLayout] = Field(default=None, description="Detailed column layout if multi-column")
+    # Deprecated fields (kept for backwards compatibility)
+    has_multi_column: bool = Field(default=False, description="DEPRECATED: Use column_layout instead")
+    column_count: Optional[int] = Field(default=None, description="DEPRECATED: Use column_layout.column_count")
     reading_order_notes: Optional[str] = Field(default=None, description="Notes about reading order if complex")
-    # NEW: Primary text direction for the page
-    page_direction: Optional[Literal["ltr", "rtl"]] = Field(default="ltr", description="Primary text direction: ltr or rtl")
+    page_direction: Literal["ltr", "rtl"] = Field(default="ltr", description="Primary text direction: ltr or rtl")
+
+    @property
+    def is_multi_column(self) -> bool:
+        """Check if page has multiple columns."""
+        if self.column_layout:
+            return self.column_layout.column_count > 1
+        return self.has_multi_column
+
+    @property
+    def get_column_count(self) -> int:
+        """Get column count (1 for single column)."""
+        if self.column_layout:
+            return self.column_layout.column_count
+        return self.column_count or 1
 
 
 class DocumentMetadata(BaseModel):
@@ -200,6 +358,11 @@ class ChunkExtraction(BaseModel):
     """Extraction result for a chunk of pages."""
     pages: list[PageContent] = Field(description="Content for each page in this chunk")
     chunk_notes: Optional[str] = Field(default=None, description="Any notes about this chunk extraction")
+
+
+# Resolve forward references for recursive structures (ListBlock -> ListItem -> ListBlock)
+ListBlock.model_rebuild()
+ListItem.model_rebuild()
 
 
 # =============================================================================
@@ -292,10 +455,19 @@ class HTMLRenderer:
             # Sample more content for better detection
             sample_text = ""
             for page in doc.pages[:5]:  # Check first 5 pages
-                for block in page.text_blocks[:10]:  # Check more blocks
-                    sample_text += block.content + " "
-                    if len(sample_text) > 2000:  # Enough sample
+                block_count = 0
+                for block in page.blocks:
+                    if isinstance(block, (HeadingBlock, ParagraphBlock)):
+                        sample_text += block.content + " "
+                        block_count += 1
+                    elif isinstance(block, ListBlock):
+                        for item in block.items:
+                            sample_text += item.content + " "
+                            block_count += 1
+                    if block_count >= 10 or len(sample_text) > 2000:  # Enough sample
                         break
+                if len(sample_text) > 2000:
+                    break
             # Use higher threshold (50%) to be sure it's RTL
             is_rtl = HTMLRenderer._detect_rtl_text(sample_text, threshold=0.5)
         
@@ -717,19 +889,20 @@ window.addEventListener('load', () => {
     }}
     
     /* Multi-column layout using flexbox - respects reading order */
-    .multi-column {{
-        display: block;
-        /* Don't use CSS column-count - it breaks our reading order sorting */
-    }}
-    
+    .multi-column,
     .multi-column-3 {{
-        display: block;
+        display: flex;
+        gap: var(--column-gap, 2rem);
+        align-items: flex-start;
+        direction: ltr; /* keep visual columns left->right even on RTL pages */
     }}
     
-    /* For RTL multi-column, use column-fill and direction */
-    [dir="rtl"] .multi-column {{
-        direction: rtl;
+    .multi-column .column,
+    .multi-column-3 .column {{
+        flex: 1 1 0;
+        min-width: 0;
     }}
+    
     
     @media print {{
         body {{ background: white; padding: 0; }}
@@ -740,7 +913,7 @@ window.addEventListener('load', () => {
     @media (max-width: 600px) {{
         body {{ padding: 10px; }}
         .page {{ padding: 20px; }}
-        .multi-column, .multi-column-3 {{ column-count: 1; }}
+        .multi-column, .multi-column-3 {{ flex-direction: column; }}
     }}
 </style>"""
     
@@ -755,185 +928,344 @@ window.addEventListener('load', () => {
     
     @staticmethod
     def _deduplicate_header_footer(page: PageContent) -> PageContent:
-        """Remove header/footer text from text_blocks if they appear there."""
-        if page.header:
-            # Remove any text block that exactly matches the header
-            page.text_blocks = [b for b in page.text_blocks if b.content.strip() != page.header.strip()]
-        
-        if page.footer:
-            # Remove any text block that exactly matches the footer
-            page.text_blocks = [b for b in page.text_blocks if b.content.strip() != page.footer.strip()]
-        
+        """Remove header/footer text from blocks if they appear there."""
+        if page.header or page.footer:
+            filtered_blocks = []
+            for block in page.blocks:
+                # Get content from block (different blocks have content in different places)
+                content = None
+                if isinstance(block, (HeadingBlock, ParagraphBlock, CodeBlock, QuoteBlock, FootnoteBlock)):
+                    content = block.content
+                elif isinstance(block, EquationBlock):
+                    content = block.latex
+
+                # Skip if matches header or footer
+                if content:
+                    if page.header and content.strip() == page.header.strip():
+                        continue
+                    if page.footer and content.strip() == page.footer.strip():
+                        continue
+
+                filtered_blocks.append(block)
+
+            page.blocks = filtered_blocks
+
         return page
     
     @staticmethod
     def _render_page(page: PageContent, is_rtl: bool = False) -> str:
-        """Render a single page to HTML."""
-        # Remove duplicate header/footer from text_blocks
+        """Render a single page to HTML with polymorphic blocks."""
+        # Remove duplicate header/footer from blocks
         page = HTMLRenderer._deduplicate_header_footer(page)
-        
+
         parts = []
         page_class = "page"
-        
-        # Check if entire page is English by analyzing all text content
-        page_text = " ".join(block.content for block in page.text_blocks)
+
+        # Collect all text content for language detection
+        page_text = ""
+        for block in page.blocks:
+            if isinstance(block, (HeadingBlock, ParagraphBlock)):
+                page_text += block.content + " "
+            elif isinstance(block, ListBlock):
+                for item in block.items:
+                    page_text += item.content + " "
+
         is_english_page = HTMLRenderer._detect_english_content(page_text)
-        
-        # Override RTL for English pages
         page_dir = "ltr" if is_english_page else ("rtl" if is_rtl else "ltr")
-        
-        # Add multi-column indicator for debugging if needed
-        if page.has_multi_column:
+
+        if page.is_multi_column:
             page_class += " has-multi-column"
-        
-        # Add english-text class for English pages
+            if page.column_layout:
+                page_class += f" columns-{page.column_layout.column_count}"
+
         if is_english_page:
             page_class += " english-text"
-        
+
         parts.append(f'<div class="{page_class}" id="page-{page.page_number}" style="position: relative;" dir="{page_dir}">')
-        
-        # Display actual header from PDF if available, otherwise show absolute page number
+
+        # Display header
         if page.header:
             parts.append(f'<div class="page-header">{HTMLRenderer._escape(page.header)}</div>')
         else:
             parts.append(f'<div class="page-header">Page {page.page_number}</div>')
-        
-        # Wrap content in a container
+
         parts.append('<div class="page-content">')
-        
-        # Combine all elements with bbox positions for proper ordering
-        # Sort by position to get correct reading flow
+
+        # Sort blocks by position for correct reading flow
         elements = []
-        insertion_order = 0
-        
-        # Add text blocks with their positions
-        for block in page.text_blocks:
-            y_pos = block.bbox_top if block.bbox_top is not None else (50 + insertion_order * 0.1)
-            x_pos = block.bbox_left if block.bbox_left is not None else 0
+        for i, block in enumerate(page.blocks):
             elements.append({
-                'type': 'text',
-                'y': y_pos,
-                'x': x_pos,
-                'order': insertion_order,
-                'content': block
+                'y': block.bbox_top,
+                'x': block.bbox_left,
+                'order': i,
+                'block': block
             })
-            insertion_order += 1
-        
-        # Add tables with their positions
-        for table in page.tables:
-            y_pos = table.bbox_top if table.bbox_top is not None else (50 + insertion_order * 0.1)
-            x_pos = table.bbox_left if table.bbox_left is not None else 0
-            elements.append({
-                'type': 'table',
-                'y': y_pos,
-                'x': x_pos,
-                'order': insertion_order,
-                'content': table
-            })
-            insertion_order += 1
-        
-        # Add images with their positions
-        for image in page.images:
-            y_pos = image.bbox_top if image.bbox_top is not None else (50 + insertion_order * 0.1)
-            x_pos = image.bbox_left if image.bbox_left is not None else 0
-            elements.append({
-                'type': 'image',
-                'y': y_pos,
-                'x': x_pos,
-                'order': insertion_order,
-                'content': image
-            })
-            insertion_order += 1
-        
-        # Sort by position for correct reading flow
-        # For multi-column: group by column (x), then sort by y within column
-        # For single column: just sort by y, then x
-        if page.has_multi_column and page.column_count and page.column_count > 1:
-            # Multi-column: sort by column then y-position
-            column_width = 100.0 / page.column_count
-            
-            def get_column(x_pos: float) -> int:
-                """Determine column based on x position."""
-                col = int(x_pos / column_width)
-                return min(max(col, 0), page.column_count - 1)
-            
-            # For RTL (Arabic), rightmost column comes first
-            if is_rtl:
+
+        # Sort by position
+        get_column = None
+        col_count = 1
+        reading_order = "rtl" if is_rtl else "ltr"
+        if page.is_multi_column:
+            col_count = max(1, page.get_column_count)
+
+            # Use column boundaries if available, otherwise estimate
+            if page.column_layout and page.column_layout.column_boundaries:
+                boundaries = [0.0] + page.column_layout.column_boundaries + [100.0]
+
+                def get_column(x_pos: float) -> int:
+                    for i in range(len(boundaries) - 1):
+                        if boundaries[i] <= x_pos < boundaries[i + 1]:
+                            return i
+                    return len(boundaries) - 2
+            else:
+                # Fallback to equal-width columns
+                column_width = 100.0 / col_count
+
+                def get_column(x_pos: float) -> int:
+                    col = int(x_pos / column_width)
+                    return min(max(col, 0), col_count - 1)
+
+            # Determine reading order
+            reading_order = page.column_layout.reading_order if page.column_layout else reading_order
+
+            if reading_order == "rtl":
                 elements.sort(key=lambda e: (-(get_column(e['x'])), e['y'], e['order']))
             else:
                 elements.sort(key=lambda e: (get_column(e['x']), e['y'], e['order']))
         else:
-            # Single column: sort top to bottom, left to right
             elements.sort(key=lambda e: (e['y'], e['x'], e['order']))
-        
-        # Render elements in order, grouping consecutive list items
-        footnotes = []  # Collect footnotes for end of page
-        i = 0
-        while i < len(elements):
-            element = elements[i]
-            
-            if element['type'] == 'text':
-                block = element['content']
-                
-                # Collect footnotes separately
-                if block.block_type == 'footnote':
+
+        # Render blocks in order
+        footnotes = []
+        if page.is_multi_column:
+            gap_style = ""
+            if page.column_layout and page.column_layout.column_gaps:
+                avg_gap = sum(page.column_layout.column_gaps) / len(page.column_layout.column_gaps)
+                gap_style = f' style="--column-gap: {avg_gap:.2f}%;"'
+
+            column_class = f"multi-column columns-{col_count}" if col_count > 1 else "multi-column"
+            parts.append(f'<div class="{column_class}"{gap_style}>')
+
+            columns = [[] for _ in range(col_count)]
+            for element in elements:
+                block = element['block']
+
+                # Collect footnotes for end of page
+                if isinstance(block, FootnoteBlock):
                     footnotes.append(block)
-                    i += 1
                     continue
-                
-                # Handle list items - group consecutive ones
-                if block.block_type == 'list_item':
-                    list_items = [block]
-                    j = i + 1
-                    # Collect consecutive list items
-                    while j < len(elements) and elements[j]['type'] == 'text' and elements[j]['content'].block_type == 'list_item':
-                        list_items.append(elements[j]['content'])
-                        j += 1
-                    
-                    # Render as a proper list
-                    parts.append(HTMLRenderer._render_list(list_items))
-                    i = j  # Skip the items we just processed
-                else:
-                    parts.append(HTMLRenderer._render_text_block(block))
-                    i += 1
-                    
-            elif element['type'] == 'table':
-                parts.append(HTMLRenderer._render_table(element['content']))
-                i += 1
-            elif element['type'] == 'image':
-                parts.append(HTMLRenderer._render_image(element['content']))
-                i += 1
-            else:
-                i += 1
-        
-        # Render footnotes at the end if any
+
+                col_idx = get_column(element['x']) if get_column else 0
+                col_idx = min(max(col_idx, 0), col_count - 1)
+                columns[col_idx].append(element)
+
+            for column in columns:
+                column.sort(key=lambda e: (e['y'], e['order']))
+
+            column_order = list(range(col_count))
+            if reading_order == "rtl":
+                column_order = list(reversed(column_order))
+
+            for col_idx in column_order:
+                parts.append(f'<div class="column" style="order: {col_idx};">')
+                for element in columns[col_idx]:
+                    parts.append(HTMLRenderer._render_block(element['block'], page))
+                parts.append('</div>')
+
+            parts.append('</div>')
+        else:
+            for element in elements:
+                block = element['block']
+
+                # Collect footnotes for end of page
+                if isinstance(block, FootnoteBlock):
+                    footnotes.append(block)
+                    continue
+
+                # Render block based on type
+                parts.append(HTMLRenderer._render_block(block, page))
+
+        # Render footnotes at end
         if footnotes:
             parts.append('<div class="footnotes-section">')
             for footnote in footnotes:
+                ref = f"[{footnote.reference_number}] " if footnote.reference_number else ""
                 content = HTMLRenderer._escape(footnote.content)
-                parts.append(f'<div class="footnote">{content}</div>')
+                parts.append(f'<div class="footnote">{ref}{content}</div>')
             parts.append('</div>')
-        
+
         parts.append('</div>')  # Close page-content
-        
-        # Display actual footer from PDF if available
+
+        # Display footer
         if page.footer:
             parts.append(f'<div class="page-footer">{HTMLRenderer._escape(page.footer)}</div>')
-        
-        # Reading order notes removed - no longer needed for single-column flow
-        
+
         parts.append("</div>")
         return "\n".join(parts)
     
     @staticmethod
-    def _render_list(list_items: list[TextBlock]) -> str:
-        """Render a group of consecutive list items as a proper HTML list."""
-        parts = ['<ul class="list-wrapper">']
-        for item in list_items:
-            content = HTMLRenderer._escape(item.content)
-            parts.append(f"<li>{content}</li>")
-        parts.append('</ul>')
+    def _apply_spans(content: str, spans: list[Span]) -> str:
+        """Apply inline formatting spans to text content."""
+        if not spans:
+            return HTMLRenderer._escape(content)
+
+        # Sort spans by start position
+        sorted_spans = sorted(spans, key=lambda s: s.start)
+
+        result = []
+        last_end = 0
+
+        for span in sorted_spans:
+            # Add text before this span
+            if span.start > last_end:
+                result.append(HTMLRenderer._escape(content[last_end:span.start]))
+
+            # Add styled span
+            span_text = HTMLRenderer._escape(content[span.start:span.end])
+
+            if span.style == "bold":
+                result.append(f"<strong>{span_text}</strong>")
+            elif span.style == "italic":
+                result.append(f"<em>{span_text}</em>")
+            elif span.style == "underline":
+                result.append(f"<u>{span_text}</u>")
+            elif span.style == "code":
+                result.append(f"<code>{span_text}</code>")
+            elif span.style == "link" and span.url:
+                result.append(f'<a href="{HTMLRenderer._escape(span.url)}">{span_text}</a>')
+            elif span.style == "superscript":
+                result.append(f"<sup>{span_text}</sup>")
+            elif span.style == "subscript":
+                result.append(f"<sub>{span_text}</sub>")
+            else:
+                result.append(span_text)
+
+            last_end = span.end
+
+        # Add remaining text after last span
+        if last_end < len(content):
+            result.append(HTMLRenderer._escape(content[last_end:]))
+
+        return "".join(result)
+
+    @staticmethod
+    def _render_block(block: ContentBlock, page: Optional[PageContent] = None) -> str:
+        """Render a polymorphic content block based on its type."""
+        if isinstance(block, HeadingBlock):
+            return HTMLRenderer._render_heading(block)
+        elif isinstance(block, ParagraphBlock):
+            return HTMLRenderer._render_paragraph(block)
+        elif isinstance(block, ListBlock):
+            return HTMLRenderer._render_list(block)
+        elif isinstance(block, TableBlock):
+            return HTMLRenderer._render_table(block)
+        elif isinstance(block, EquationBlock):
+            return HTMLRenderer._render_equation(block)
+        elif isinstance(block, ImageBlock):
+            return HTMLRenderer._render_image(block, page)
+        elif isinstance(block, CodeBlock):
+            return HTMLRenderer._render_code(block)
+        elif isinstance(block, QuoteBlock):
+            return HTMLRenderer._render_quote(block)
+        else:
+            return ""
+
+    @staticmethod
+    def _render_heading(heading: HeadingBlock) -> str:
+        """Render a heading block with styling."""
+        id_attr = f' id="{heading.id}"' if heading.id else ""
+        dir_attr = f' dir="{heading.text_direction}"' if heading.text_direction != "auto" else ""
+
+        # Build inline style
+        styles = []
+        if heading.font_size_pt:
+            styles.append(f"font-size: {heading.font_size_pt}pt")
+        if heading.font_weight:
+            styles.append(f"font-weight: {heading.font_weight}")
+        if heading.font_family:
+            styles.append(f"font-family: '{heading.font_family}'")
+        if heading.text_color:
+            styles.append(f"color: {heading.text_color}")
+        if heading.background_color:
+            styles.append(f"background-color: {heading.background_color}")
+        if heading.alignment:
+            styles.append(f"text-align: {heading.alignment}")
+
+        style_attr = f' style="{"; ".join(styles)}"' if styles else ""
+        content = HTMLRenderer._escape(heading.content)
+        return f'<h{heading.level}{id_attr}{dir_attr}{style_attr}>{content}</h{heading.level}>'
+
+    @staticmethod
+    def _render_paragraph(paragraph: ParagraphBlock) -> str:
+        """Render a paragraph block with inline formatting spans and styling."""
+        dir_attr = f' dir="{paragraph.text_direction}"' if paragraph.text_direction != "auto" else ""
+
+        # Build inline style
+        styles = []
+        if paragraph.font_size_pt:
+            styles.append(f"font-size: {paragraph.font_size_pt}pt")
+        if paragraph.font_weight:
+            styles.append(f"font-weight: {paragraph.font_weight}")
+        if paragraph.font_family:
+            styles.append(f"font-family: '{paragraph.font_family}'")
+        if paragraph.text_color:
+            styles.append(f"color: {paragraph.text_color}")
+        if paragraph.background_color:
+            styles.append(f"background-color: {paragraph.background_color}")
+        if paragraph.alignment:
+            styles.append(f"text-align: {paragraph.alignment}")
+
+        style_attr = f' style="{"; ".join(styles)}"' if styles else ""
+        content = HTMLRenderer._apply_spans(paragraph.content, paragraph.spans)
+        return f'<p{dir_attr}{style_attr}>{content}</p>'
+
+    @staticmethod
+    def _render_list(list_block: ListBlock) -> str:
+        """Render a list block with support for nested lists."""
+        tag = "ul" if list_block.style == "unordered" else "ol"
+        parts = [f'<{tag}>']
+
+        for item in list_block.items:
+            parts.append(f"<li>{HTMLRenderer._escape(item.content)}")
+            # Recursively render nested sub-list
+            if item.sub_list:
+                parts.append(HTMLRenderer._render_list(item.sub_list))
+            parts.append("</li>")
+
+        parts.append(f'</{tag}>')
         return "\n".join(parts)
+
+    @staticmethod
+    def _render_code(code: CodeBlock) -> str:
+        """Render a code block."""
+        lang_class = f' class="language-{code.language}"' if code.language else ""
+        content = HTMLRenderer._escape(code.content)
+        return f'<pre><code{lang_class}>{content}</code></pre>'
+
+    @staticmethod
+    def _render_quote(quote: QuoteBlock) -> str:
+        """Render a quote block."""
+        parts = ['<blockquote>']
+        parts.append(f'<p>{HTMLRenderer._escape(quote.content)}</p>')
+        if quote.attribution:
+            parts.append(f'<footer>— {HTMLRenderer._escape(quote.attribution)}</footer>')
+        parts.append('</blockquote>')
+        return "\n".join(parts)
+
+    @staticmethod
+    def _render_equation(equation: EquationBlock) -> str:
+        """Render an equation block."""
+        if equation.is_display:
+            # Display equation
+            eq_html = f'<div class="equation">\\[{equation.latex}\\]</div>'
+        else:
+            # Inline equation
+            eq_html = f'<span class="equation-inline">\\({equation.latex}\\)</span>'
+
+        if equation.number:
+            return f'<div class="equation-container">{eq_html}<span class="equation-number">{HTMLRenderer._escape(equation.number)}</span></div>'
+        else:
+            return eq_html
     
     @staticmethod
     def _detect_english_content(text: str) -> bool:
@@ -1001,139 +1333,95 @@ window.addEventListener('load', () => {
         arabic_caption = ' '.join(arabic_parts).strip()
         return cleaned, arabic_caption
     
-    @staticmethod
-    def _render_text_block(block: TextBlock) -> str:
-        """Render a text block to HTML."""
-        content = HTMLRenderer._escape(block.content)
-        
-        # Don't use bbox positioning for single-column flow
-        # Let content flow naturally without horizontal positioning
-        bbox_style = ""
-        bbox_class = ""
-        
-        if block.block_type == "heading":
-            level = min(max(block.level or 1, 1), 6)
-            classes = []
-            if block.style:
-                classes.append(block.style)
-            if bbox_class:
-                classes.append(bbox_class.strip())
-            
-            # Add LTR class for English content
-            if HTMLRenderer._detect_english_content(block.content):
-                classes.append("ltr")
-            
-            class_attr = f' class="{" ".join(classes)}"' if classes else ""
-            return f"<h{level}{class_attr}{bbox_style}>{content}</h{level}>"
-        
-        elif block.block_type == "paragraph":
-            classes = []
-            if block.style:
-                classes.append(block.style)
-            if bbox_class:
-                classes.append(bbox_class.strip())
-            
-            # Add LTR class for English content
-            if HTMLRenderer._detect_english_content(block.content):
-                classes.append("ltr")
-            
-            class_attr = f' class="{" ".join(classes)}"' if classes else ""
-            return f"<p{class_attr}{bbox_style}>{content}</p>"
-        
-        elif block.block_type == "list_item":
-            # This shouldn't be called directly anymore - lists are grouped
-            # But keep for backwards compatibility
-            return f"<li>{content}</li>"
-        
-        elif block.block_type == "caption":
-            return f'<p class="caption">{content}</p>'
-        
-        elif block.block_type == "footnote":
-            # Footnotes are now grouped at page end, but keep for fallback
-            return f'<div class="footnote">{content}</div>'
-        
-        elif block.block_type == "quote":
-            return f"<blockquote>{content}</blockquote>"
-        
-        elif block.block_type == "code":
-            return f"<pre><code>{content}</code></pre>"
-        
-        elif block.block_type == "equation":
-            # Render LaTeX equations with MathJax
-            # Don't escape the content - it's already LaTeX
-            raw_content = block.content  # Use raw content, not escaped
-            
-            # Clean equation content (remove Arabic text captions)
-            cleaned_equation, arabic_caption = HTMLRenderer._clean_equation_content(raw_content)
-            
-            # If no real equation content (just Arabic label), render as styled paragraph
-            if not cleaned_equation or len(cleaned_equation.strip()) < 3:
-                return f'<p class="equation-caption" dir="rtl">{arabic_caption}</p>'
-            
-            # Check if content already has delimiters
-            has_display_delimiters = cleaned_equation.strip().startswith('\\[') or cleaned_equation.strip().startswith('$$')
-            has_inline_delimiters = cleaned_equation.strip().startswith('\\(') or cleaned_equation.strip().startswith('$')
-            
-            result_parts = []
-            
-            if block.is_display_math:
-                # Display mode: centered, on its own line
-                if has_display_delimiters:
-                    result_parts.append(f'<div class="equation">{cleaned_equation}</div>')
-                else:
-                    result_parts.append(f'<div class="equation">\\[{cleaned_equation}\\]</div>')
-            else:
-                # Inline mode
-                if has_inline_delimiters:
-                    result_parts.append(f'<span class="equation-inline">{cleaned_equation}</span>')
-                else:
-                    result_parts.append(f'<span class="equation-inline">\\({cleaned_equation}\\)</span>')
-            
-            # Add Arabic caption as separate paragraph if present
-            if arabic_caption:
-                result_parts.append(f'<p class="equation-caption" dir="rtl">{arabic_caption}</p>')
-            
-            return '\n'.join(result_parts)
-        
-        return f"<p>{content}</p>"
     
     @staticmethod
-    def _render_table(table: Table) -> str:
-        """Render a table to HTML."""
+    def _render_table(table: TableBlock) -> str:
+        """Render a table to HTML with support for rowspan/colspan."""
         parts = []
-        
+
         if table.caption:
             parts.append(f'<p class="table-caption">{HTMLRenderer._escape(table.caption)}</p>')
-        
+
         parts.append("<table>")
-        
+
         if table.headers:
             parts.append("<thead><tr>")
             for header in table.headers:
                 parts.append(f"<th>{HTMLRenderer._escape(header)}</th>")
             parts.append("</tr></thead>")
-        
+
         parts.append("<tbody>")
         for row in table.rows:
             parts.append("<tr>")
             for cell in row:
-                parts.append(f"<td>{HTMLRenderer._escape(cell)}</td>")
+                # Build attributes for rowspan/colspan
+                attrs = []
+                if cell.row_span > 1:
+                    attrs.append(f'rowspan="{cell.row_span}"')
+                if cell.col_span > 1:
+                    attrs.append(f'colspan="{cell.col_span}"')
+
+                # Build inline style for cell
+                cell_styles = []
+                if cell.alignment:
+                    cell_styles.append(f"text-align: {cell.alignment}")
+                if cell.vertical_alignment:
+                    cell_styles.append(f"vertical-align: {cell.vertical_alignment}")
+                if cell.background_color:
+                    cell_styles.append(f"background-color: {cell.background_color}")
+                if cell.text_color:
+                    cell_styles.append(f"color: {cell.text_color}")
+                if cell.font_weight:
+                    cell_styles.append(f"font-weight: {cell.font_weight}")
+
+                if cell_styles:
+                    attrs.append(f'style="{"; ".join(cell_styles)}"')
+
+                # Use th for header cells, td for regular cells
+                tag = "th" if cell.is_header else "td"
+                attr_str = " " + " ".join(attrs) if attrs else ""
+                parts.append(f"<{tag}{attr_str}>{HTMLRenderer._escape(cell.content)}</{tag}>")
             parts.append("</tr>")
         parts.append("</tbody>")
         parts.append("</table>")
-        
+
         return "\n".join(parts)
     
     @staticmethod
-    def _render_image(image: Image) -> str:
+    def _render_image(image: ImageBlock, page: Optional[PageContent] = None) -> str:
         """Render an image to HTML - as normal in-flow block to prevent overlaps."""
         # Use bbox dimensions for better sizing
-        # For wide images (>70% page width), show at full bbox width
-        # For smaller images, cap at reasonable size
-        if image.bbox_width > 70:
-            width = min(95, image.bbox_width)
-        else:
-            width = max(30, min(80, image.bbox_width))
+        # If multi-column, scale width relative to column width
+        width = None
+        if page and page.is_multi_column:
+            col_count = max(1, page.get_column_count)
+            column_width_pct = None
+            if page.column_layout and page.column_layout.column_boundaries:
+                boundaries = [0.0] + page.column_layout.column_boundaries + [100.0]
+                col_idx = 0
+                for i in range(len(boundaries) - 1):
+                    if boundaries[i] <= image.bbox_left < boundaries[i + 1]:
+                        col_idx = i
+                        break
+                column_width_pct = boundaries[col_idx + 1] - boundaries[col_idx]
+            else:
+                column_width_pct = 100.0 / col_count
+
+            if column_width_pct and column_width_pct > 0:
+                relative_width = (image.bbox_width / column_width_pct) * 100.0
+                # Boost likely full-column figures to better match PDF visuals
+                if relative_width >= 50:
+                    relative_width = max(relative_width, 80)
+                width = min(100, max(10, relative_width))
+
+        # Fallback to page-based sizing
+        if width is None:
+            # For wide images (>70% page width), show at full bbox width
+            # For smaller images, cap at reasonable size
+            if image.bbox_width > 70:
+                width = min(95, image.bbox_width)
+            else:
+                width = max(30, min(80, image.bbox_width))
         
         # Build inline style for sizing (no horizontal positioning)
         style = f"max-width: {width}%; margin: 1rem auto;"
@@ -1153,6 +1441,129 @@ window.addEventListener('load', () => {
             parts.append(f"<figcaption>{HTMLRenderer._escape(image.caption)}</figcaption>")
         parts.append("</figure>")
         return "\n".join(parts)
+
+
+# =============================================================================
+# DOCUMENT VALIDATOR
+# =============================================================================
+
+class DocumentValidator:
+    """Validates extracted documents for quality and completeness."""
+
+    @staticmethod
+    def validate_document(doc: DocumentStructure) -> dict:
+        """
+        Validate an extracted document and return quality report.
+
+        Returns:
+            dict with 'is_valid': bool, 'errors': list, 'warnings': list, 'stats': dict
+        """
+        errors = []
+        warnings = []
+        stats = {
+            "total_pages": len(doc.pages),
+            "total_blocks": 0,
+            "missing_bbox_count": 0,
+            "duplicate_content_count": 0,
+            "empty_blocks": 0,
+        }
+
+        # Check page continuity
+        page_numbers = [p.page_number for p in doc.pages]
+        expected_pages = list(range(1, len(doc.pages) + 1))
+
+        if page_numbers != expected_pages:
+            missing = set(expected_pages) - set(page_numbers)
+            extra = set(page_numbers) - set(expected_pages)
+            if missing:
+                errors.append(f"Missing pages: {sorted(missing)}")
+            if extra:
+                warnings.append(f"Extra/duplicate page numbers: {sorted(extra)}")
+
+        # Check each page
+        all_content = []
+        for page in doc.pages:
+            stats["total_blocks"] += len(page.blocks)
+
+            for block in page.blocks:
+                # Check for missing bbox
+                if not DocumentValidator._has_valid_bbox(block):
+                    stats["missing_bbox_count"] += 1
+                    warnings.append(f"Page {page.page_number}: Block missing complete bbox")
+
+                # Check for empty content
+                content = DocumentValidator._get_block_content(block)
+                if content and not content.strip():
+                    stats["empty_blocks"] += 1
+                    warnings.append(f"Page {page.page_number}: Empty block found")
+                elif content:
+                    all_content.append(content.strip())
+
+        # Check for duplicate content
+        if all_content:
+            from collections import Counter
+            content_counts = Counter(all_content)
+            duplicates = {content: count for content, count in content_counts.items() if count > 1}
+            if duplicates:
+                stats["duplicate_content_count"] = len(duplicates)
+                # Only warn about excessive duplication
+                if len(duplicates) > 5:
+                    warnings.append(f"Found {len(duplicates)} pieces of duplicate content (possible extraction error)")
+
+        # Check for pages with no content
+        empty_pages = []
+        for page in doc.pages:
+            if not page.blocks or len(page.blocks) == 0:
+                empty_pages.append(page.page_number)
+
+        if empty_pages:
+            warnings.append(f"Pages with no content blocks: {empty_pages}")
+
+        # Validation summary
+        is_valid = len(errors) == 0
+        return {
+            "is_valid": is_valid,
+            "errors": errors,
+            "warnings": warnings,
+            "stats": stats,
+        }
+
+    @staticmethod
+    def _has_valid_bbox(block: ContentBlock) -> bool:
+        """Check if block has all required bbox fields."""
+        try:
+            return (
+                hasattr(block, 'bbox_top') and block.bbox_top is not None and
+                hasattr(block, 'bbox_left') and block.bbox_left is not None and
+                hasattr(block, 'bbox_width') and block.bbox_width is not None and
+                hasattr(block, 'bbox_height') and block.bbox_height is not None and
+                0 <= block.bbox_top <= 100 and
+                0 <= block.bbox_left <= 100 and
+                0 <= block.bbox_width <= 100 and
+                0 <= block.bbox_height <= 100
+            )
+        except:
+            return False
+
+    @staticmethod
+    def _get_block_content(block: ContentBlock) -> Optional[str]:
+        """Extract text content from any block type."""
+        if isinstance(block, (HeadingBlock, ParagraphBlock, CodeBlock, QuoteBlock, FootnoteBlock)):
+            return block.content
+        elif isinstance(block, ListBlock):
+            return " ".join(item.content for item in block.items)
+        elif isinstance(block, EquationBlock):
+            return block.latex
+        elif isinstance(block, ImageBlock):
+            return block.description
+        elif isinstance(block, TableBlock):
+            # Extract text from table cells
+            text_parts = []
+            for row in block.rows:
+                for cell in row:
+                    text_parts.append(cell.content)
+            return " ".join(text_parts)
+        return None
 
 
 # =============================================================================
@@ -1254,28 +1665,29 @@ class ImageExtractor:
     def extract_images_for_document(self, doc: DocumentStructure) -> DocumentStructure:
         """
         Extract all images from the document and populate image_data fields.
-        
+
         Args:
             doc: DocumentStructure with image bounding boxes from Gemini
-        
+
         Returns:
             DocumentStructure with image_data populated
         """
         for page in doc.pages:
-            for image in page.images:
-                try:
-                    image_data = self.extract_image(
-                        page_num=page.page_number,
-                        bbox_top=image.bbox_top,
-                        bbox_left=image.bbox_left,
-                        bbox_width=image.bbox_width,
-                        bbox_height=image.bbox_height
-                    )
-                    image.image_data = image_data
-                    if image_data:
-                        logger.info(f"Extracted {image.image_type} from page {page.page_number}")
-                except Exception as e:
-                    logger.warning(f"Failed to extract image from page {page.page_number}: {e}")
+            for block in page.blocks:
+                if isinstance(block, ImageBlock):
+                    try:
+                        image_data = self.extract_image(
+                            page_num=page.page_number,
+                            bbox_top=block.bbox_top,
+                            bbox_left=block.bbox_left,
+                            bbox_width=block.bbox_width,
+                            bbox_height=block.bbox_height
+                        )
+                        block.image_data = image_data
+                        if image_data:
+                            logger.info(f"Extracted {block.image_type} from page {page.page_number}")
+                    except Exception as e:
+                        logger.warning(f"Failed to extract image from page {page.page_number}: {e}")
         
         return doc
     
@@ -1301,7 +1713,7 @@ class PDFProcessor:
     def __init__(self, config: Optional[ProcessingConfig] = None):
         """Initialize the processor with configuration."""
         self.config = config or ProcessingConfig()
-        
+
         # Validate API key exists
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key:
@@ -1310,13 +1722,16 @@ class PDFProcessor:
                 "Please set it with your Google Gemini API key. "
                 "Get your key at: https://aistudio.google.com/app/apikey"
             )
-        
+
         self.client = genai.Client(api_key=api_key)
         self._uploaded_file = None
-        
+        self._cached_content = None  # For context caching
+
         # Token usage tracking
         self._total_input_tokens = 0
         self._total_output_tokens = 0
+        self._cache_creation_tokens = 0
+        self._cache_read_tokens = 0
     
     def _get_media_resolution(self) -> types.MediaResolution:
         """Convert config resolution to API type."""
@@ -1349,7 +1764,37 @@ class PDFProcessor:
                     time.sleep(self.config.retry_delay * (attempt + 1))
                 else:
                     raise RuntimeError(f"Failed to upload PDF after {self.config.max_retries} attempts") from e
-    
+
+    def _create_cached_content(self, uploaded_file: types.File) -> Optional[any]:
+        """
+        Create cached content for the uploaded PDF to reduce costs.
+
+        Context caching can save ~90% of input token costs for multi-chunk documents.
+        Cache is valid for 1 hour by default.
+        """
+        if not self.config.use_chunked_processing:
+            # Only use caching for chunked processing (multi-chunk documents)
+            return None
+
+        try:
+            logger.info("Creating context cache for PDF (saves ~90% on input tokens for subsequent chunks)")
+
+            # Create a cache with the uploaded PDF file
+            # The cache will be reused for all subsequent API calls
+            cached = self.client.caches.create(
+                model=self.config.model,
+                contents=[uploaded_file],
+                ttl_seconds=3600,  # Cache for 1 hour
+                system_instruction="You are an expert OCR and document analysis system."
+            )
+
+            logger.info(f"Context cache created: {cached.name} (valid for 1 hour)")
+            return cached
+
+        except Exception as e:
+            logger.warning(f"Failed to create context cache: {e}. Continuing without caching.")
+            return None
+
     def _get_page_count(self, uploaded_file: types.File) -> tuple[int, DocumentMetadata]:
         """Get document page count and metadata."""
         prompt = """Analyze this PDF document and provide:
@@ -1462,25 +1907,34 @@ IMPORTANT:
     
     def _calculate_page_quality(self, page: PageContent) -> dict:
         """Calculate quality metrics for a page.
-        
+
         Returns:
             dict with quality metrics
         """
-        total_text_chars = sum(len(block.content) for block in page.text_blocks)
-        total_blocks = len(page.text_blocks)
-        total_tables = len(page.tables)
-        total_images = len(page.images)
-        
-        # Calculate table cell count
-        table_cells = sum(
-            len(table.headers) + sum(len(row) for row in table.rows)
-            for table in page.tables
-        )
-        
+        total_text_chars = 0
+        total_blocks = len(page.blocks)
+        total_tables = 0
+        total_images = 0
+        table_cells = 0
+
+        for block in page.blocks:
+            if isinstance(block, (HeadingBlock, ParagraphBlock, CodeBlock, QuoteBlock, FootnoteBlock)):
+                total_text_chars += len(block.content)
+            elif isinstance(block, ListBlock):
+                for item in block.items:
+                    total_text_chars += len(item.content)
+            elif isinstance(block, TableBlock):
+                total_tables += 1
+                table_cells += len(block.headers) + sum(len(row) for row in block.rows)
+            elif isinstance(block, ImageBlock):
+                total_images += 1
+            elif isinstance(block, EquationBlock):
+                total_text_chars += len(block.latex)
+
         # Quality heuristics
         has_content = total_text_chars > 0 or total_tables > 0 or total_images > 0
         is_substantial = total_text_chars > 50  # At least 50 chars
-        
+
         return {
             "page_number": page.page_number,
             "text_chars": total_text_chars,
@@ -1490,7 +1944,8 @@ IMPORTANT:
             "images": total_images,
             "has_content": has_content,
             "is_substantial": is_substantial,
-            "multi_column": page.has_multi_column,
+            "multi_column": page.is_multi_column,
+            "column_count": page.get_column_count,
         }
     
     def _extract_page_range(self, uploaded_file: types.File, start_page: int, end_page: int) -> list[PageContent]:
@@ -1503,13 +1958,23 @@ For each page in this range:
 1. Set the correct page_number (starting from {start_page})
 2. Extract the HEADER text if present (usually at the top of the page - may contain page numbers, chapter titles, section names)
 3. Extract the FOOTER text if present (usually at the bottom of the page - may contain page numbers, citations, document info)
-4. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
-   - CRITICAL: For EVERY SINGLE text block, you MUST provide BOUNDING BOX coordinates as percentages (0-100):
-     * bbox_top: distance from top of page to top of text block (REQUIRED, 0-100)
-     * bbox_left: distance from left of page to left of text block (REQUIRED, 0-100)
-     * bbox_width: width of the text block (REQUIRED, 0-100)
-     * bbox_height: height of the text block (REQUIRED, 0-100)
-   - These coordinates are MANDATORY for proper rendering, not optional
+4. Extract content using STRICTLY TYPED BLOCKS with lowercase 'type' discriminators:
+   - HEADINGS: type='heading' with level (1-6), content, and bbox
+   - PARAGRAPHS: type='paragraph' with content, spans (for bold/italic/links), and bbox
+   - LISTS: type='list' with style (ordered/unordered), items, and bbox
+     * For NESTED LISTS: Set sub_list field in ListItem to create nested list
+   - TABLES: type='table' with rows of TableCell objects (with row_span/col_span)
+   - EQUATIONS: type='equation' with latex, is_display, number (if present), and bbox
+   - IMAGES/FIGURES: type='image' with image_type, description, caption, and bbox
+   - CODE: type='code' with content, language, and bbox
+   - QUOTES: type='quote' with content, attribution, and bbox
+   - FOOTNOTES: type='footnote' with content, reference_number, and bbox
+
+   CRITICAL RULES:
+   - EVERY block MUST have complete BOUNDING BOX coordinates (bbox_top, bbox_left, bbox_width, bbox_height) as percentages 0-100
+   - bbox fields are REQUIRED, not optional - missing bbox = invalid output
+   - For INLINE FORMATTING (bold, italic, underline, links): Add Span objects to the paragraph's spans field
+     * Span has start/end character indices, style type, and optional URL for links
 5. For MATHEMATICAL EQUATIONS:
    - CRITICAL: TRANSCRIBE equations EXACTLY as they appear - do NOT solve, simplify, or manipulate them
    - Extract the equation as it is written in the PDF, preserving all notation and structure
@@ -1569,32 +2034,35 @@ REMEMBER:
                 temperature = 0.3 + (attempt * 0.2)  # 0.3 -> 0.5 -> 0.7 on retries
                 logger.info(f"Extracting pages {start_page}-{end_page} (attempt {attempt + 1}, temperature={temperature})")
                 
+                # Use cached content if available, otherwise use uploaded file
+                if self._cached_content:
+                    contents = [self._cached_content, prompt]
+                else:
+                    contents = [uploaded_file, prompt]
+
                 response = self.client.models.generate_content(
                     model=self.config.model,
-                    contents=[uploaded_file, prompt],
+                    contents=contents,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                         response_json_schema=ChunkExtraction.model_json_schema(),
                         system_instruction=(
-                            f"You are an expert OCR and document analysis system extracting pages {start_page}-{end_page} only. "
-                            "Extract page headers and footers (usually contain page numbers, titles, or citations). "
-                            "OCR all text content including tables. "
-                            "PRESERVE NUMERAL SYSTEMS: If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), keep them exactly - do NOT convert to Western numerals (0123456789). "
-                            "TRANSCRIBE mathematical equations EXACTLY as written - do NOT solve, simplify, or manipulate them. "
-                            "Extract equations as LaTeX in 'equation' blocks preserving the exact notation from the PDF. "
-                            "For SUPERSCRIPTS/SUBSCRIPTS: Use ^{} and _{} in LaTeX (e.g., x^{2}, H_{2}O). "
-                            "For NUMBERED EQUATIONS: Extract equation number in equation_number field. "
-                            "For NESTED LISTS: Set list_level (1=top, 2=nested, etc.) to preserve hierarchy. "
-                            "For MERGED TABLE CELLS: Set row_span and col_span appropriately. "
-                            "For MULTI-COLUMN LAYOUTS in LTR docs: Extract left-to-right column order. For RTL docs: right-to-left. "
-                            "For MIXED RTL/LTR TEXT: Set text_direction on individual text blocks. "
-                            "For WATERMARKS: Ignore decorative watermarks like 'DRAFT', 'CONFIDENTIAL'. "
-                            "For EVERY element (text blocks, tables, images), provide bbox coordinates (top, left, width, height) as percentages. "
-                            "CRITICAL BBOX RULES: ALWAYS measure bbox_left from the PHYSICAL LEFT EDGE of the page (0% = left edge, 100% = right edge). "
-                            "This applies regardless of text direction (RTL or LTR). For Arabic/Hebrew RTL text that appears on the right side of the page, bbox_left should be 70-90%, NOT 10-30%. "
-                            "For charts, graphs, diagrams, and figures provide accurate bounding box coordinates as percentages. "
-                            "For tables, also provide bbox coordinates for proper ordering. "
-                            "CRITICAL: Ensure all JSON strings are properly escaped, especially quotes and special characters."
+                            f"You are an expert OCR and document analysis system extracting pages {start_page}-{end_page} only using POLYMORPHIC BLOCK TYPES. "
+                            "Use STRICTLY TYPED blocks with lowercase 'type' discriminators: type='heading', 'paragraph', 'list', 'table', 'equation', 'image', 'code', 'quote', 'footnote'. "
+                            "For HEADINGS: type='heading' with level 1-6. "
+                            "For PARAGRAPHS: type='paragraph'. For bold/italic/links, add Span objects to spans field with start/end indices and style. "
+                            "For LISTS: type='list' with ordered/unordered style. For NESTED lists, set sub_list field in ListItem to create recursive list. "
+                            "For TABLES: type='table' with rows of TableCell objects. For MERGED CELLS: Set row_span and col_span in TableCell. "
+                            "For EQUATIONS: type='equation' with LaTeX. TRANSCRIBE EXACTLY - do NOT solve or simplify. Use ^{} and _{} for super/subscripts. "
+                            "For IMAGES/FIGURES: type='image' with image_type, description, caption. "
+                            "PRESERVE NUMERAL SYSTEMS: If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), keep them exactly - do NOT convert to Western numerals. "
+                            "MANDATORY BBOX: EVERY block MUST have bbox_top, bbox_left, bbox_width, bbox_height as percentages (0-100). Missing bbox = invalid. "
+                            "BBOX MEASUREMENT: Always measure bbox_left from PHYSICAL LEFT EDGE (0% = left, 100% = right), regardless of text direction. "
+                            "For RTL text on right side: bbox_left should be 70-90%, NOT 10-30%. "
+                            "For MULTI-COLUMN: LTR docs extract left-to-right, RTL docs extract right-to-left. "
+                            "For MIXED RTL/LTR: Set text_direction on individual blocks. "
+                            "IGNORE decorative watermarks. "
+                            "Ensure all JSON strings are properly escaped."
                         ),
                         media_resolution=self._get_media_resolution(),
                         max_output_tokens=self.config.max_output_tokens,
@@ -1604,10 +2072,14 @@ REMEMBER:
                 
                 chunk = ChunkExtraction.model_validate_json(response.text)
                 
-                # Track token usage
+                # Track token usage including cache metrics
                 if hasattr(response, 'usage_metadata'):
                     self._total_input_tokens += getattr(response.usage_metadata, 'prompt_token_count', 0)
                     self._total_output_tokens += getattr(response.usage_metadata, 'candidates_token_count', 0)
+                    # Track cache-specific tokens if using caching
+                    if self._cached_content:
+                        self._cache_creation_tokens += getattr(response.usage_metadata, 'cached_content_token_count', 0)
+                        self._cache_read_tokens += getattr(response.usage_metadata, 'cache_read_input_tokens', 0)
                 
                 logger.info(f"Extracted {len(chunk.pages)} pages from range {start_page}-{end_page}")
                 return chunk.pages
@@ -1635,44 +2107,93 @@ REMEMBER:
         """Extract document content in chunks for large documents."""
         # First, get page count and metadata
         total_pages, metadata = self._get_page_count(uploaded_file)
-        
+
+        # Create cached content for cost savings (if chunked processing enabled)
+        self._cached_content = self._create_cached_content(uploaded_file)
+        if self._cached_content:
+            logger.info("✓ Context caching enabled - will save ~90% on input tokens for subsequent chunks")
+
         # Estimate cost and time
         cost_estimate = self._estimate_cost(total_pages)
-        logger.info(f"Starting extraction of {total_pages} pages (estimated ${cost_estimate['estimated_cost_usd']} USD)")
-        
+        if self._cached_content:
+            # Adjust cost estimate for caching (90% savings on input tokens for chunks after first)
+            num_chunks = (total_pages + self.config.pages_per_chunk - 1) // self.config.pages_per_chunk
+            if num_chunks > 1:
+                savings = cost_estimate['estimated_cost_usd'] * 0.9 * (num_chunks - 1) / num_chunks
+                adjusted_cost = cost_estimate['estimated_cost_usd'] - savings
+                logger.info(f"Estimated cost with caching: ${adjusted_cost:.4f} USD (saves ${savings:.4f})")
+            else:
+                logger.info(f"Estimated cost: ${cost_estimate['estimated_cost_usd']} USD")
+        else:
+            logger.info(f"Starting extraction of {total_pages} pages (estimated ${cost_estimate['estimated_cost_usd']} USD)")
+
         all_pages: list[PageContent] = []
         chunk_size = self.config.pages_per_chunk
         start_time = time.time()
-        
-        # Process in chunks
+
+        # Calculate all chunk ranges
+        chunk_ranges = []
         for chunk_idx, start in enumerate(range(1, total_pages + 1, chunk_size), 1):
             end = min(start + chunk_size - 1, total_pages)
-            progress = (chunk_idx / ((total_pages + chunk_size - 1) // chunk_size)) * 100
-            logger.info(f"Processing chunk {chunk_idx}: pages {start}-{end} of {total_pages} ({progress:.1f}% complete)")
-            
+            chunk_ranges.append((chunk_idx, start, end))
+
+        total_chunks = len(chunk_ranges)
+        logger.info(f"Processing {total_chunks} chunks in parallel")
+
+        # Helper function to process a single chunk
+        def process_chunk(chunk_info):
+            chunk_idx, start, end = chunk_info
             try:
+                logger.info(f"Processing chunk {chunk_idx}: pages {start}-{end} of {total_pages}")
                 chunk_pages = self._extract_page_range(uploaded_file, start, end)
-                
+
                 # Ensure page numbers are correct
                 for i, page in enumerate(chunk_pages):
                     expected_page = start + i
                     if page.page_number != expected_page:
                         page.page_number = expected_page
-                
-                all_pages.extend(chunk_pages)
-                logger.info(f"Total pages extracted so far: {len(all_pages)}")
-                
+
+                logger.info(f"Chunk {chunk_idx} complete: extracted {len(chunk_pages)} pages")
+                return (chunk_idx, chunk_pages, None)
+
             except Exception as e:
-                logger.error(f"Failed to extract pages {start}-{end}: {e}")
+                logger.error(f"Chunk {chunk_idx} failed (pages {start}-{end}): {e}")
                 # Create placeholder pages for failed chunks
+                placeholder_pages = []
                 for page_num in range(start, end + 1):
-                    all_pages.append(PageContent(
+                    placeholder_pages.append(PageContent(
                         page_number=page_num,
-                        text_blocks=[TextBlock(
-                            block_type="paragraph",
-                            content=f"[Page {page_num} extraction failed: {e}]"
+                        blocks=[ParagraphBlock(
+                            content=f"[Page {page_num} extraction failed: {e}]",
+                            bbox_top=50.0,
+                            bbox_left=10.0,
+                            bbox_width=80.0,
+                            bbox_height=10.0
                         )]
                     ))
+                return (chunk_idx, placeholder_pages, str(e))
+
+        # Process all chunks in parallel
+        chunk_results = []
+        with ThreadPoolExecutor(max_workers=total_chunks) as executor:
+            # Submit all chunks
+            futures = {executor.submit(process_chunk, chunk_info): chunk_info for chunk_info in chunk_ranges}
+
+            # Collect results as they complete
+            completed = 0
+            for future in as_completed(futures):
+                chunk_idx, pages, error = future.result()
+                chunk_results.append((chunk_idx, pages, error))
+                completed += 1
+                progress = (completed / total_chunks) * 100
+                logger.info(f"Progress: {completed}/{total_chunks} chunks complete ({progress:.1f}%)")
+
+        # Sort results by chunk index to maintain page order
+        chunk_results.sort(key=lambda x: x[0])
+
+        # Combine all pages in order
+        for chunk_idx, pages, error in chunk_results:
+            all_pages.extend(pages)
         
         # Sort pages by page number (in case of any ordering issues)
         all_pages.sort(key=lambda p: p.page_number)
@@ -1709,9 +2230,12 @@ REMEMBER:
                     logger.error(f"Failed to extract page {page_num} after {self.config.max_retries} retries")
                     all_pages.append(PageContent(
                         page_number=page_num,
-                        text_blocks=[TextBlock(
-                            block_type="paragraph",
-                            content=f"[Page {page_num} could not be extracted after multiple attempts]"
+                        blocks=[ParagraphBlock(
+                            content=f"[Page {page_num} could not be extracted after multiple attempts]",
+                            bbox_top=50.0,
+                            bbox_left=10.0,
+                            bbox_width=80.0,
+                            bbox_height=10.0
                         )]
                     ))
             
@@ -1757,12 +2281,31 @@ REMEMBER:
         
         if missing_pages:
             extraction_notes += f" Recovered {len(missing_pages) - len(still_missing)}/{len(missing_pages)} missing pages."
-        
-        return DocumentStructure(
+
+        # Create document structure
+        doc = DocumentStructure(
             metadata=metadata,
             pages=all_pages,
             extraction_notes=extraction_notes
         )
+
+        # Validate the extracted document
+        validation_result = DocumentValidator.validate_document(doc)
+        logger.info(f"Document validation: {validation_result['stats']}")
+
+        if not validation_result['is_valid']:
+            logger.error(f"Document validation failed with {len(validation_result['errors'])} errors")
+            for error in validation_result['errors']:
+                logger.error(f"  - {error}")
+
+        if validation_result['warnings']:
+            logger.warning(f"Document validation found {len(validation_result['warnings'])} warnings")
+            for warning in validation_result['warnings'][:5]:  # Show first 5 warnings
+                logger.warning(f"  - {warning}")
+            if len(validation_result['warnings']) > 5:
+                logger.warning(f"  ... and {len(validation_result['warnings']) - 5} more warnings")
+
+        return doc
     
     def _extract_structured(self, uploaded_file: types.File) -> DocumentStructure:
         """Extract structured document data using Gemini's structured output."""
@@ -1787,12 +2330,12 @@ Instructions:
    - CRITICAL: Preserve EXACT numeral system from PDF
    - If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), keep them EXACTLY
    - Do NOT convert to Western numerals (0123456789)
-7. For LISTS (numbered, bulleted, nested):
-   - For NESTED LISTS: Set list_level field (1=top, 2=nested, etc.)
-   - Preserve hierarchy structure
-8. For TABLES: OCR all text content. Do NOT treat tables as images.
-   - For MERGED CELLS: Set row_span and col_span values
-   - For table captions: Extract separately
+7. For LISTS: type='list' with ordered/unordered style
+   - For NESTED LISTS: Set sub_list field in ListItem to create nested list
+   - Preserve hierarchy with recursion
+8. For TABLES: type='table' with rows of TableCell objects
+   - For MERGED CELLS: Set row_span and col_span in TableCell
+   - For table captions: Extract in caption field
    - Provide bbox coordinates
 9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
    - Identify image_type and provide description
@@ -1828,26 +2371,21 @@ REMEMBER:
                         response_mime_type="application/json",
                         response_json_schema=DocumentStructure.model_json_schema(),
                         system_instruction=(
-                            "You are an expert OCR and document analysis system. "
-                            "Extract complete, accurate structured data from documents. "
-                            "Extract page headers and footers (usually contain page numbers, titles, or citations). "
-                            "OCR all text content including tables. "
-                            "PRESERVE NUMERAL SYSTEMS: If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), keep them exactly - do NOT convert to Western numerals (0123456789). "
-                            "TRANSCRIBE mathematical equations EXACTLY as written - do NOT solve, simplify, or manipulate them. "
-                            "Extract equations as LaTeX in 'equation' blocks preserving the exact notation from the PDF. "
-                            "For SUPERSCRIPTS/SUBSCRIPTS: Use ^{} and _{} in LaTeX (e.g., x^{2}, H_{2}O). "
-                            "For NUMBERED EQUATIONS: Extract equation number in equation_number field. "
-                            "For NESTED LISTS: Set list_level (1=top, 2=nested, etc.) to preserve hierarchy. "
-                            "For MERGED TABLE CELLS: Set row_span and col_span appropriately. "
-                            "For MULTI-COLUMN LAYOUTS in LTR docs: Extract left-to-right column order. For RTL docs: right-to-left. "
-                            "For MIXED RTL/LTR TEXT: Set text_direction on individual text blocks. "
-                            "For WATERMARKS: Ignore decorative watermarks like 'DRAFT', 'CONFIDENTIAL'. "
-                            "For ALL elements (text blocks, tables, images), provide bbox coordinates (top, left, width, height) as percentages. "
-                            "CRITICAL BBOX RULES: ALWAYS measure bbox_left from the PHYSICAL LEFT EDGE of the page (0% = left edge, 100% = right edge). "
-                            "This applies regardless of text direction (RTL or LTR). For Arabic/Hebrew RTL text that appears on the right side of the page, bbox_left should be 70-90%, NOT 10-30%. "
-                            "Preserve all content, formatting, and semantic structure. "
-                            "Be thorough - process every page completely. "
-                            "CRITICAL: Ensure all JSON strings are properly escaped, especially quotes and special characters."
+                            "You are an expert OCR system using POLYMORPHIC BLOCK TYPES. "
+                            "Use STRICTLY TYPED blocks with lowercase 'type' discriminators: type='heading', 'paragraph', 'list', 'table', 'equation', 'image', 'code', 'quote', 'footnote'. "
+                            "For HEADINGS: type='heading' with level 1-6. "
+                            "For PARAGRAPHS: type='paragraph' with Span objects for bold/italic/links. "
+                            "For LISTS: type='list'. For NESTED lists, use sub_list field in ListItem for recursive list. "
+                            "For TABLES: type='table' with TableCell objects. For MERGED cells, set row_span/col_span. "
+                            "For EQUATIONS: type='equation' with LaTeX. TRANSCRIBE EXACTLY - do NOT solve. Use ^{}/_{} for scripts. "
+                            "For IMAGES: type='image' with image_type, description, caption. "
+                            "PRESERVE Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) - do NOT convert to Western. "
+                            "MANDATORY BBOX: ALL blocks MUST have bbox_top, bbox_left, bbox_width, bbox_height (0-100%). "
+                            "Measure bbox_left from PHYSICAL LEFT edge, regardless of text direction. "
+                            "For RTL text on right: bbox_left = 70-90%, NOT 10-30%. "
+                            "MULTI-COLUMN: LTR=left-to-right, RTL=right-to-left. "
+                            "IGNORE decorative watermarks. "
+                            "Ensure JSON strings are escaped."
                         ),
                         media_resolution=self._get_media_resolution(),
                         max_output_tokens=self.config.max_output_tokens,
@@ -1858,6 +2396,21 @@ REMEMBER:
                 # Parse and validate the response
                 doc = DocumentStructure.model_validate_json(response.text)
                 logger.info(f"Successfully extracted {len(doc.pages)} pages")
+
+                # Validate the extracted document
+                validation_result = DocumentValidator.validate_document(doc)
+                logger.info(f"Document validation: {validation_result['stats']}")
+
+                if not validation_result['is_valid']:
+                    logger.error(f"Validation failed with {len(validation_result['errors'])} errors")
+                    for error in validation_result['errors']:
+                        logger.error(f"  - {error}")
+
+                if validation_result['warnings']:
+                    logger.warning(f"Validation found {len(validation_result['warnings'])} warnings")
+                    for warning in validation_result['warnings'][:5]:
+                        logger.warning(f"  - {warning}")
+
                 return doc
                 
             except Exception as e:
@@ -2057,11 +2610,22 @@ Requirements:
             
             # Add token usage metadata for cost tracking
             if hasattr(self, '_total_input_tokens'):
-                result["usage_metadata"] = {
+                metadata = {
                     "total_input_tokens": self._total_input_tokens,
                     "total_output_tokens": self._total_output_tokens,
                     "total_tokens": self._total_input_tokens + self._total_output_tokens
                 }
+
+                # Add cache metrics if caching was used
+                if self._cached_content:
+                    metadata["cache_creation_tokens"] = self._cache_creation_tokens
+                    metadata["cache_read_tokens"] = self._cache_read_tokens
+                    # Calculate savings (cache reads cost ~10% of regular input tokens)
+                    regular_cost = self._total_input_tokens * 0.50 / 1_000_000  # $0.50 per 1M tokens
+                    cache_cost = self._cache_read_tokens * 0.05 / 1_000_000  # $0.05 per 1M tokens
+                    metadata["estimated_cache_savings_usd"] = round(regular_cost - cache_cost, 4)
+
+                result["usage_metadata"] = metadata
                 logger.info(
                     f"Token usage: {self._total_input_tokens:,} input, "
                     f"{self._total_output_tokens:,} output, "
