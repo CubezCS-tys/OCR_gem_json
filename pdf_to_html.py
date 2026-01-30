@@ -1158,7 +1158,7 @@ window.addEventListener('load', () => {
         elif isinstance(block, ListBlock):
             return HTMLRenderer._render_list(block)
         elif isinstance(block, TableBlock):
-            return HTMLRenderer._render_table(block)
+            return HTMLRenderer._render_table(block, page)
         elif isinstance(block, EquationBlock):
             return HTMLRenderer._render_equation(block)
         elif isinstance(block, ImageBlock):
@@ -1335,23 +1335,27 @@ window.addEventListener('load', () => {
     
     
     @staticmethod
-    def _render_table(table: TableBlock) -> str:
+    def _render_table(table: TableBlock, page: Optional[PageContent] = None) -> str:
         """Render a table to HTML with support for rowspan/colspan."""
         parts = []
 
         if table.caption:
             parts.append(f'<p class="table-caption">{HTMLRenderer._escape(table.caption)}</p>')
 
+        # Keep the extracted column order; RTL pages already render right-to-left via dir="rtl"
+        headers = list(table.headers)
+        rows = table.rows
+
         parts.append("<table>")
 
-        if table.headers:
+        if headers:
             parts.append("<thead><tr>")
-            for header in table.headers:
+            for header in headers:
                 parts.append(f"<th>{HTMLRenderer._escape(header)}</th>")
             parts.append("</tr></thead>")
 
         parts.append("<tbody>")
-        for row in table.rows:
+        for row in rows:
             parts.append("<tr>")
             for cell in row:
                 # Build attributes for rowspan/colspan

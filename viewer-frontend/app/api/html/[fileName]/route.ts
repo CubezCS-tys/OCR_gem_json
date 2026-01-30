@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
-const OUTPUTS_DIR = path.join(process.cwd(), "../outputs");
+const OUTPUTS_DIR = path.join(process.cwd(), "../output_batch");
 
 export async function GET(
   request: NextRequest,

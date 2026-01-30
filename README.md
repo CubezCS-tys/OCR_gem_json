@@ -87,8 +87,11 @@ cp .env.example .env
 # Start Redis
 redis-server
 
-# Start Celery workers
-celery -A celery_config worker --loglevel=info
+# Start Celery workers (submit_jobs.py / tasks.py)
+python -m celery -A celery_config worker --loglevel=info --include=tasks
+
+# Or: submit_batch.py / celery_tasks.py
+python -m celery -A celery_config worker --loglevel=info --queue=pdf_processing --include=celery_tasks
 
 # Start monitoring dashboard
 celery -A celery_config flower
@@ -97,6 +100,10 @@ celery -A celery_config flower
 ### Submit Jobs
 
 ```bash
+# Batch pipeline (submit_batch.py)
+python submit_batch.py pdfs/*.pdf --output-dir outputs/ --monitor
+
+# Production pipeline (submit_jobs.py)
 # Single PDF
 python submit_jobs.py document.pdf
 

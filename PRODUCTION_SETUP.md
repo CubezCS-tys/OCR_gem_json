@@ -33,7 +33,11 @@ Create `.env` file:
 # Gemini API
 GEMINI_API_KEY=your_api_key_here
 
-# Redis Configuration (optional, defaults shown)
+# Celery broker/result (used by celery_config.py)
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
+
+# Redis Configuration for cache (submit_jobs.py, optional)
 REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
@@ -42,24 +46,28 @@ REDIS_DB=0
 
 ### 4. Start Celery Workers
 
+Workers must include the task module (tasks are not auto-discovered).
+
 ```bash
-# Start worker (basic)
-celery -A celery_config worker --loglevel=info
+# submit_jobs.py / tasks.py (default "celery" queue)
+python -m celery -A celery_config worker --loglevel=info --concurrency=2 --include=tasks
 
-# Start worker with specific queue
-celery -A celery_config worker -Q pdf_processing --loglevel=info
+# submit_batch.py / celery_tasks.py (routed to pdf_processing queue)
+python -m celery -A celery_config worker --loglevel=info --concurrency=2 --queue=pdf_processing --include=celery_tasks
 
-# Start multiple workers (recommended for production)
-celery -A celery_config worker -Q pdf_processing --concurrency=4 --loglevel=info
-celery -A celery_config worker -Q html_rebuild --concurrency=2 --loglevel=info
-
-# Start worker as background process
-celery -A celery_config worker --detach --loglevel=info --pidfile=celery.pid
+# Start worker as background process (submit_jobs example)
+python -m celery -A celery_config worker --detach --loglevel=info --pidfile=celery.pid --include=tasks
 ```
+
+`submit_batch.py` routes tasks to `pdf_processing` via `celery_config.py`. `submit_jobs.py` uses the default `celery` queue unless you add routing.
 
 ### 5. Submit Jobs
 
 ```bash
+# Batch pipeline (submit_batch.py)
+python submit_batch.py pdfs/*.pdf --output-dir outputs/ --monitor
+
+# Production pipeline (submit_jobs.py)
 # Single PDF
 python submit_jobs.py document.pdf
 
@@ -75,6 +83,8 @@ python submit_jobs.py --status <task_id>
 # Rebuild HTML from JSON
 python submit_jobs.py --rebuild output.json
 ```
+
+Note: `submit_jobs.py` expects `PRIORITY_*` constants in `celery_config.py`. If you hit an import error, define them there or use `submit_batch.py`.
 
 ### 6. Monitor Processing
 
@@ -100,7 +110,8 @@ celery -A celery_config flower
 ```
 ┌─────────────┐         ┌─────────┐         ┌──────────────┐
 │   Client    │────────>│  Redis  │────────>│   Workers    │
-│ submit_jobs │         │  Broker │         │ (Celery)     │
+│ submit_batch │        │  Broker │         │ (Celery)     │
+│ submit_jobs  │        │         │         │             │
 └─────────────┘         └─────────┘         └──────────────┘
                              │                      │
                              │                      │
@@ -108,7 +119,9 @@ celery -A celery_config flower
                         PDF Cache            (Gemini API)
 ```
 
-### Priority Queues
+### Priority Levels (submit_jobs.py)
+
+These are used by `submit_jobs.py` and require priority constants in `celery_config.py` plus broker support.
 
 - **URGENT** (9): Time-critical processing
 - **HIGH** (7): Important documents
@@ -118,7 +131,7 @@ celery -A celery_config flower
 
 ### Rate Limiting
 
-- **Gemini API**: 60 requests/minute (configurable)
+- **Default Celery rate limit**: 10 tasks/minute (set in `celery_config.py`)
 - Shared across all workers
 - Auto-retry with exponential backoff
 - Max 3 retries per task
@@ -138,13 +151,13 @@ Deploy workers across multiple machines:
 
 ```bash
 # Machine 1: High-priority workers
-celery -A celery_config worker -Q pdf_processing -n worker1@%h --concurrency=4
+python -m celery -A celery_config worker -n worker1@%h --concurrency=4 --include=tasks
 
 # Machine 2: Normal priority
-celery -A celery_config worker -Q pdf_processing -n worker2@%h --concurrency=2
+python -m celery -A celery_config worker -n worker2@%h --concurrency=2 --include=tasks
 
-# Machine 3: HTML rebuild
-celery -A celery_config worker -Q html_rebuild -n worker3@%h --concurrency=4
+# Machine 3: HTML rebuild (add routing first if you want a separate queue)
+python -m celery -A celery_config worker -n worker3@%h --concurrency=4 --include=tasks
 ```
 
 ### Monitoring Dashboard
@@ -181,7 +194,7 @@ services:
 
   celery_worker:
     build: .
-    command: celery -A celery_config worker -Q pdf_processing --loglevel=info
+    command: celery -A celery_config worker --loglevel=info --include=tasks
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - REDIS_HOST=redis
@@ -232,7 +245,8 @@ ExecStart=/path/to/venv/bin/celery -A celery_config worker \
     --detach \
     --pidfile=/var/run/celery/worker.pid \
     --logfile=/var/log/celery/worker.log \
-    --loglevel=info
+    --loglevel=info \
+    --include=tasks
 ExecStop=/path/to/venv/bin/celery -A celery_config control shutdown
 Restart=always
 
@@ -269,7 +283,7 @@ python submit_jobs.py -d ./pdfs --format json
 ### Priority Processing
 
 ```bash
-# Urgent document (jumps queue)
+# Urgent document (highest priority)
 python submit_jobs.py critical.pdf --priority urgent
 
 # High priority
@@ -317,13 +331,13 @@ python submit_jobs.py document.pdf --no-cache
 
 ```bash
 # Auto-detect CPU cores
-celery -A celery_config worker --autoscale=10,3
+python -m celery -A celery_config worker --autoscale=10,3 --include=tasks
 
 # Fixed concurrency
-celery -A celery_config worker --concurrency=8
+python -m celery -A celery_config worker --concurrency=8 --include=tasks
 
 # Single-threaded (max reliability)
-celery -A celery_config worker --concurrency=1
+python -m celery -A celery_config worker --concurrency=1 --include=tasks
 ```
 
 ### Rate Limiting
@@ -332,7 +346,13 @@ Edit `celery_config.py`:
 
 ```python
 # Increase if you have higher quota
-'tasks.process_pdf_task': {'rate_limit': '100/m'},  # 100 per minute
+task_default_rate_limit = '10/m'
+task_annotations = {
+    # submit_jobs.py
+    'tasks.process_pdf_task': {'rate_limit': '100/m'},
+    # submit_batch.py
+    'celery_tasks.process_pdf': {'rate_limit': '100/m'},
+}
 ```
 
 ### Memory Management
@@ -373,6 +393,9 @@ celery -A celery_config inspect active
 # Check registered tasks
 celery -A celery_config inspect registered
 
+# If registered task count is 0, restart workers with --include=celery_tasks or --include=tasks
+# and make sure the queue matches the submit script you used.
+
 # Purge stuck tasks
 celery -A celery_config purge
 ```
@@ -392,7 +415,7 @@ If you see "429 Too Many Requests":
 watch -n 1 'ps aux | grep celery'
 
 # Reduce max tasks per worker
-celery -A celery_config worker --max-tasks-per-child=10
+python -m celery -A celery_config worker --max-tasks-per-child=10 --include=tasks
 ```
 
 ### Task Hangs
@@ -467,7 +490,7 @@ Run workers as non-privileged user:
 ```bash
 sudo useradd -r -s /bin/false celery
 sudo chown -R celery:celery /path/to/OCR_gem_json
-sudo -u celery celery -A celery_config worker
+sudo -u celery celery -A celery_config worker --include=tasks
 ```
 
 ## Monitoring Metrics

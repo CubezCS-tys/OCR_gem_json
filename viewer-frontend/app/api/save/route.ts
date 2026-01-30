@@ -5,7 +5,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 
 const execAsync = promisify(exec);
-const OUTPUTS_DIR = path.join(process.cwd(), "../outputs");
+const OUTPUTS_DIR = path.join(process.cwd(), "../output_batch");
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,11 +32,11 @@ export async function POST(request: NextRequest) {
       const { stdout, stderr } = await execAsync(
         `python3 "${pythonScript}" "${jsonPath}" "${htmlPath}"`
       );
-      
+
       if (stderr) {
         console.error("Python stderr:", stderr);
       }
-      
+
       console.log("HTML regeneration output:", stdout);
     } catch (error) {
       console.error("Error running Python script:", error);
