@@ -11,6 +11,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Priority levels for task scheduling (lower = higher priority)
+PRIORITY_URGENT = 0
+PRIORITY_HIGH = 3
+PRIORITY_NORMAL = 5
+PRIORITY_LOW = 9
+
 # Celery app configuration
 app = Celery(
     'pdf_processor',

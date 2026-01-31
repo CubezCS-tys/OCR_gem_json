@@ -32,7 +32,7 @@ def process_pdf(
         pdf_path: Path to input PDF file
         output_html: Path to output HTML file (optional)
         output_json: Path to output JSON file (optional)
-        output_format: 'html', 'json', or 'both'
+        output_format: 'html', 'json', 'both', or 'gemini_html'
         resolution: 'low', 'medium', or 'high'
         pages_per_chunk: Number of pages per chunk for parallel processing
         max_retries: Maximum retry attempts per chunk
@@ -50,7 +50,7 @@ def process_pdf(
             raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
         # Auto-generate output paths if not provided
-        if output_html is None and output_format in ['html', 'both']:
+        if output_html is None and output_format in ['html', 'both', 'gemini_html']:
             output_html = pdf_path.with_suffix('.html')
         if output_json is None and output_format in ['json', 'both']:
             output_json = pdf_path.with_suffix('.json')
