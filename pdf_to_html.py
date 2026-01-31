@@ -447,8 +447,11 @@ window.addEventListener('load', () => {
         margin-bottom: 20px;
         padding-bottom: 10px;
         border-bottom: 1px solid var(--border-color);
+        break-inside: avoid;
+        column-break-inside: avoid;
+        page-break-inside: avoid;
     }}
-    
+
     .page-footer {{
         font-size: 0.75rem;
         color: #888;
@@ -456,6 +459,9 @@ window.addEventListener('load', () => {
         margin-top: 20px;
         padding-top: 10px;
         border-top: 1px solid var(--border-color);
+        break-inside: avoid;
+        column-break-inside: avoid;
+        page-break-inside: avoid;
     }}
     
     /* RTL Support */
@@ -496,6 +502,10 @@ window.addEventListener('load', () => {
     /* Force LTR for specific content */
     .ltr {{
         direction: ltr;
+        unicode-bidi: isolate;
+    }}
+    .rtl {{
+        direction: rtl;
         unicode-bidi: isolate;
     }}
     
@@ -551,6 +561,18 @@ window.addEventListener('load', () => {
     
     /* Auto-generated list wrapper */
     .list-wrapper {{ margin: 1rem 0; }}
+    .list-wrapper.ltr-list {{
+        direction: ltr;
+        text-align: left;
+        padding-left: 2rem;
+        padding-right: 0;
+    }}
+    .list-wrapper.rtl-list {{
+        direction: rtl;
+        text-align: right;
+        padding-right: 2rem;
+        padding-left: 0;
+    }}
     
     table {{
         width: 100%;
@@ -623,7 +645,7 @@ window.addEventListener('load', () => {
         color: #555;
         margin-top: 0.5em;
     }}
-    
+
     .image-placeholder {{
         background: #f0f0f0;
         padding: 20px;
@@ -716,18 +738,21 @@ window.addEventListener('load', () => {
         font-style: italic;
     }}
     
-    /* Multi-column layout using flexbox - respects reading order */
-    .multi-column {{
-        display: block;
-        /* Don't use CSS column-count - it breaks our reading order sorting */
+    /* Multi-column layout */
+    .has-multi-column {{
+        column-count: 2;
+        column-gap: 2rem;
+        column-rule: 1px solid #e0e0e0;
     }}
-    
-    .multi-column-3 {{
-        display: block;
+
+    .has-multi-column-3 {{
+        column-count: 3;
+        column-gap: 2rem;
+        column-rule: 1px solid #e0e0e0;
     }}
     
     /* For RTL multi-column, use column-fill and direction */
-    [dir="rtl"] .multi-column {{
+    [dir="rtl"] .has-multi-column {{
         direction: rtl;
     }}
     
@@ -740,7 +765,7 @@ window.addEventListener('load', () => {
     @media (max-width: 600px) {{
         body {{ padding: 10px; }}
         .page {{ padding: 20px; }}
-        .multi-column, .multi-column-3 {{ column-count: 1; }}
+        .has-multi-column, .has-multi-column-3 {{ column-count: 1; }}
     }}
 </style>"""
     
@@ -774,32 +799,33 @@ window.addEventListener('load', () => {
         
         parts = []
         page_class = "page"
-        
+        content_class = "page-content"
+
         # Check if entire page is English by analyzing all text content
         page_text = " ".join(block.content for block in page.text_blocks)
         is_english_page = HTMLRenderer._detect_english_content(page_text)
-        
+
         # Override RTL for English pages
         page_dir = "ltr" if is_english_page else ("rtl" if is_rtl else "ltr")
-        
-        # Add multi-column indicator for debugging if needed
+
+        # Add multi-column class to content, not page container
         if page.has_multi_column:
-            page_class += " has-multi-column"
-        
+            content_class += " has-multi-column"
+
         # Add english-text class for English pages
         if is_english_page:
             page_class += " english-text"
-        
+
         parts.append(f'<div class="{page_class}" id="page-{page.page_number}" style="position: relative;" dir="{page_dir}">')
-        
+
         # Display actual header from PDF if available, otherwise show absolute page number
         if page.header:
             parts.append(f'<div class="page-header">{HTMLRenderer._escape(page.header)}</div>')
         else:
             parts.append(f'<div class="page-header">Page {page.page_number}</div>')
-        
-        # Wrap content in a container
-        parts.append('<div class="page-content">')
+
+        # Wrap content in a container with multi-column class if needed
+        parts.append(f'<div class="{content_class}">')
         
         # Combine all elements with bbox positions for proper ordering
         # Sort by position to get correct reading flow
@@ -901,7 +927,7 @@ window.addEventListener('load', () => {
                 parts.append(HTMLRenderer._render_table(element['content']))
                 i += 1
             elif element['type'] == 'image':
-                parts.append(HTMLRenderer._render_image(element['content']))
+                parts.append(HTMLRenderer._render_image(element['content'], page))
                 i += 1
             else:
                 i += 1
@@ -928,10 +954,26 @@ window.addEventListener('load', () => {
     @staticmethod
     def _render_list(list_items: list[TextBlock]) -> str:
         """Render a group of consecutive list items as a proper HTML list."""
-        parts = ['<ul class="list-wrapper">']
+        english_count = sum(1 for item in list_items if HTMLRenderer._detect_english_content(item.content))
+        arabic_count = sum(1 for item in list_items if HTMLRenderer._has_arabic(item.content))
+        list_classes = ["list-wrapper"]
+        dir_attr = ""
+        if english_count > arabic_count and english_count > 0:
+            list_classes.append("ltr-list")
+            dir_attr = ' dir="ltr"'
+        elif arabic_count > english_count and arabic_count > 0:
+            list_classes.append("rtl-list")
+            dir_attr = ' dir="rtl"'
+
+        parts = [f'<ul class="{" ".join(list_classes)}"{dir_attr}>']
         for item in list_items:
             content = HTMLRenderer._escape(item.content)
-            parts.append(f"<li>{content}</li>")
+            if HTMLRenderer._detect_english_content(item.content):
+                parts.append(f'<li dir="ltr">{content}</li>')
+            elif HTMLRenderer._has_arabic(item.content):
+                parts.append(f'<li dir="rtl">{content}</li>')
+            else:
+                parts.append(f"<li>{content}</li>")
         parts.append('</ul>')
         return "\n".join(parts)
     
@@ -1019,12 +1061,17 @@ window.addEventListener('load', () => {
             if bbox_class:
                 classes.append(bbox_class.strip())
             
-            # Add LTR class for English content
+            # Add direction class/attr based on content
+            dir_attr = ""
             if HTMLRenderer._detect_english_content(block.content):
                 classes.append("ltr")
+                dir_attr = ' dir="ltr"'
+            elif HTMLRenderer._has_arabic(block.content):
+                classes.append("rtl")
+                dir_attr = ' dir="rtl"'
             
             class_attr = f' class="{" ".join(classes)}"' if classes else ""
-            return f"<h{level}{class_attr}{bbox_style}>{content}</h{level}>"
+            return f"<h{level}{class_attr}{dir_attr}{bbox_style}>{content}</h{level}>"
         
         elif block.block_type == "paragraph":
             classes = []
@@ -1033,12 +1080,17 @@ window.addEventListener('load', () => {
             if bbox_class:
                 classes.append(bbox_class.strip())
             
-            # Add LTR class for English content
+            # Add direction class/attr based on content
+            dir_attr = ""
             if HTMLRenderer._detect_english_content(block.content):
                 classes.append("ltr")
+                dir_attr = ' dir="ltr"'
+            elif HTMLRenderer._has_arabic(block.content):
+                classes.append("rtl")
+                dir_attr = ' dir="rtl"'
             
             class_attr = f' class="{" ".join(classes)}"' if classes else ""
-            return f"<p{class_attr}{bbox_style}>{content}</p>"
+            return f"<p{class_attr}{dir_attr}{bbox_style}>{content}</p>"
         
         elif block.block_type == "list_item":
             # This shouldn't be called directly anymore - lists are grouped
@@ -1125,15 +1177,26 @@ window.addEventListener('load', () => {
         return "\n".join(parts)
     
     @staticmethod
-    def _render_image(image: Image) -> str:
+    def _render_image(image: Image, page: Optional[PageContent] = None) -> str:
         """Render an image to HTML - as normal in-flow block to prevent overlaps."""
         # Use bbox dimensions for better sizing
-        # For wide images (>70% page width), show at full bbox width
-        # For smaller images, cap at reasonable size
-        if image.bbox_width > 70:
-            width = min(95, image.bbox_width)
+        bbox_width = image.bbox_width or 60.0
+
+        # For multi-column pages, scale single-column images to fill the column width
+        if page and page.has_multi_column and page.column_count and page.column_count > 1:
+            column_width = 100.0 / page.column_count
+            if bbox_width <= column_width * 1.1:
+                scale = 1.15  # Slightly enlarge within column for better visual parity
+                width = min(100.0, (bbox_width / column_width) * 100.0 * scale)
+            else:
+                width = min(95.0, bbox_width)
         else:
-            width = max(30, min(80, image.bbox_width))
+            # For wide images (>70% page width), show at full bbox width
+            # For smaller images, cap at reasonable size
+            if bbox_width > 70:
+                width = min(95.0, bbox_width)
+            else:
+                width = max(30.0, min(80.0, bbox_width))
         
         # Build inline style for sizing (no horizontal positioning)
         style = f"max-width: {width}%; margin: 1rem auto;"
