@@ -62,7 +62,7 @@ export function PageThumbnails() {
                       <span>images</span>
                     </div>
                   )}
-                  {page.is_multi_column && (
+                  {page.has_multi_column && (
                     <div className="text-primary/70 font-medium">
                       {page.column_count || 2} columns
                     </div>

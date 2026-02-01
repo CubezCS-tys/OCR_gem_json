@@ -58,7 +58,7 @@ export function EditorView() {
                 <CardTitle className="flex items-center justify-between text-base">
                   <span>Page {page.page_number}</span>
                   <div className="flex gap-2">
-                    {page.is_multi_column && (
+                    {page.has_multi_column && (
                       <Badge variant="secondary" className="text-xs">
                         {page.column_count || 2} Columns
                       </Badge>
