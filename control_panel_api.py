@@ -14,6 +14,7 @@ import signal
 from pathlib import Path
 from datetime import datetime
 import redis
+import uuid
 from celery import Celery
 from celery.result import AsyncResult
 import psutil
@@ -75,6 +76,98 @@ def get_priority_value(priority: str) -> int:
         'low': PRIORITY_LOW
     }
     return priorities.get(priority.lower(), PRIORITY_NORMAL)
+
+
+def store_job_history(job_id: str, job_data: dict):
+    """Store job execution history in Redis."""
+    try:
+        # Store job data with job_id as key
+        redis_client.hset(f'job_history:{job_id}', mapping={
+            'data': json.dumps(job_data)
+        })
+        # Add to sorted set for chronological ordering
+        redis_client.zadd('job_history_index', {job_id: job_data['submitted_at']})
+        # Set expiration to 30 days
+        redis_client.expire(f'job_history:{job_id}', 30 * 24 * 60 * 60)
+    except Exception as e:
+        print(f"Failed to store job history: {e}")
+
+
+def store_batch_history(batch_id: str, batch_data: dict):
+    """Store batch execution history in Redis."""
+    try:
+        # Store batch data
+        redis_client.hset(f'batch_history:{batch_id}', mapping={
+            'data': json.dumps(batch_data)
+        })
+        # Add to sorted set
+        redis_client.zadd('batch_history_index', {batch_id: batch_data['submitted_at']})
+        # Set expiration to 30 days
+        redis_client.expire(f'batch_history:{batch_id}', 30 * 24 * 60 * 60)
+    except Exception as e:
+        print(f"Failed to store batch history: {e}")
+
+
+def update_job_status(job_id: str, status: str, result: dict = None):
+    """Update job status in history."""
+    try:
+        job_key = f'job_history:{job_id}'
+        if redis_client.exists(job_key):
+            data_str = redis_client.hget(job_key, 'data')
+            if data_str:
+                job_data = json.loads(data_str)
+                job_data['status'] = status
+                job_data['updated_at'] = datetime.now().timestamp()
+                if result:
+                    job_data['result'] = result
+                redis_client.hset(job_key, 'data', json.dumps(job_data))
+    except Exception as e:
+        print(f"Failed to update job status: {e}")
+
+
+def update_job_metrics(task_id: str, metrics: dict):
+    """Update job with execution metrics from task result."""
+    try:
+        # Find job by task_id
+        job_ids = redis_client.zrevrange('job_history_index', 0, -1)
+        for job_id in job_ids:
+            job_key = f'job_history:{job_id}'
+            if redis_client.exists(job_key):
+                data_str = redis_client.hget(job_key, 'data')
+                if data_str:
+                    job_data = json.loads(data_str)
+                    if job_data.get('task_id') == task_id:
+                        # Update with metrics
+                        job_data['completed_at'] = datetime.now().timestamp()
+                        job_data['completed_at_iso'] = datetime.now().isoformat()
+                        
+                        # Calculate duration
+                        if 'submitted_at' in job_data:
+                            duration = job_data['completed_at'] - job_data['submitted_at']
+                            job_data['duration_seconds'] = round(duration, 2)
+                        
+                        # Add task metrics
+                        if 'processing_time' in metrics:
+                            job_data['processing_time'] = metrics['processing_time']
+                        if 'cost' in metrics:
+                            job_data['cost'] = metrics['cost']
+                        if 'cached' in metrics:
+                            job_data['cached'] = metrics['cached']
+                        if 'usage_metadata' in metrics:
+                            job_data['usage_metadata'] = metrics['usage_metadata']
+                        if 'error' in metrics:
+                            job_data['error'] = metrics['error']
+                        
+                        # Update status based on result
+                        if metrics.get('success'):
+                            job_data['status'] = 'completed'
+                        elif 'error' in metrics:
+                            job_data['status'] = 'failed'
+                        
+                        redis_client.hset(job_key, 'data', json.dumps(job_data))
+                        break
+    except Exception as e:
+        print(f"Failed to update job metrics: {e}")
 
 
 def get_celery_workers():
@@ -340,8 +433,27 @@ def submit_job(job: JobSubmission):
             priority=priority
         )
         
+        # Store job history
+        job_id = str(uuid.uuid4())
+        job_history = {
+            'job_id': job_id,
+            'task_id': task.id,
+            'type': 'single',
+            'pdf_name': pdf_path.name,
+            'pdf_path': str(pdf_path),
+            'output_dir': job.output_dir,
+            'priority': job.priority,
+            'format': job.format,
+            'extract_images': job.extract_images,
+            'status': 'submitted',
+            'submitted_at': datetime.now().timestamp(),
+            'submitted_at_iso': datetime.now().isoformat()
+        }
+        store_job_history(job_id, job_history)
+        
         return {
             "status": "submitted",
+            "job_id": job_id,
             "task_id": task.id,
             "pdf": pdf_path.name,
             "priority": job.priority
@@ -398,7 +510,27 @@ def submit_batch(batch: BatchJobSubmission):
         submitted = sum(1 for r in results if r['status'] == 'submitted')
         cached = sum(1 for r in results if r['status'] == 'cached')
         
+        # Store batch history
+        batch_id = str(uuid.uuid4())
+        batch_history = {
+            'batch_id': batch_id,
+            'type': 'batch',
+            'directory': str(pdf_dir),
+            'pattern': batch.pattern,
+            'output_dir': batch.output_dir,
+            'priority': batch.priority,
+            'total_files': len(pdf_files),
+            'submitted': submitted,
+            'cached': cached,
+            'status': 'submitted',
+            'submitted_at': datetime.now().timestamp(),
+            'submitted_at_iso': datetime.now().isoformat(),
+            'tasks': results
+        }
+        store_batch_history(batch_id, batch_history)
+        
         return {
+            "batch_id": batch_id,
             "total": len(pdf_files),
             "submitted": submitted,
             "cached": cached,
@@ -482,9 +614,16 @@ def get_task_status(task_id: str):
         
         if task.ready():
             if task.successful():
-                result['result'] = task.result
+                task_result = task.result
+                result['result'] = task_result
+                # Update job history with metrics
+                if isinstance(task_result, dict):
+                    update_job_metrics(task_id, task_result)
             else:
-                result['error'] = str(task.info)
+                error_str = str(task.info)
+                result['error'] = error_str
+                # Update job history with error
+                update_job_metrics(task_id, {'error': error_str, 'success': False})
         elif task.state == 'PENDING':
             result['info'] = 'Task is waiting to be processed'
         else:
@@ -571,6 +710,198 @@ def flush_redis():
             "status": "success",
             "message": "Redis database flushed"
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/history/jobs")
+def get_job_history(limit: int = 50, offset: int = 0):
+    """Get job execution history."""
+    try:
+        # Get job IDs in reverse chronological order
+        job_ids = redis_client.zrevrange('job_history_index', offset, offset + limit - 1)
+        
+        jobs = []
+        for job_id in job_ids:
+            job_key = f'job_history:{job_id}'
+            if redis_client.exists(job_key):
+                data_str = redis_client.hget(job_key, 'data')
+                if data_str:
+                    job_data = json.loads(data_str)
+                    # Enrich with current task status if available
+                    if 'task_id' in job_data:
+                        try:
+                            task = AsyncResult(job_data['task_id'], app=celery_app)
+                            job_data['current_state'] = task.state
+                        except:
+                            pass
+                    jobs.append(job_data)
+        
+        total = redis_client.zcard('job_history_index')
+        
+        return {
+            "jobs": jobs,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/history/batches")
+def get_batch_history(limit: int = 50, offset: int = 0):
+    """Get batch execution history."""
+    try:
+        # Get batch IDs in reverse chronological order
+        batch_ids = redis_client.zrevrange('batch_history_index', offset, offset + limit - 1)
+        
+        batches = []
+        for batch_id in batch_ids:
+            batch_key = f'batch_history:{batch_id}'
+            if redis_client.exists(batch_key):
+                data_str = redis_client.hget(batch_key, 'data')
+                if data_str:
+                    batch_data = json.loads(data_str)
+                    batches.append(batch_data)
+        
+        total = redis_client.zcard('batch_history_index')
+        
+        return {
+            "batches": batches,
+            "total": total,
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/history/statistics")
+def get_history_statistics():
+    """Get aggregate statistics from job and batch history."""
+    try:
+        stats = {
+            'total_jobs': 0,
+            'total_batches': 0,
+            'total_files_processed': 0,
+            'jobs_by_status': {},
+            'jobs_by_priority': {},
+            'recent_activity': [],
+            'cache_hit_rate': 0,
+            'total_cost_usd': 0,
+            'average_processing_time': 0,
+            'total_processing_time': 0,
+            'failed_jobs': 0,
+            'retry_count': 0
+        }
+        
+        # Count jobs and batches
+        stats['total_jobs'] = redis_client.zcard('job_history_index')
+        stats['total_batches'] = redis_client.zcard('batch_history_index')
+        
+        # Get recent jobs for statistics
+        job_ids = redis_client.zrevrange('job_history_index', 0, 99)
+        total_files = 0
+        cached_count = 0
+        processing_times = []
+        
+        for job_id in job_ids:
+            job_key = f'job_history:{job_id}'
+            if redis_client.exists(job_key):
+                data_str = redis_client.hget(job_key, 'data')
+                if data_str:
+                    job_data = json.loads(data_str)
+                    
+                    # Count by status
+                    status = job_data.get('status', 'unknown')
+                    stats['jobs_by_status'][status] = stats['jobs_by_status'].get(status, 0) + 1
+                    
+                    # Count by priority
+                    priority = job_data.get('priority', 'normal')
+                    stats['jobs_by_priority'][priority] = stats['jobs_by_priority'].get(priority, 0) + 1
+                    
+                    # Aggregate cost
+                    if 'cost' in job_data:
+                        stats['total_cost_usd'] += job_data['cost'].get('total_cost_usd', 0)
+                    
+                    # Aggregate processing time
+                    if 'processing_time' in job_data:
+                        processing_times.append(job_data['processing_time'])
+                        stats['total_processing_time'] += job_data['processing_time']
+                    
+                    # Count failures
+                    if status == 'failed':
+                        stats['failed_jobs'] += 1
+                    
+                    # Check if cached
+                    if job_data.get('cached'):
+                        cached_count += 1
+                    
+                    total_files += 1
+        
+        # Get batch statistics
+        batch_ids = redis_client.zrevrange('batch_history_index', 0, 99)
+        for batch_id in batch_ids:
+            batch_key = f'batch_history:{batch_id}'
+            if redis_client.exists(batch_key):
+                data_str = redis_client.hget(batch_key, 'data')
+                if data_str:
+                    batch_data = json.loads(data_str)
+                    total_files += batch_data.get('total_files', 0)
+                    cached_count += batch_data.get('cached', 0)
+        
+        stats['total_files_processed'] = total_files
+        
+        # Calculate cache hit rate
+        if total_files > 0:
+            stats['cache_hit_rate'] = round((cached_count / total_files) * 100, 2)
+        
+        # Calculate average processing time
+        if processing_times:
+            stats['average_processing_time'] = round(sum(processing_times) / len(processing_times), 2)
+        
+        # Round cost
+        stats['total_cost_usd'] = round(stats['total_cost_usd'], 4)
+        stats['total_processing_time'] = round(stats['total_processing_time'], 2)
+        
+        # Get recent activity (last 10 items)
+        recent_jobs = redis_client.zrevrange('job_history_index', 0, 4)
+        recent_batches = redis_client.zrevrange('batch_history_index', 0, 4)
+        
+        for job_id in recent_jobs:
+            job_key = f'job_history:{job_id}'
+            if redis_client.exists(job_key):
+                data_str = redis_client.hget(job_key, 'data')
+                if data_str:
+                    job_data = json.loads(data_str)
+                    stats['recent_activity'].append({
+                        'type': 'job',
+                        'id': job_data['job_id'],
+                        'name': job_data.get('pdf_name', 'unknown'),
+                        'status': job_data.get('status', 'unknown'),
+                        'timestamp': job_data.get('submitted_at_iso')
+                    })
+        
+        for batch_id in recent_batches:
+            batch_key = f'batch_history:{batch_id}'
+            if redis_client.exists(batch_key):
+                data_str = redis_client.hget(batch_key, 'data')
+                if data_str:
+                    batch_data = json.loads(data_str)
+                    stats['recent_activity'].append({
+                        'type': 'batch',
+                        'id': batch_data['batch_id'],
+                        'name': f"{batch_data.get('total_files', 0)} files",
+                        'status': batch_data.get('status', 'unknown'),
+                        'timestamp': batch_data.get('submitted_at_iso')
+                    })
+        
+        # Sort recent activity by timestamp
+        stats['recent_activity'].sort(key=lambda x: x['timestamp'], reverse=True)
+        stats['recent_activity'] = stats['recent_activity'][:10]
+        
+        return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

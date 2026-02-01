@@ -32,6 +32,7 @@ const OUTPUT_FOLDERS = [
   "output_run1",
   "output_test",
   "json_outputs",
+  "image_resize",
 ];
 
 export function FileSelector() {
