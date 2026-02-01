@@ -11,7 +11,7 @@ interface SystemMetricsProps {
     disk_percent: number;
   };
 }
-
+//
 export default function SystemMetrics({ metrics }: SystemMetricsProps) {
   const getColorClass = (percent: number) => {
     if (percent >= 90) return 'bg-red-500';
