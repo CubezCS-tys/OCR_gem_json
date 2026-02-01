@@ -19,14 +19,15 @@ export function TableEditor({ table, pageNumber, tableIndex }: TableEditorProps)
   const [editedValue, setEditedValue] = useState("");
 
   const startEdit = (row: number, col: number) => {
-    const value = row === -1 ? table.headers[col] : table.rows[row][col];
+    const cell = row === -1 ? table.headers[col] : table.rows[row][col];
+    const value = typeof cell === 'string' ? cell : cell.content;
     setEditedValue(value);
     setEditingCell({ row, col });
   };
 
   const handleSave = () => {
     if (editingCell) {
-      updateTableCell(pageNumber, tableIndex, editingCell.row, editingCell.col, editedValue);
+      updateTableCell(pageNumber - 1, table.id, editingCell.row, editingCell.col, editedValue);
       setEditingCell(null);
     }
   };
@@ -81,7 +82,7 @@ export function TableEditor({ table, pageNumber, tableIndex }: TableEditorProps)
                         </div>
                       ) : (
                         <div className="group flex items-center justify-between">
-                          <span>{header}</span>
+                          <span>{typeof header === 'string' ? header : header.content}</span>
                           <Button
                             size="sm"
                             variant="ghost"
@@ -131,7 +132,7 @@ export function TableEditor({ table, pageNumber, tableIndex }: TableEditorProps)
                         </div>
                       ) : (
                         <div className="group flex items-center justify-between">
-                          <span>{cell}</span>
+                          <span>{typeof cell === 'string' ? cell : cell.content}</span>
                           <Button
                             size="sm"
                             variant="ghost"
