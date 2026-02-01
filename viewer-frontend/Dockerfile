@@ -8,8 +8,17 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci
 
-# Copy source code
-COPY . .
+# Copy configuration files first
+COPY tsconfig.json ./
+COPY next.config.js ./
+COPY postcss.config.js ./
+COPY tailwind.config.ts ./
+
+# Copy source directories
+COPY app ./app
+COPY components ./components
+COPY lib ./lib
+COPY public ./public
 
 # Build the Next.js app
 RUN npm run build
