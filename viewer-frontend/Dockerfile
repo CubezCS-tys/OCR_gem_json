@@ -18,7 +18,6 @@ COPY tailwind.config.ts ./
 COPY app ./app
 COPY components ./components
 COPY lib ./lib
-COPY public ./public
 
 # Build the Next.js app
 RUN npm run build
