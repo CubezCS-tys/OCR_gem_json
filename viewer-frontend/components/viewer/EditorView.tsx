@@ -2,15 +2,12 @@
 
 import { useViewerStore } from "@/lib/store";
 import { PDFViewer } from "./PDFViewer";
-import { TextBlockEditor } from "./TextBlockEditor";
-import { TableEditor } from "./TableEditor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export function EditorView() {
-  const { documentData, currentPage, currentFile } = useViewerStore();
+  const { documentData, currentPage } = useViewerStore();
 
   if (!documentData) {
     return (
@@ -38,39 +35,36 @@ export function EditorView() {
   }
 
   return (
-    <div className="flex h-full">
-      {/* Left: PDF Viewer */}
-      <div className="flex-1 flex flex-col border-r">
-        <div className="px-4 py-2 border-b bg-muted/50">
-          <h3 className="text-sm font-medium">Original PDF - Page {currentPage}</h3>
+    <div className="grid grid-cols-2 h-full divide-x">
+      {/* Left: PDF */}
+      <div className="flex flex-col">
+        <div className="px-4 py-3 border-b bg-muted/30">
+          <h3 className="text-sm font-semibold">Original PDF - Page {currentPage}</h3>
         </div>
-        <div className="flex-1 overflow-auto custom-scrollbar">
+        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
           <PDFViewer />
         </div>
       </div>
 
-      <Separator orientation="vertical" className="w-[2px]" />
-
-      {/* Right: Editor Panel */}
-      <div className="flex-1 flex flex-col">
-        <div className="px-4 py-2 border-b bg-muted/50">
-          <h3 className="text-sm font-medium">Edit Content</h3>
+      {/* Right: Content Editor */}
+      <div className="flex flex-col">
+        <div className="px-4 py-3 border-b bg-muted/30">
+          <h3 className="text-sm font-semibold">Page Content</h3>
         </div>
-        <div className="flex-1 overflow-auto custom-scrollbar bg-muted/30">
-          <div className="max-w-3xl mx-auto p-6 space-y-6">
-            {/* Page Info */}
+        <ScrollArea className="flex-1">
+          <div className="p-6 space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+                <CardTitle className="flex items-center justify-between text-base">
                   <span>Page {page.page_number}</span>
                   <div className="flex gap-2">
-                    {page.has_multi_column && (
-                      <Badge variant="secondary">
+                    {page.is_multi_column && (
+                      <Badge variant="secondary" className="text-xs">
                         {page.column_count || 2} Columns
                       </Badge>
                     )}
                     {page.page_direction === "rtl" && (
-                      <Badge variant="secondary">RTL</Badge>
+                      <Badge variant="secondary" className="text-xs">RTL</Badge>
                     )}
                   </div>
                 </CardTitle>
@@ -93,33 +87,27 @@ export function EditorView() {
               )}
             </Card>
 
-            {/* Info Banner */}
-            <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-              <div className="text-sm text-blue-900 dark:text-blue-100">
-                <p className="font-medium mb-1">Text Content Editing Only</p>
-                <p className="text-blue-700 dark:text-blue-300">
-                  You can edit text content, but layout properties (positions, sizes, styles) are preserved.
-                  This ensures the visual structure remains intact while allowing corrections to OCR mistakes.
-                </p>
-              </div>
-            </div>
-
             {/* Text Blocks */}
-            {page.text_blocks.length > 0 && (
+            {page.text_blocks && page.text_blocks.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Text Blocks ({page.text_blocks.length})</CardTitle>
+                  <CardTitle className="text-base">Text Blocks ({page.text_blocks.length})</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {page.text_blocks.map((block, index) => (
-                    <div key={index}>
-                      {index > 0 && <Separator className="my-4" />}
-                      <TextBlockEditor
-                        block={block}
-                        pageNumber={page.page_number}
-                        blockIndex={index}
-                      />
+                <CardContent className="space-y-3">
+                  {page.text_blocks.map((block, idx) => (
+                    <div key={idx} className="p-3 border rounded-lg bg-muted/20">
+                      <div className="flex items-start justify-between mb-2">
+                        <Badge variant="outline" className="text-xs">{block.block_type}</Badge>
+                        {block.is_centered && (
+                          <span className="text-xs text-muted-foreground">centered</span>
+                        )}
+                      </div>
+                      <div
+                        className="text-sm whitespace-pre-wrap"
+                        dir={block.text_direction || 'ltr'}
+                      >
+                        {block.content}
+                      </div>
                     </div>
                   ))}
                 </CardContent>
@@ -127,57 +115,58 @@ export function EditorView() {
             )}
 
             {/* Tables */}
-            {page.tables.length > 0 && (
+            {page.tables && page.tables.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Tables ({page.tables.length})</CardTitle>
+                  <CardTitle className="text-base">Tables ({page.tables.length})</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  {page.tables.map((table, index) => (
-                    <div key={index}>
-                      {index > 0 && <Separator className="my-6" />}
-                      <TableEditor
-                        table={table}
-                        pageNumber={page.page_number}
-                        tableIndex={index}
-                      />
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Images (Read-only info) */}
-            {page.images.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Images ({page.images.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {page.images.map((image, index) => (
-                    <div
-                      key={index}
-                      className="p-3 border rounded-lg bg-muted/50"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <Badge variant="outline">{image.image_type}</Badge>
-                        <span className="text-xs text-muted-foreground">
-                          Position: {image.bbox_top.toFixed(1)}%, {image.bbox_left.toFixed(1)}%
-                        </span>
-                      </div>
-                      <p className="text-sm">{image.description}</p>
-                      {image.caption && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Caption: {image.caption}
-                        </p>
+                <CardContent className="space-y-4">
+                  {page.tables.map((table, idx) => (
+                    <div key={idx} className="border rounded-lg overflow-hidden">
+                      {table.caption && (
+                        <div className="px-3 py-2 bg-muted text-sm font-medium">
+                          {table.caption}
+                        </div>
                       )}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          {table.headers.length > 0 && (
+                            <thead>
+                              <tr className="bg-muted">
+                                {table.headers.map((header, cellIdx) => (
+                                  <th
+                                    key={cellIdx}
+                                    className="border px-3 py-2 text-left font-medium"
+                                  >
+                                    {header.content}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                          )}
+                          <tbody>
+                            {table.rows.map((row, rowIdx) => (
+                              <tr key={rowIdx}>
+                                {row.map((cell, cellIdx) => (
+                                  <td
+                                    key={cellIdx}
+                                    className="border px-3 py-2"
+                                  >
+                                    {cell.content}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   ))}
                 </CardContent>
               </Card>
             )}
           </div>
-        </div>
+        </ScrollArea>
       </div>
     </div>
   );

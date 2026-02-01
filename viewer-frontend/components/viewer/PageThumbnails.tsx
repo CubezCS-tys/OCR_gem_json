@@ -1,11 +1,8 @@
 "use client";
 
 import { useViewerStore } from "@/lib/store";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Table, Image } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export function PageThumbnails() {
   const { documentData, currentPage, setCurrentPage } = useViewerStore();
@@ -13,72 +10,65 @@ export function PageThumbnails() {
   if (!documentData) return null;
 
   return (
-    <div className="h-full border-r bg-muted/30">
-      <div className="p-3 border-b bg-card">
+    <div className="h-full border-r bg-muted/20">
+      <div className="px-3 py-3 border-b bg-background/95">
         <h3 className="text-sm font-semibold">Pages</h3>
-        <p className="text-xs text-muted-foreground">
-          {documentData.pages.length} pages
+        <p className="text-xs text-muted-foreground mt-1">
+          {documentData.pages.length} total
         </p>
       </div>
-      
-      <ScrollArea className="h-[calc(100%-80px)]">
+      <ScrollArea className="h-[calc(100%-4rem)]">
         <div className="p-2 space-y-2">
           {documentData.pages.map((page) => {
             const isActive = page.page_number === currentPage;
-            const textBlockCount = page.text_blocks.length;
-            const tableCount = page.tables.length;
-            const imageCount = page.images.length;
-
             return (
-              <Card
+              <button
                 key={page.page_number}
-                className={`p-3 cursor-pointer transition-all hover:shadow-md ${
-                  isActive
-                    ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                    : "hover:border-primary/50"
-                }`}
                 onClick={() => setCurrentPage(page.page_number)}
+                className={cn(
+                  "w-full p-3 rounded-lg border-2 transition-all text-left",
+                  isActive
+                    ? "border-primary bg-primary/10 shadow-sm"
+                    : "border-transparent bg-background hover:border-muted-foreground/30 hover:bg-muted/50"
+                )}
               >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-8 h-8 rounded flex items-center justify-center text-sm font-bold ${
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {page.page_number}
-                    </div>
-                  </div>
-                  {page.has_multi_column && (
-                    <Badge variant="secondary" className="text-xs">
-                      {page.column_count || 2} Col
-                    </Badge>
+                <div className="flex items-center justify-between">
+                  <span className={cn(
+                    "text-sm font-medium",
+                    isActive ? "text-primary" : "text-foreground"
+                  )}>
+                    Page {page.page_number}
+                  </span>
+                  {isActive && (
+                    <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
                   )}
                 </div>
-
-                <div className="space-y-1">
-                  {textBlockCount > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <FileText className="h-3 w-3" />
-                      <span>{textBlockCount} text blocks</span>
+                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {page.text_blocks && (
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium">{page.text_blocks.length}</span>
+                      <span>text blocks</span>
                     </div>
                   )}
-                  {tableCount > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Table className="h-3 w-3" />
-                      <span>{tableCount} tables</span>
+                  {page.tables && page.tables.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium">{page.tables.length}</span>
+                      <span>tables</span>
                     </div>
                   )}
-                  {imageCount > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Image className="h-3 w-3" />
-                      <span>{imageCount} images</span>
+                  {page.images && page.images.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <span className="font-medium">{page.images.length}</span>
+                      <span>images</span>
+                    </div>
+                  )}
+                  {page.is_multi_column && (
+                    <div className="text-primary/70 font-medium">
+                      {page.column_count || 2} columns
                     </div>
                   )}
                 </div>
-              </Card>
+              </button>
             );
           })}
         </div>

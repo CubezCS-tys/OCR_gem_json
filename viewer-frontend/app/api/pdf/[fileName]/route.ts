@@ -6,10 +6,10 @@ const PDFS_DIR = path.join(process.cwd(), "../pdfs");
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { fileName: string } }
+  { params }: { params: Promise<{ fileName: string }> }
 ) {
   try {
-    const fileName = params.fileName;
+    const { fileName } = await params;
     const pdfPath = path.join(PDFS_DIR, `${fileName}.pdf`);
 
     // Check if file exists

@@ -1,0 +1,5 @@
+# FastAPI backend for control panel
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+psutil>=5.9.0
