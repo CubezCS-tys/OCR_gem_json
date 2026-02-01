@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
-const OUTPUTS_DIR = path.join(process.cwd(), "../outputs");
-
 export async function GET(
   request: NextRequest,
-  { params }: { params: { fileName: string } }
+  { params }: { params: Promise<{ fileName: string }> }
 ) {
   try {
-    const fileName = params.fileName;
+    const { fileName } = await params;
+    const { searchParams } = new URL(request.url);
+    const folder = searchParams.get("folder") || "outputs";
+    
+    const OUTPUTS_DIR = path.join(process.cwd(), `../${folder}`);
     const jsonPath = path.join(OUTPUTS_DIR, `${fileName}.json`);
 
     // Check if file exists

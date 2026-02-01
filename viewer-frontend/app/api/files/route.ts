@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
 
-const OUTPUTS_DIR = path.join(process.cwd(), "../outputs");
 const PDFS_DIR = path.join(process.cwd(), "../pdfs");
 
 export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const folder = searchParams.get("folder") || "outputs";
+    
+    const OUTPUTS_DIR = path.join(process.cwd(), `../${folder}`);
+
     // Check if directories exist
     const outputsExist = await fs
       .access(OUTPUTS_DIR)
@@ -15,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     if (!outputsExist) {
       return NextResponse.json(
-        { error: "Outputs directory not found" },
+        { error: `Directory ${folder} not found` },
         { status: 404 }
       );
     }
@@ -54,7 +58,7 @@ export async function GET(request: NextRequest) {
     // Filter out files without JSON
     const validFiles = fileInfos.filter((f) => f.jsonPath);
 
-    return NextResponse.json({ files: validFiles });
+    return NextResponse.json({ files: validFiles, folder });
   } catch (error) {
     console.error("Error loading files:", error);
     return NextResponse.json(

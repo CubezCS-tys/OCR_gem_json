@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useViewerStore } from "@/lib/store";
-import { Button } from "@/components/ui/button";
+import { FileInfo } from "@/lib/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -10,97 +17,144 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, FolderOpen } from "lucide-react";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { FileText, Loader2, FolderOpen } from "lucide-react";
+import { Label } from "@/components/ui/label";
 import axios from "axios";
+
+const OUTPUT_FOLDERS = [
+  "outputs",
+  "output_batch",
+  "output_batch_2",
+  "output_batch_3",
+  "output_gem_1",
+  "output_run1",
+  "output_test",
+  "json_outputs",
+];
 
 export function FileSelector() {
   const {
-    availableFiles,
-    currentFile,
+    isFileSelectorOpen,
+    setIsFileSelectorOpen,
     setCurrentFile,
+    setCurrentFolder,
     setDocumentData,
+    setCurrentPage,
     setLoading,
   } = useViewerStore();
 
-  const [isOpen, setIsOpen] = useState(!currentFile);
+  const [files, setFiles] = useState<FileInfo[]>([]);
+  const [loading, setLocalLoading] = useState(true);
+  const [selectedFolder, setSelectedFolder] = useState("outputs");
 
-  // Listen for custom event from header button
   useEffect(() => {
-    const handleOpenSelector = () => setIsOpen(true);
-    window.addEventListener('openFileSelector', handleOpenSelector);
-    return () => window.removeEventListener('openFileSelector', handleOpenSelector);
-  }, []);
+    if (isFileSelectorOpen) {
+      loadFiles(selectedFolder);
+    }
+  }, [isFileSelectorOpen, selectedFolder]);
 
-  const handleFileSelect = async (fileName: string) => {
-    const file = availableFiles.find((f) => f.name === fileName);
-    if (!file) return;
+  const loadFiles = async (folder: string) => {
+    try {
+      setLocalLoading(true);
+      const response = await axios.get(`/api/files?folder=${folder}`);
+      setFiles(response.data.files || []);
+    } catch (err) {
+      console.error("Failed to load files:", err);
+      setFiles([]);
+    } finally {
+      setLocalLoading(false);
+    }
+  };
 
+  const handleSelectFile = async (file: FileInfo) => {
     try {
       setLoading(true);
-      
-      // Load JSON data
-      const response = await axios.get(`/api/document/${fileName}`);
-      
-      setCurrentFile(file);
+      setIsFileSelectorOpen(false);
+
+      // Store the selected folder
+      setCurrentFolder(selectedFolder);
+
+      // Load document data from selected folder
+      const response = await axios.get(`/api/document/${file.name}?folder=${selectedFolder}`);
       setDocumentData(response.data);
-      setIsOpen(false);
-      toast.success(`Loaded ${fileName}`);
+      setCurrentFile(file);
+      setCurrentPage(1);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load document";
-      toast.error(message);
+      console.error("Failed to load document:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-card border rounded-lg shadow-lg max-w-md w-full p-6">
-        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          Select Document
-        </h2>
+    <Dialog open={isFileSelectorOpen} onOpenChange={setIsFileSelectorOpen}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Select a Document</DialogTitle>
+          <DialogDescription>
+            Choose an output folder and a PDF document to view
+          </DialogDescription>
+        </DialogHeader>
 
-        {availableFiles.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-muted-foreground mb-4">
-              No documents found. Please add PDF and JSON files to the outputs directory.
-            </p>
-          </div>
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground mb-4">
-              Choose a document to view and edit
-            </p>
-
-            <Select onValueChange={handleFileSelect}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a file..." />
+        <div className="space-y-4">
+          {/* Folder Selector */}
+          <div className="space-y-2">
+            <Label htmlFor="folder-select" className="flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Output Folder
+            </Label>
+            <Select value={selectedFolder} onValueChange={setSelectedFolder}>
+              <SelectTrigger id="folder-select">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {availableFiles.map((file) => (
-                  <SelectItem key={file.name} value={file.name}>
-                    {file.name}
+                {OUTPUT_FOLDERS.map((folder) => (
+                  <SelectItem key={folder} value={folder}>
+                    {folder}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-          </>
-        )}
+          </div>
 
-        {currentFile && (
-          <Button
-            variant="ghost"
-            className="w-full mt-4"
-            onClick={() => setIsOpen(false)}
-          >
-            Cancel
-          </Button>
-        )}
-      </div>
-    </div>
+          {/* File List */}
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <ScrollArea className="h-96">
+              <div className="space-y-2">
+                {files.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">
+                    No documents found in {selectedFolder}
+                  </p>
+                ) : (
+                  files.map((file) => (
+                    <button
+                      key={file.name}
+                      onClick={() => handleSelectFile(file)}
+                      className="w-full flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors text-left"
+                    >
+                      <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{file.name}</p>
+                        <div className="flex gap-3 text-xs text-muted-foreground mt-1">
+                          {file.pdfPath && <span>PDF</span>}
+                          {file.jsonPath && <span>JSON</span>}
+                          {file.htmlPath && <span>HTML</span>}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

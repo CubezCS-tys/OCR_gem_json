@@ -4,6 +4,7 @@ const nextConfig = {
     config.resolve.alias.canvas = false;
     return config;
   },
+  turbopack: {},
 }
 
 module.exports = nextConfig
