@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,12 +19,14 @@ import {
   AlertCircle,
   Cpu,
   HardDrive,
-  MemoryStick
+  MemoryStick,
+  Home
 } from 'lucide-react';
 import WorkersPanel from '@/components/control-panel/WorkersPanel';
 import JobsPanel from '@/components/control-panel/JobsPanel';
 import TasksPanel from '@/components/control-panel/TasksPanel';
 import SystemMetrics from '@/components/control-panel/SystemMetrics';
+import HistoryPanel from '@/components/control-panel/HistoryPanel';
 
 interface SystemStatus {
   timestamp: string;
@@ -41,6 +44,7 @@ interface SystemStatus {
 }
 
 export default function ControlPanelPage() {
+  const router = useRouter();
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -89,13 +93,26 @@ export default function ControlPanelPage() {
       <div className="border-b bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                OCR Pipeline Control Panel
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Monitor and control your document processing infrastructure
-              </p>
+            <div className="flex items-center gap-4">
+              {/* Home Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/select")}
+                className="gap-2"
+              >
+                <Home className="h-4 w-4" />
+                Home
+              </Button>
+              <div className="h-8 w-px bg-border" />
+              <div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  OCR Pipeline Control Panel
+                </h1>
+                <p className="text-sm text-gray-500 mt-1">
+                  Monitor and control your document processing infrastructure
+                </p>
+              </div>
             </div>
             
             <div className="flex items-center gap-3">
@@ -219,10 +236,11 @@ export default function ControlPanelPage() {
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="workers" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsList className="grid w-full grid-cols-4 lg:w-[500px]">
             <TabsTrigger value="workers">Workers</TabsTrigger>
             <TabsTrigger value="jobs">Jobs</TabsTrigger>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
 
           <TabsContent value="workers" className="space-y-4">
@@ -235,6 +253,10 @@ export default function ControlPanelPage() {
 
           <TabsContent value="tasks" className="space-y-4">
             <TasksPanel />
+          </TabsContent>
+
+          <TabsContent value="history" className="space-y-4">
+            <HistoryPanel />
           </TabsContent>
         </Tabs>
       </div>

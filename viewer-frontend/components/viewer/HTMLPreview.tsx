@@ -73,7 +73,6 @@ export function HTMLPreview() {
       <iframe
         srcDoc={htmlContent}
         className="w-full h-full border-0"
-        style={{ transform: 'scale(1.15)', transformOrigin: 'top left', width: '87%', height: '87%' }}
         title="HTML Preview"
       />
     </div>

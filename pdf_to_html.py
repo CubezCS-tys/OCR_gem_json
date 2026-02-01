@@ -629,7 +629,6 @@ window.addEventListener('load', () => {
     
     figure.image-block img {{
         display: block;
-        width: 100%;
         height: auto;
         max-width: 100%;
         margin: 0 auto;
@@ -1192,14 +1191,34 @@ window.addEventListener('load', () => {
                 width = min(95.0, bbox_width)
         else:
             # For wide images (>70% page width), show at full bbox width
-            # For smaller images, cap at reasonable size
+            # For very small images (<5%), set a minimum to keep them visible
+            # For medium images (5-80%), use actual bbox width
             if bbox_width > 70:
                 width = min(95.0, bbox_width)
+            elif bbox_width < 5:
+                # Very small images (icons, etc.) - make visible but not huge
+                width = 15.0
             else:
-                width = max(30.0, min(80.0, bbox_width))
+                # Use actual size for everything else
+                width = min(80.0, bbox_width)
         
-        # Build inline style for sizing (no horizontal positioning)
-        style = f"max-width: {width}%; margin: 1rem auto;"
+        # Determine horizontal alignment based on bbox position
+        bbox_left = image.bbox_left
+        if bbox_left < 15:
+            # Image on left side of page
+            align = "margin-left: 0; margin-right: auto;"
+        elif bbox_left > 85:
+            # Image on right side of page
+            align = "margin-left: auto; margin-right: 0;"
+        elif 35 < bbox_left < 65:
+            # Image centered
+            align = "margin: 1rem auto;"
+        else:
+            # Default to center for everything else
+            align = "margin: 1rem auto;"
+        
+        # Build inline style for sizing and positioning
+        style = f"max-width: {width}%; {align}"
         
         parts = [f'<figure class="image-block" style="{style}" data-bbox="{image.bbox_left},{image.bbox_top},{image.bbox_width},{image.bbox_height}">']
         
