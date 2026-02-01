@@ -26,6 +26,16 @@ export function ViewerHeader() {
 
   const totalPages = documentData?.pages.length || 0;
 
+  const handleOpenFileSelector = () => {
+    if (typeof setIsFileSelectorOpen === 'function') {
+      setIsFileSelectorOpen(true);
+    } else {
+      console.error('setIsFileSelectorOpen is not a function. Store might be corrupted.');
+      // Fallback: try to reload the page to reset the store
+      window.location.reload();
+    }
+  };
+
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex items-center justify-between px-4 py-3">
@@ -112,7 +122,7 @@ export function ViewerHeader() {
           </div>
 
           {/* Open File Button */}
-          <Button onClick={() => setIsFileSelectorOpen(true)} className="gap-2">
+          <Button onClick={handleOpenFileSelector} className="gap-2">
             <FolderOpen className="h-4 w-4" />
             Open File
           </Button>
