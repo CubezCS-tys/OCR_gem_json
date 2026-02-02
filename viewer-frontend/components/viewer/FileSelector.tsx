@@ -23,18 +23,6 @@ import { FileText, Loader2, FolderOpen } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import axios from "axios";
 
-const OUTPUT_FOLDERS = [
-  "outputs",
-  "output_batch",
-  "output_batch_2",
-  "output_batch_3",
-  "output_gem_1",
-  "output_run1",
-  "output_test",
-  "json_outputs",
-  "image_resize",
-];
-
 export function FileSelector() {
   const {
     isFileSelectorOpen,
@@ -48,13 +36,25 @@ export function FileSelector() {
 
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLocalLoading] = useState(true);
-  const [selectedFolder, setSelectedFolder] = useState("outputs");
+  const [selectedFolder, setSelectedFolder] = useState("output_run1");
+  const [availableFolders, setAvailableFolders] = useState<string[]>([]);
 
   useEffect(() => {
     if (isFileSelectorOpen) {
+      loadFolders();
       loadFiles(selectedFolder);
     }
   }, [isFileSelectorOpen, selectedFolder]);
+
+  const loadFolders = async () => {
+    try {
+      const response = await axios.get("/api/folders");
+      setAvailableFolders(response.data.folders || ["output_run1"]);
+    } catch (err) {
+      console.error("Failed to load folders:", err);
+      setAvailableFolders(["output_run1"]);
+    }
+  };
 
   const loadFiles = async (folder: string) => {
     try {
@@ -111,7 +111,7 @@ export function FileSelector() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {OUTPUT_FOLDERS.map((folder) => (
+                {availableFolders.map((folder) => (
                   <SelectItem key={folder} value={folder}>
                     {folder}
                   </SelectItem>
