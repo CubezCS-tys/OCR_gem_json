@@ -7,6 +7,7 @@ Useful for:
 - Testing HTML rendering changes
 - Regenerating HTML with different styles
 - Re-extracting images at different DPI
+- Switching between semantic and pixel-perfect rendering
 """
 
 import argparse
@@ -14,7 +15,10 @@ import json
 import sys
 from pathlib import Path
 
-from pdf_to_html import DocumentStructure, HTMLRenderer, ImageExtractor, HAS_PYMUPDF
+from pdf_to_html import (
+    DocumentStructure, HTMLRenderer, ImageExtractor, HAS_PYMUPDF,
+    DocumentPP, PixelPerfectRenderer
+)
 
 
 def rebuild_html(
@@ -22,7 +26,9 @@ def rebuild_html(
     output_path: str = None,
     pdf_path: str = None,
     extract_images: bool = False,
-    image_dpi: int = 150
+    image_dpi: int = 150,
+    pixel_perfect: bool = False,
+    scale: float = 1.0
 ) -> str:
     """
     Rebuild HTML from JSON structure.
@@ -33,6 +39,8 @@ def rebuild_html(
         pdf_path: Path to original PDF (required if extract_images=True)
         extract_images: Whether to extract actual images from PDF
         image_dpi: DPI for image extraction
+        pixel_perfect: Use pixel-perfect rendering (requires pixel-perfect JSON schema)
+        scale: Scale factor for pixel-perfect mode
     
     Returns:
         Path to the generated HTML file
@@ -47,32 +55,78 @@ def rebuild_html(
     with open(json_path, 'r', encoding='utf-8') as f:
         json_data = json.load(f)
     
-    # Parse into DocumentStructure
-    doc = DocumentStructure.model_validate(json_data)
-    print(f"✓ Loaded document: {len(doc.pages)} pages")
+    # Detect schema type and parse accordingly
+    schema_version = json_data.get("schema_version", "")
+    is_pp_schema = schema_version.startswith("pdf2html.pp") or "text_runs" in str(json_data)
     
-    # Re-extract images if requested
-    if extract_images:
-        if not pdf_path:
-            raise ValueError("pdf_path is required when extract_images=True")
-        
-        if not HAS_PYMUPDF:
-            print("⚠ PyMuPDF not installed. Images will be placeholders.")
-            print("  Install with: pip install PyMuPDF")
-        else:
-            pdf_path = Path(pdf_path)
-            if not pdf_path.exists():
-                raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+    if pixel_perfect or is_pp_schema:
+        # Pixel-perfect mode
+        try:
+            doc_pp = DocumentPP.model_validate(json_data)
+            print(f"✓ Loaded pixel-perfect document: {len(doc_pp.pages)} pages")
             
-            print(f"Extracting images from: {pdf_path} (DPI: {image_dpi})")
-            with ImageExtractor(str(pdf_path), dpi=image_dpi) as extractor:
-                doc = extractor.extract_images_for_document(doc)
-                image_count = sum(1 for page in doc.pages for img in page.images if img.image_data)
-                print(f"✓ Extracted {image_count} images")
+            # Re-extract images if requested
+            if extract_images and pdf_path:
+                if not HAS_PYMUPDF:
+                    print("⚠ PyMuPDF not installed. Images will be placeholders.")
+                else:
+                    pdf_path_obj = Path(pdf_path)
+                    if pdf_path_obj.exists():
+                        print(f"Extracting images from: {pdf_path} (DPI: {image_dpi})")
+                        with ImageExtractor(str(pdf_path_obj), dpi=image_dpi) as extractor:
+                            for page in doc_pp.pages:
+                                for image in page.images:
+                                    if page.width > 0 and page.height > 0:
+                                        bbox_left = (image.bbox.x / page.width) * 100
+                                        bbox_top = (image.bbox.y / page.height) * 100
+                                        bbox_width = (image.bbox.w / page.width) * 100
+                                        bbox_height = (image.bbox.h / page.height) * 100
+                                        image.data_base64 = extractor.extract_image(
+                                            page_num=page.page_number,
+                                            bbox_top=bbox_top,
+                                            bbox_left=bbox_left,
+                                            bbox_width=bbox_width,
+                                            bbox_height=bbox_height
+                                        )
+                            image_count = sum(1 for page in doc_pp.pages for img in page.images if img.data_base64)
+                            print(f"✓ Extracted {image_count} images")
+            
+            # Render pixel-perfect HTML
+            print(f"Rendering pixel-perfect HTML (scale: {scale})...")
+            html_content = PixelPerfectRenderer.render(doc_pp, scale=scale)
+            
+        except Exception as e:
+            print(f"⚠ Failed to parse as pixel-perfect schema: {e}")
+            print("  Falling back to semantic schema...")
+            pixel_perfect = False
     
-    # Render HTML
-    print("Rendering HTML...")
-    html_content = HTMLRenderer.render(doc)
+    if not pixel_perfect and not is_pp_schema:
+        # Semantic mode (original)
+        doc = DocumentStructure.model_validate(json_data)
+        print(f"✓ Loaded document: {len(doc.pages)} pages")
+        
+        # Re-extract images if requested
+        if extract_images:
+            if not pdf_path:
+                raise ValueError("pdf_path is required when extract_images=True")
+            
+            if not HAS_PYMUPDF:
+                print("⚠ PyMuPDF not installed. Images will be placeholders.")
+                print("  Install with: pip install PyMuPDF")
+            else:
+                pdf_path_obj = Path(pdf_path)
+                if not pdf_path_obj.exists():
+                    raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+                
+                print(f"Extracting images from: {pdf_path} (DPI: {image_dpi})")
+                with ImageExtractor(str(pdf_path_obj), dpi=image_dpi) as extractor:
+                    doc = extractor.extract_images_for_document(doc)
+                    image_count = sum(1 for page in doc.pages for img in page.images if img.image_data)
+                    print(f"✓ Extracted {image_count} images")
+        
+        # Render HTML
+        print("Rendering HTML...")
+        html_content = HTMLRenderer.render(doc)
     
     # Determine output path
     if not output_path:
@@ -97,6 +151,8 @@ Examples:
   %(prog)s document.json -o custom.html            # Custom output name
   %(prog)s document.json --pdf document.pdf --extract-images    # Re-extract images from PDF
   %(prog)s document.json --pdf document.pdf --image-dpi 300     # Higher quality images
+  %(prog)s document.json --pixel-perfect           # Force pixel-perfect rendering
+  %(prog)s document.json -pp --scale 1.5           # Pixel-perfect at 150% scale
         """
     )
     
@@ -107,6 +163,10 @@ Examples:
                         help='Re-extract actual images from PDF (requires --pdf)')
     parser.add_argument('--image-dpi', type=int, default=150,
                         help='DPI for image extraction (default: 150)')
+    parser.add_argument('-pp', '--pixel-perfect', action='store_true',
+                        help='Force pixel-perfect rendering mode')
+    parser.add_argument('--scale', type=float, default=1.0,
+                        help='Scale factor for pixel-perfect mode (default: 1.0)')
     
     args = parser.parse_args()
     
@@ -116,7 +176,9 @@ Examples:
             output_path=args.output,
             pdf_path=args.pdf,
             extract_images=args.extract_images,
-            image_dpi=args.image_dpi
+            image_dpi=args.image_dpi,
+            pixel_perfect=args.pixel_perfect,
+            scale=args.scale
         )
         print("\n✓ HTML rebuild complete!")
         

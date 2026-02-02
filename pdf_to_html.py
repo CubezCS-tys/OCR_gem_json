@@ -22,6 +22,8 @@ import time
 import base64
 import io
 import re
+import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Literal
 from dataclasses import dataclass, field
 from enum import Enum
@@ -79,6 +81,9 @@ class ProcessingConfig:
     image_dpi: int = 150  # DPI for rendering pages when extracting images
     request_timeout: int = 300  # Timeout for API requests in seconds (5 minutes)
     experimental_gemini_html: bool = False  # Also request HTML directly from Gemini for comparison
+    pixel_perfect_mode: bool = False  # Use geometry-first extraction for exact reproduction
+    parallel_pages: bool = False  # Process pages in parallel (one page per API call)
+    max_parallel_workers: int = 5  # Maximum concurrent API calls for parallel processing
     
     def __post_init__(self):
         """Validate configuration parameters."""
@@ -200,6 +205,140 @@ class ChunkExtraction(BaseModel):
     """Extraction result for a chunk of pages."""
     pages: list[PageContent] = Field(description="Content for each page in this chunk")
     chunk_notes: Optional[str] = Field(default=None, description="Any notes about this chunk extraction")
+
+
+# =============================================================================
+# PIXEL-PERFECT SCHEMAS (Geometry-first for exact reproduction)
+# =============================================================================
+
+class BBox(BaseModel):
+    """Absolute bounding box in points (1pt = 1/72 inch)."""
+    x: float = Field(description="Left edge in points from page left")
+    y: float = Field(description="Top edge in points from page top")
+    w: float = Field(description="Width in points")
+    h: float = Field(description="Height in points")
+
+
+class TextStylePP(BaseModel):
+    """Complete text styling information for pixel-perfect rendering."""
+    font_family: Optional[str] = Field(default=None, description="Font name e.g. 'Arial', 'Times New Roman', 'Amiri'")
+    font_size: Optional[float] = Field(default=12.0, description="Font size in points")
+    font_weight: Literal["normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"] = Field(default="normal")
+    font_style: Literal["normal", "italic", "oblique"] = Field(default="normal")
+    text_decoration: Literal["none", "underline", "line-through", "overline"] = Field(default="none")
+    color: Optional[str] = Field(default="#000000", description="Text color as #RRGGBB")
+    background_color: Optional[str] = Field(default=None, description="Background color as #RRGGBB")
+    letter_spacing: Optional[float] = Field(default=None, description="Letter spacing in points")
+    line_height: Optional[float] = Field(default=None, description="Line height multiplier")
+
+
+class TextRun(BaseModel):
+    """A single positioned text fragment - the atomic unit for pixel-perfect rendering."""
+    id: str = Field(description="Unique ID e.g. 'p1_t0001'")
+    bbox: BBox = Field(description="Exact position and size in points")
+    text: str = Field(description="The actual text content - preserve exact characters")
+    style: TextStylePP = Field(default_factory=TextStylePP)
+    lang: str = Field(default="en", description="Language code (en, ar, he, etc.)")
+    dir: Literal["ltr", "rtl"] = Field(default="ltr", description="Text direction")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="OCR confidence 0-1")
+    uncertain: bool = Field(default=False, description="Flag low-confidence text")
+    equation: bool = Field(default=False, description="True if this text contains mathematical notation")
+    equation_inline: bool = Field(default=True, description="True for inline math, False for display math")
+    text_class: Optional[str] = Field(default=None, description="Text classification: header, subheader, body, small")
+    page_region: Optional[str] = Field(default=None, description="Page region: header, body, footer")
+    content_type: Optional[str] = Field(default=None, description="Content type: page_number, header_title, citation, etc.")
+
+
+class Shape(BaseModel):
+    """Vector shape for lines, boxes, separators, borders."""
+    id: str = Field(description="Unique ID e.g. 'p1_s0001'")
+    bbox: BBox = Field(description="Bounding box of the shape")
+    shape_type: Literal["line", "rect", "ellipse", "path", "horizontal_rule"] = Field(default="rect")
+    stroke_color: Optional[str] = Field(default=None, description="Stroke color as #RRGGBB")
+    stroke_width: Optional[float] = Field(default=1.0, description="Stroke width in points")
+    fill_color: Optional[str] = Field(default=None, description="Fill color as #RRGGBB")
+
+
+class TableCellPP(BaseModel):
+    """Pixel-perfect table cell with exact positioning."""
+    bbox: BBox = Field(description="Cell bounding box in points")
+    text: str = Field(description="Cell text content")
+    style: TextStylePP = Field(default_factory=TextStylePP)
+    rowspan: int = Field(default=1)
+    colspan: int = Field(default=1)
+    dir: Literal["ltr", "rtl"] = Field(default="ltr")
+    lang: str = Field(default="en")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    uncertain: bool = Field(default=False)
+    background_color: Optional[str] = Field(default=None)
+
+
+class TableRowPP(BaseModel):
+    """A row in a pixel-perfect table."""
+    cells: list[TableCellPP] = Field(default_factory=list)
+
+
+class TablePP(BaseModel):
+    """Pixel-perfect table with positioned cells."""
+    id: str = Field(description="Unique ID e.g. 'p1_tbl0001'")
+    bbox: BBox = Field(description="Table bounding box in points")
+    rows: list[TableRowPP] = Field(default_factory=list)
+    structure_confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence in table structure detection")
+    caption: Optional[str] = Field(default=None)
+
+
+class ImagePP(BaseModel):
+    """Pixel-perfect image element."""
+    id: str = Field(description="Unique ID e.g. 'p1_img0001'")
+    bbox: BBox = Field(description="Image bounding box in points")
+    image_type: Literal["chart", "graph", "diagram", "figure", "photo", "logo", "illustration", "other"] = Field(default="figure")
+    alt: str = Field(default="", description="Alt text / description")
+    caption: Optional[str] = Field(default=None)
+    mime: Optional[str] = Field(default="image/png", description="MIME type")
+    data_base64: Optional[str] = Field(default=None, description="Base64 encoded image data (populated at runtime)")
+
+
+class PagePP(BaseModel):
+    """Pixel-perfect page representation with exact dimensions."""
+    page_number: int = Field(description="1-based page number")
+    width: float = Field(description="Page width in points (1pt = 1/72 inch)")
+    height: float = Field(description="Page height in points")
+    rotation: Literal[0, 90, 180, 270] = Field(default=0, description="Page rotation in degrees")
+    unreadable: bool = Field(default=False, description="True if page could not be read")
+    unreadable_reason: Optional[str] = Field(default=None, description="Reason if unreadable")
+    
+    # All elements with absolute positioning
+    text_runs: list[TextRun] = Field(default_factory=list, description="Individual text fragments")
+    shapes: list[Shape] = Field(default_factory=list, description="Lines, rectangles, borders")
+    tables: list[TablePP] = Field(default_factory=list, description="Tables with cell structure")
+    images: list[ImagePP] = Field(default_factory=list, description="Images and figures")
+
+
+class DocumentMetadataPP(BaseModel):
+    """Metadata for pixel-perfect document."""
+    title: Optional[str] = Field(default=None)
+    author: Optional[str] = Field(default=None)
+    languages_detected: list[str] = Field(default_factory=lambda: ["en"])
+    page_count: int = Field(description="Total number of pages")
+    notes: list[str] = Field(default_factory=list)
+
+
+class DocumentPP(BaseModel):
+    """Pixel-perfect document structure with geometry-first representation."""
+    schema_version: str = Field(default="pdf2html.pp.v1", description="Schema version for compatibility")
+    coordinate_system: dict = Field(
+        default_factory=lambda: {"unit": "pt", "origin": "top-left", "axes": "x-right,y-down"},
+        description="Coordinate system specification"
+    )
+    metadata: DocumentMetadataPP = Field(description="Document metadata")
+    pages: list[PagePP] = Field(description="All pages with positioned elements")
+    extraction_notes: Optional[str] = Field(default=None)
+
+
+class ChunkExtractionPP(BaseModel):
+    """Chunk extraction result for pixel-perfect mode."""
+    pages: list[PagePP] = Field(description="Pages in this chunk")
+    chunk_notes: Optional[str] = Field(default=None)
 
 
 # =============================================================================
@@ -1238,6 +1377,674 @@ window.addEventListener('load', () => {
 
 
 # =============================================================================
+# PIXEL-PERFECT HTML RENDERER
+# =============================================================================
+
+class PixelPerfectRenderer:
+    """Renders DocumentPP to pixel-perfect HTML with absolute positioning."""
+    
+    # Standard page sizes in points (72 points = 1 inch)
+    PAGE_SIZES = {
+        "letter": (612, 792),  # 8.5 x 11 inches
+        "a4": (595, 842),      # 210 x 297 mm
+        "legal": (612, 1008),  # 8.5 x 14 inches
+    }
+    
+    @staticmethod
+    def render(doc: DocumentPP, scale: float = 1.0) -> str:
+        """
+        Render pixel-perfect document to HTML.
+        
+        Args:
+            doc: DocumentPP with positioned elements
+            scale: Scale factor for display (1.0 = 100%, 1.5 = 150%, etc.)
+        
+        Returns:
+            Self-contained HTML string
+        """
+        parts = []
+        
+        # Determine primary language/direction
+        langs = doc.metadata.languages_detected or ["en"]
+        primary_lang = langs[0] if langs else "en"
+        is_rtl = primary_lang in ("ar", "he", "fa", "ur", "ps", "yi")
+        
+        # HTML head
+        parts.append("<!DOCTYPE html>")
+        parts.append(f'<html lang="{primary_lang}" dir="{"rtl" if is_rtl else "ltr"}">')
+        parts.append("<head>")
+        parts.append('<meta charset="UTF-8">')
+        parts.append('<meta name="viewport" content="width=device-width, initial-scale=1.0">')
+        parts.append(f"<title>{doc.metadata.title or 'Document'}</title>")
+        
+        # MathJax for equations
+        parts.append(PixelPerfectRenderer._get_mathjax())
+        
+        # CSS styles
+        parts.append(PixelPerfectRenderer._get_styles(scale))
+        
+        parts.append("</head>")
+        parts.append("<body>")
+        parts.append('<div id="doc">')
+        
+        # Render each page
+        for page in doc.pages:
+            parts.append(PixelPerfectRenderer._render_page(page, scale))
+        
+        parts.append("</div>")
+        parts.append("</body>")
+        parts.append("</html>")
+        
+        return "\n".join(parts)
+    
+    @staticmethod
+    def _get_mathjax() -> str:
+        """MathJax configuration for equations."""
+        return r"""<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]'], ['$$', '$$']],
+    processEscapes: true
+  },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'] }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>"""
+    
+    @staticmethod
+    def _get_styles(scale: float = 1.0) -> str:
+        """CSS for pixel-perfect rendering."""
+        # 1pt = 1.333px at 96dpi (screen), scaled
+        pt_to_px = 1.333333 * scale
+        
+        return f"""<style>
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Times+New+Roman&display=swap');
+
+:root {{
+    --pt: {pt_to_px}px;
+    --scale: {scale};
+}}
+
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+body {{
+    background: #525659;
+    font-family: 'Times New Roman', 'Amiri', serif;
+    padding: 20px;
+}}
+
+#doc {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}}
+
+.page {{
+    position: relative;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    overflow: hidden;
+    /* Page dimensions set inline */
+}}
+
+.page-number {{
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 10px;
+    color: #999;
+    z-index: 100;
+}}
+
+/* Text runs - absolutely positioned */
+.t {{
+    position: absolute;
+    white-space: pre;
+    margin: 0;
+    padding: 0;
+    line-height: 1.2;
+    /* Positioning set inline */
+}}
+
+/* Low confidence text styling */
+.uncertain {{
+    outline: 1px dotted #cc0000;
+    background: rgba(255, 200, 200, 0.3);
+}}
+
+/* Unreadable page banner */
+.unreadable-banner {{
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    background: #fff3cd;
+    border-bottom: 2px solid #ffc107;
+    color: #856404;
+    padding: 12px;
+    text-align: center;
+    font-weight: bold;
+    z-index: 50;
+}}
+
+/* Shapes (lines, rectangles) */
+.shape {{
+    position: absolute;
+    pointer-events: none;
+}}
+
+.shape-line {{
+    border: none;
+}}
+
+.shape-rect {{
+    /* styled inline */
+}}
+
+/* Tables */
+.table-container {{
+    position: absolute;
+    overflow: visible;
+}}
+
+.pp-table {{
+    border-collapse: collapse;
+    width: 100%;
+    height: 100%;
+}}
+
+.pp-table td, .pp-table th {{
+    border: 1px solid #333;
+    padding: 4px 6px;
+    vertical-align: top;
+    text-align: left;
+}}
+
+.pp-table td[dir="rtl"], .pp-table th[dir="rtl"] {{
+    text-align: right;
+}}
+
+.pp-table td.uncertain {{
+    background: rgba(255, 200, 200, 0.2);
+}}
+
+/* Images */
+.pp-image {{
+    position: absolute;
+}}
+
+.pp-image img {{
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}}
+
+.image-placeholder {{
+    width: 100%;
+    height: 100%;
+    background: #f0f0f0;
+    border: 2px dashed #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-style: italic;
+    font-size: 12px;
+    text-align: center;
+    padding: 8px;
+}}
+
+/* RTL support */
+[dir="rtl"] .t {{
+    text-align: right;
+}}
+
+/* Column layout support */
+.column-0, .column-1, .column-2 {{
+    position: relative;
+}}
+
+.column-0 .t, .column-1 .t, .column-2 .t {{
+    position: absolute;
+}}
+
+/* Multi-column indicators for debugging */
+.page[data-columns="2"] .column-0 {{
+    /* Left column styling */
+}}
+
+.page[data-columns="2"] .column-1 {{
+    /* Right column styling */
+}}
+
+/* Text flow improvements */
+.t {{
+    line-height: 1.4;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}}
+
+/* Headers and spacing */
+.t[data-size="large"] {{
+    font-weight: bold;
+    margin-bottom: 0.5em;
+}}
+
+.t[data-size="header"] {{
+    font-weight: bold;
+    font-size: 1.2em;
+    margin: 0.8em 0 0.4em 0;
+}}
+
+/* Text hierarchy styling */
+.t.text-header {{
+    font-weight: bold;
+    font-size: 1.2em;
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+}}
+
+.t.text-subheader {{
+    font-weight: 600;
+    font-size: 1.1em;
+    margin-top: 0.8em;
+    margin-bottom: 0.4em;
+}}
+
+.t.text-small {{
+    font-size: 0.9em;
+    color: #666;
+}}
+
+.t.text-body {{
+    /* Default body text styling */
+}}
+
+/* Z-index layering system */
+/*
+Layer 0: Shapes (lines, rectangles, backgrounds)
+Layer 1: Body text (default)
+Layer 2: Images and figures  
+Layer 3: Tables
+Layer 5: Display equations
+Layer 10: Headers and footers
+Layer 15: Uncertain/highlighted content
+Layer 100: Page numbers (built-in)
+*/
+
+/* Page region styling */
+.t.region-header {{
+    z-index: 10;
+    border-bottom: 1px solid #eee;
+}}
+
+.t.region-footer {{
+    z-index: 10;
+    border-top: 1px solid #eee;
+    font-size: 0.9em;
+    color: #666;
+}}
+
+.t.content-page_number {{
+    font-weight: bold;
+    color: #333;
+}}
+
+.t.content-citation {{
+    font-style: italic;
+    color: #777;
+    font-size: 0.85em;
+}}
+
+/* Equations styling */
+.t.equation {{
+    font-family: 'STIX Two Math', 'Times New Roman', serif;
+}}
+
+/* Print styles */
+@media print {{
+    body {{ background: white; padding: 0; }}
+    .page {{ 
+        box-shadow: none; 
+        margin: 0;
+        page-break-after: always;
+    }}
+    .page-number {{ display: none; }}
+}}
+</style>"""
+    
+    @staticmethod
+    def _escape(text: str) -> str:
+        """Escape HTML special characters."""
+        return (text
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;"))
+    
+    @staticmethod
+    def _render_page(page: PagePP, scale: float = 1.0) -> str:
+        """Render a single page with column-aware positioning."""
+        parts = []
+        
+        # Page container with exact dimensions
+        width_px = page.width * 1.333333 * scale
+        height_px = page.height * 1.333333 * scale
+        
+        parts.append(f'<div class="page" data-page="{page.page_number}" style="width: {width_px:.2f}px; height: {height_px:.2f}px;">')
+        
+        # Page number indicator
+        parts.append(f'<span class="page-number">{page.page_number}</span>')
+        
+        # Unreadable banner
+        if page.unreadable:
+            reason = page.unreadable_reason or "Page could not be read"
+            parts.append(f'<div class="unreadable-banner">⚠ {PixelPerfectRenderer._escape(reason)}</div>')
+        
+        # Detect column layout
+        columns = PixelPerfectRenderer._detect_page_columns(page)
+        
+        # Render shapes first (background elements like lines, boxes)
+        for shape in page.shapes:
+            parts.append(PixelPerfectRenderer._render_shape(shape, scale))
+        
+        # Render tables
+        for table in page.tables:
+            parts.append(PixelPerfectRenderer._render_table(table, scale))
+        
+        # Render images
+        for image in page.images:
+            parts.append(PixelPerfectRenderer._render_image(image, scale))
+        
+        # Render text with column awareness
+        if len(columns) > 1:
+            # Multi-column layout - render columns separately
+            for col_idx, column_runs in enumerate(columns):
+                if column_runs:
+                    column_class = f"column-{col_idx}"
+                    parts.append(f'<div class="{column_class}">')
+                    for run in column_runs:
+                        parts.append(PixelPerfectRenderer._render_text_run(run, scale))
+                    parts.append('</div>')
+        else:
+            # Single column or undetected - render normally
+            for run in page.text_runs:
+                parts.append(PixelPerfectRenderer._render_text_run(run, scale))
+        
+        parts.append("</div>")
+        return "\n".join(parts)
+    
+    @staticmethod
+    def _detect_page_columns(page: PagePP) -> list[list[TextRun]]:
+        """Detect multi-column layout in a page."""
+        if not page.text_runs:
+            return []
+        
+        page_width = page.width or 595
+        
+        # Analyze x-positions to find column boundaries
+        x_positions = [run.bbox.x for run in page.text_runs]
+        x_positions.sort()
+        
+        # Find gaps that indicate column breaks (>30pt gap)
+        column_breaks = []
+        last_x = -1
+        for x in x_positions:
+            if last_x >= 0 and x - last_x > 30:
+                # Potential column break
+                column_breaks.append((last_x + x) / 2)
+            last_x = x
+        
+        # If no clear breaks found, try simple left/right split for RTL documents
+        if not column_breaks:
+            middle = page_width / 2
+            # Check if we have significant content on both sides
+            left_count = sum(1 for run in page.text_runs if run.bbox.x + run.bbox.w / 2 < middle)
+            right_count = sum(1 for run in page.text_runs if run.bbox.x + run.bbox.w / 2 >= middle)
+            
+            if left_count > 2 and right_count > 2:  # Both sides have substantial content
+                column_breaks.append(middle)
+        
+        # Group text runs by column
+        if not column_breaks:
+            return [sorted(page.text_runs, key=lambda t: t.bbox.y)]
+        
+        columns = [[] for _ in range(len(column_breaks) + 1)]
+        
+        for run in page.text_runs:
+            run_center = run.bbox.x + run.bbox.w / 2
+            col_idx = 0
+            for break_x in column_breaks:
+                if run_center >= break_x:
+                    col_idx += 1
+                else:
+                    break
+            columns[col_idx].append(run)
+        
+        # Sort each column by y-position
+        for column in columns:
+            column.sort(key=lambda t: t.bbox.y)
+        
+        # Remove empty columns
+        return [col for col in columns if col]
+    
+    @staticmethod
+    def _render_text_run(run: TextRun, scale: float = 1.0) -> str:
+        """Render a single positioned text run."""
+        # Calculate positions in pixels
+        left = run.bbox.x * 1.333333 * scale
+        top = run.bbox.y * 1.333333 * scale
+        width = run.bbox.w * 1.333333 * scale
+        height = run.bbox.h * 1.333333 * scale
+        
+        # Build style
+        styles = [
+            f"left: {left:.2f}px",
+            f"top: {top:.2f}px",
+        ]
+        
+        # Only set width/height if meaningful
+        if width > 0:
+            styles.append(f"width: {width:.2f}px")
+        if height > 0:
+            styles.append(f"height: {height:.2f}px")
+        
+        # Font styling
+        if run.style.font_size:
+            font_size_px = run.style.font_size * 1.333333 * scale
+            styles.append(f"font-size: {font_size_px:.2f}px")
+        
+        if run.style.font_family:
+            styles.append(f"font-family: {run.style.font_family}")
+        
+        if run.style.font_weight and run.style.font_weight != "normal":
+            styles.append(f"font-weight: {run.style.font_weight}")
+        
+        if run.style.font_style and run.style.font_style != "normal":
+            styles.append(f"font-style: {run.style.font_style}")
+        
+        if run.style.text_decoration and run.style.text_decoration != "none":
+            styles.append(f"text-decoration: {run.style.text_decoration}")
+        
+        if run.style.color:
+            styles.append(f"color: {run.style.color}")
+        
+        if run.style.background_color:
+            styles.append(f"background-color: {run.style.background_color}")
+        
+        if run.style.letter_spacing:
+            ls_px = run.style.letter_spacing * 1.333333 * scale
+            styles.append(f"letter-spacing: {ls_px:.2f}px")
+        
+        # Z-index layering
+        z_index = 1  # Default text layer
+        if hasattr(run, 'page_region'):
+            if run.page_region == "header":
+                z_index = 10  # Headers above body
+            elif run.page_region == "footer":
+                z_index = 10  # Footers above body
+        
+        if run.equation and not run.equation_inline:
+            z_index = 5  # Display equations slightly above text
+        
+        if run.uncertain:
+            z_index = 15  # Uncertain text highlighted on top
+        
+        styles.append(f"z-index: {z_index}")
+        
+        # Classes
+        classes = ["t"]
+        if run.uncertain or run.confidence < 0.6:
+            classes.append("uncertain")
+        if run.equation:
+            classes.append("equation")
+        if hasattr(run, 'text_class') and run.text_class:
+            classes.append(f"text-{run.text_class}")
+        if hasattr(run, 'page_region') and run.page_region:
+            classes.append(f"region-{run.page_region}")
+        if hasattr(run, 'content_type') and run.content_type:
+            classes.append(f"content-{run.content_type}")
+        
+        # Direction
+        dir_attr = f' dir="{run.dir}"' if run.dir else ""
+        lang_attr = f' lang="{run.lang}"' if run.lang else ""
+        title_attr = f' title="Confidence: {run.confidence:.0%}"' if run.confidence < 0.8 else ""
+        
+        style_str = "; ".join(styles)
+        class_str = " ".join(classes)
+        
+        # Handle equations
+        if run.equation:
+            # Wrap math in appropriate MathJax delimiters
+            if run.equation_inline:
+                text = f"\\({PixelPerfectRenderer._escape(run.text)}\\)"
+            else:
+                text = f"\\[{PixelPerfectRenderer._escape(run.text)}\\]"
+        else:
+            text = PixelPerfectRenderer._escape(run.text)
+        
+        return f'<span class="{class_str}" style="{style_str}"{dir_attr}{lang_attr}{title_attr}>{text}</span>'
+    
+    @staticmethod
+    def _render_shape(shape: Shape, scale: float = 1.0) -> str:
+        """Render a shape element (line, rectangle, etc.)."""
+        left = shape.bbox.x * 1.333333 * scale
+        top = shape.bbox.y * 1.333333 * scale
+        width = shape.bbox.w * 1.333333 * scale
+        height = shape.bbox.h * 1.333333 * scale
+        
+        styles = [
+            f"left: {left:.2f}px",
+            f"top: {top:.2f}px",
+            f"width: {width:.2f}px",
+            f"height: {height:.2f}px",
+            "z-index: 0",  # Shapes in background
+        ]
+        
+        if shape.shape_type == "line" or shape.shape_type == "horizontal_rule":
+            # Horizontal line
+            if shape.stroke_color:
+                styles.append(f"border-bottom: {shape.stroke_width or 1}px solid {shape.stroke_color}")
+            else:
+                styles.append(f"border-bottom: {shape.stroke_width or 1}px solid #000")
+            styles.append("height: 0")
+        else:
+            # Rectangle or other
+            if shape.stroke_color:
+                styles.append(f"border: {shape.stroke_width or 1}px solid {shape.stroke_color}")
+            if shape.fill_color:
+                styles.append(f"background-color: {shape.fill_color}")
+        
+        style_str = "; ".join(styles)
+        return f'<div class="shape shape-{shape.shape_type}" style="{style_str}"></div>'
+    
+    @staticmethod
+    def _render_table(table: TablePP, scale: float = 1.0) -> str:
+        """Render a table with positioned cells."""
+        left = table.bbox.x * 1.333333 * scale
+        top = table.bbox.y * 1.333333 * scale
+        width = table.bbox.w * 1.333333 * scale
+        height = table.bbox.h * 1.333333 * scale
+        
+        parts = []
+        parts.append(f'<div class="table-container" style="left: {left:.2f}px; top: {top:.2f}px; width: {width:.2f}px; height: {height:.2f}px; z-index: 3;">')
+        
+        if table.caption:
+            parts.append(f'<div class="table-caption">{PixelPerfectRenderer._escape(table.caption)}</div>')
+        
+        parts.append('<table class="pp-table">')
+        
+        for row in table.rows:
+            parts.append("<tr>")
+            for cell in row.cells:
+                # Cell attributes
+                attrs = []
+                if cell.rowspan > 1:
+                    attrs.append(f'rowspan="{cell.rowspan}"')
+                if cell.colspan > 1:
+                    attrs.append(f'colspan="{cell.colspan}"')
+                if cell.dir:
+                    attrs.append(f'dir="{cell.dir}"')
+                if cell.lang:
+                    attrs.append(f'lang="{cell.lang}"')
+                
+                # Cell styling
+                cell_styles = []
+                if cell.style.font_size:
+                    cell_styles.append(f"font-size: {cell.style.font_size * 1.333333 * scale:.2f}px")
+                if cell.style.font_weight and cell.style.font_weight != "normal":
+                    cell_styles.append(f"font-weight: {cell.style.font_weight}")
+                if cell.style.color:
+                    cell_styles.append(f"color: {cell.style.color}")
+                if cell.background_color:
+                    cell_styles.append(f"background-color: {cell.background_color}")
+                
+                if cell_styles:
+                    attrs.append(f'style="{"; ".join(cell_styles)}"')
+                
+                # Uncertainty class
+                cell_class = ""
+                if cell.uncertain or cell.confidence < 0.6:
+                    cell_class = ' class="uncertain"'
+                
+                attrs_str = " " + " ".join(attrs) if attrs else ""
+                text = PixelPerfectRenderer._escape(cell.text)
+                parts.append(f"<td{cell_class}{attrs_str}>{text}</td>")
+            parts.append("</tr>")
+        
+        parts.append("</table>")
+        parts.append("</div>")
+        return "\n".join(parts)
+    
+    @staticmethod
+    def _render_image(image: ImagePP, scale: float = 1.0) -> str:
+        """Render an image element."""
+        left = image.bbox.x * 1.333333 * scale
+        top = image.bbox.y * 1.333333 * scale
+        width = image.bbox.w * 1.333333 * scale
+        height = image.bbox.h * 1.333333 * scale
+        
+        parts = []
+        parts.append(f'<figure class="pp-image" style="left: {left:.2f}px; top: {top:.2f}px; width: {width:.2f}px; height: {height:.2f}px; z-index: 2;">')
+        
+        if image.data_base64:
+            mime = image.mime or "image/png"
+            parts.append(f'<img src="data:{mime};base64,{image.data_base64}" alt="{PixelPerfectRenderer._escape(image.alt)}">')
+        else:
+            # Placeholder
+            alt_text = image.alt or f"[{image.image_type}]"
+            parts.append(f'<div class="image-placeholder">{PixelPerfectRenderer._escape(alt_text)}</div>')
+        
+        if image.caption:
+            parts.append(f'<figcaption>{PixelPerfectRenderer._escape(image.caption)}</figcaption>')
+        
+        parts.append("</figure>")
+        return "\n".join(parts)
+
+
+# =============================================================================
 # IMAGE EXTRACTOR
 # =============================================================================
 
@@ -1958,6 +2765,804 @@ REMEMBER:
                 else:
                     raise RuntimeError(f"Failed to extract content after {self.config.max_retries} attempts") from e
     
+    def _extract_single_page_from_image(self, page_image_bytes: bytes, page_number: int) -> PagePP:
+        """Extract pixel-perfect content from a single page image (for parallel processing)."""
+        prompt = f"""Extract ALL text content AND visual elements from this page (page {page_number}) with EXACT positioning and PROPER LINE SPACING.
+
+PAGE DIMENSIONS: Coordinates in points. A4 = 595×842, Letter = 612×792. ALL coordinates must be within page bounds.
+
+FOR EACH TEXT LINE on this page:
+1. Create a text_run with:
+   - id: "p{page_number}_t[number]" (e.g., "p{page_number}_t0001", "p{page_number}_t0002")
+   - bbox: x, y, w, h in points (ALL must be within page dimensions)
+   - text: the EXACT text content
+   - style: font_size (in points), font_weight, color
+   - dir: "rtl" for Arabic/Hebrew, "ltr" for English/Latin
+   - lang: language code ("ar", "en", "he", etc.)
+
+2. Extract text LINE BY LINE with PROPER VERTICAL SPACING:
+   - Normal text lines: minimum 18-20pt vertical gap between lines
+   - Large headings (18pt+): minimum 25-30pt vertical gap
+   - Small text (10pt): minimum 15pt vertical gap
+   - DO NOT place text runs closer than font_size + 3 points vertically
+
+3. For TABLES (structured data in rows and columns):
+   - IMPORTANT: Recognize tabular data (data aligned in columns and rows)
+   - Create a table object with:
+     - id: "p{page_number}_tbl[number]" (e.g., "p{page_number}_tbl001")  
+     - bbox: x, y, w, h covering the entire table
+     - rows: array of row objects
+     - Each row contains cells with individual bbox coordinates
+   - For each cell: extract text, bbox (x, y, w, h), rowspan, colspan
+   - DO NOT extract table content as individual text_runs - use table structure
+   - Look for: aligned columns, grid-like layout, repeated patterns
+
+4. For IMAGES/FIGURES/CHARTS/DIAGRAMS:
+   - Create image objects with:
+   - id: "p{page_number}_img[number]" (e.g., "p{page_number}_img001")
+   - bbox: x, y, w, h in points (exact position and size)
+   - alt_text: Brief description of the image content
+   - image_type: "chart", "diagram", "photo", "figure", "graph", etc.
+   - Extract any visible text captions or labels as separate text_runs
+
+5. COORDINATE GUIDELINES WITH SPACING:
+   - RTL text (Arabic/Hebrew) typically on right side: x = 300-550
+   - LTR text on left side: x = 50-300  
+   - Header at top: y = 50-100
+   - Body text: y = 100-750 (with proper line spacing)
+   - Footer: y = 780-820
+   - TWO-COLUMN LAYOUT: Left column x=50-280, Right column x=300-550
+   - Column gap: minimum 20pt between columns
+   - ALL coordinates must be within page bounds
+
+6. SPACING RULES:
+   - Line height should be 1.2-1.5 times font size
+   - Paragraph breaks: add extra 8-12pt spacing
+   - Section headers: add 15-20pt spacing before and after
+   - NO OVERLAPPING: Check that no two text_runs occupy the same space
+
+7. For MATHEMATICAL EQUATIONS AND FORMULAS:
+   - Identify mathematical expressions: fractions, formulas, equations
+   - Create text_runs with special styling for equations
+   - For inline math: mark with equation=true, inline=true
+   - For display math: mark with equation=true, inline=false  
+   - Convert to LaTeX notation: use \\\\frac{{}}{{}}, ^{{}}, _{{}}, etc.
+   - Examples: "س = د/ط" → "س = \\\\frac{{د}}{{ط}}", "x²" → "x^{{2}}"
+
+8. Extract COMPLETE content - every word AND every visual element on the page must appear in output.
+
+CRITICAL: This is a SINGLE PAGE. Output ONE page object with ALL its content, PROPER SPACING, and ALL VISUAL ELEMENTS."""
+
+        for attempt in range(self.config.max_retries):
+            try:
+                temperature = 0.2 + (attempt * 0.15)
+                logger.debug(f"Single page {page_number} extraction attempt {attempt + 1}, temp={temperature}")
+                
+                # Create inline image data
+                image_part = types.Part.from_bytes(
+                    data=page_image_bytes,
+                    mime_type="image/png"
+                )
+                
+                response = self.client.models.generate_content(
+                    model=self.config.model,
+                    contents=[image_part, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_json_schema=PagePP.model_json_schema(),
+                        system_instruction=(
+                            f"You are extracting ALL text AND visual elements from page {page_number} as structured data. "
+                            "Extract EVERY line of text as a separate text_run with exact bbox coordinates. "
+                            "A typical page has 30-50 lines of text - output 30-50 text_runs. "
+                            "ALSO extract ALL visual elements (charts, graphs, diagrams, figures) as image objects. "
+                            "Do NOT summarize or skip content. Every word and every visual element must be extracted. "
+                            "Set dir='rtl' lang='ar' for Arabic, dir='ltr' lang='en' for English. "
+                            "For tables: extract with cell structure, all cell coords within page bounds. "
+                            "For images: provide exact bbox coordinates and descriptive alt_text. "
+                            "CRITICAL: Extract COMPLETE page content - text, tables, AND images."
+                        ),
+                        media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,
+                        max_output_tokens=self.config.max_output_tokens,
+                        temperature=temperature,
+                    ),
+                )
+                
+                page = PagePP.model_validate_json(response.text)
+                page.page_number = page_number  # Ensure correct page number
+                
+                # Track token usage
+                if hasattr(response, 'usage_metadata'):
+                    self._total_input_tokens += getattr(response.usage_metadata, 'prompt_token_count', 0)
+                    self._total_output_tokens += getattr(response.usage_metadata, 'candidates_token_count', 0)
+                
+                logger.info(f"Page {page_number}: extracted {len(page.text_runs)} text runs, {len(page.tables)} tables")
+                return page
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Page {page_number} attempt {attempt + 1} failed: {error_msg[:200]}")
+                
+                if attempt < self.config.max_retries - 1:
+                    delay = self.config.retry_delay * (attempt + 1)
+                    time.sleep(delay)
+                else:
+                    logger.error(f"All attempts failed for page {page_number}")
+                    # Return error placeholder
+                    return PagePP(
+                        page_number=page_number,
+                        width=612,
+                        height=792,
+                        unreadable=True,
+                        unreadable_reason=f"Extraction failed: {error_msg[:100]}"
+                    )
+        
+        # Fallback
+        return PagePP(page_number=page_number, width=612, height=792, unreadable=True)
+
+    def _render_page_to_image(self, pdf_path: str, page_number: int, dpi: int = 200) -> bytes:
+        """Render a single PDF page to PNG image bytes using PyMuPDF."""
+        if not fitz:
+            raise RuntimeError("PyMuPDF (fitz) not installed, cannot render pages")
+        
+        doc = fitz.open(pdf_path)
+        try:
+            page = doc[page_number - 1]  # 0-indexed
+            # Render at high DPI for quality
+            zoom = dpi / 72.0
+            matrix = fitz.Matrix(zoom, zoom)
+            pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+            return pixmap.tobytes("png")
+        finally:
+            doc.close()
+
+    def _extract_page_range_pp(self, uploaded_file: types.File, start_page: int, end_page: int) -> list[PagePP]:
+        """Extract pixel-perfect content from a specific range of pages."""
+        prompt = f"""Extract ALL text content from pages {start_page} to {end_page} with EXACT positioning.
+
+For EACH PAGE, extract EVERY line of text as a separate text_run with precise coordinates.
+
+PAGE DIMENSIONS: A4 = 595×842 points. ALL coordinates must be within these bounds.
+
+FOR EACH TEXT LINE on pages {start_page}-{end_page}:
+1. Create a text_run with:
+   - id: "p[page]_t[number]" (e.g., "p1_t0001", "p1_t0002")
+   - bbox: x, y, w, h in points (0 ≤ x < 595, 0 ≤ y < 842)
+   - text: the EXACT text content
+   - style: font_size (in points), font_weight, color
+   - dir: "rtl" for Arabic, "ltr" for English
+   - lang: "ar" or "en"
+
+2. Extract text LINE BY LINE, not as paragraphs. A page with 30 lines should have ~30 text_runs.
+
+3. For TABLES: Extract as a table object with cells, each cell has bbox and text.
+
+4. COORDINATE RULES:
+   - Arabic text on right side: x = 300-550
+   - English text on left side: x = 50-300  
+   - Header at top: y = 50-100
+   - Body text: y = 100-750
+   - Footer: y = 780-820
+   - ALL x values must be < 595
+   - ALL y values must be < 842
+
+5. Extract COMPLETE content - do not skip any text. Every word on the page must appear in output.
+
+CRITICAL: Output must include ALL text from each page. Count the lines - if a page has 40 lines, output ~40 text_runs."""
+
+        for attempt in range(self.config.max_retries):
+            try:
+                temperature = 0.2 + (attempt * 0.15)  # Lower temperature for accuracy
+                logger.info(f"Pixel-perfect extraction pages {start_page}-{end_page} (attempt {attempt + 1}, temp={temperature})")
+                
+                response = self.client.models.generate_content(
+                    model=self.config.model,
+                    contents=[uploaded_file, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_json_schema=ChunkExtractionPP.model_json_schema(),
+                        system_instruction=(
+                            f"You are a complete OCR system extracting ALL text from pages {start_page}-{end_page}. "
+                            "Extract EVERY line of text as a separate text_run with exact bbox coordinates. "
+                            "A typical page has 30-50 lines of text - output 30-50 text_runs per page. "
+                            "Do NOT summarize or skip content. Every word must be extracted. "
+                            "COORDINATES: A4 pages are 595×842 points. All x must be < 595, all y must be < 842. "
+                            "Arabic text (right side): x = 300-550. English text (left side): x = 50-300. "
+                            "Set dir='rtl' lang='ar' for Arabic, dir='ltr' lang='en' for English. "
+                            "For tables: extract with cell structure, all cell coords within page bounds. "
+                            "CRITICAL: Extract COMPLETE page content - count lines and ensure all are included."
+                        ),
+                        media_resolution=types.MediaResolution.MEDIA_RESOLUTION_HIGH,  # Always use high resolution for pixel-perfect
+                        max_output_tokens=self.config.max_output_tokens,
+                        temperature=temperature,
+                    ),
+                )
+                
+                chunk = ChunkExtractionPP.model_validate_json(response.text)
+                
+                # Track token usage
+                if hasattr(response, 'usage_metadata'):
+                    self._total_input_tokens += getattr(response.usage_metadata, 'prompt_token_count', 0)
+                    self._total_output_tokens += getattr(response.usage_metadata, 'candidates_token_count', 0)
+                
+                logger.info(f"Pixel-perfect extracted {len(chunk.pages)} pages from range {start_page}-{end_page}")
+                return chunk.pages
+                
+            except Exception as e:
+                error_msg = str(e)
+                logger.warning(f"Pixel-perfect chunk attempt {attempt + 1} failed: {error_msg[:200]}")
+                
+                if attempt < self.config.max_retries - 1:
+                    delay = self.config.retry_delay * (attempt + 1)
+                    time.sleep(delay)
+                else:
+                    logger.error(f"All attempts failed for pages {start_page}-{end_page}")
+                    raise
+        
+        return []
+    
+    def _clamp_coordinates(self, page: PagePP) -> PagePP:
+        """Clamp all coordinates to be within page bounds."""
+        page_width = page.width or 595.0
+        page_height = page.height or 842.0
+        
+        def clamp_bbox(bbox: BBox) -> BBox:
+            """Clamp bbox to page bounds."""
+            # Clamp x to valid range
+            x = max(0, min(bbox.x, page_width - 10))
+            y = max(0, min(bbox.y, page_height - 10))
+            # Ensure width/height don't extend past page
+            w = min(bbox.w, page_width - x)
+            h = min(bbox.h, page_height - y)
+            return BBox(x=x, y=y, w=max(w, 1), h=max(h, 1))
+        
+        # Clamp text runs
+        for run in page.text_runs:
+            run.bbox = clamp_bbox(run.bbox)
+        
+        # Clamp shapes
+        for shape in page.shapes:
+            shape.bbox = clamp_bbox(shape.bbox)
+        
+        # Clamp images
+        for image in page.images:
+            image.bbox = clamp_bbox(image.bbox)
+        
+        # Clamp tables and their cells
+        for table in page.tables:
+            table.bbox = clamp_bbox(table.bbox)
+            for row in table.rows:
+                for cell in row.cells:
+                    cell.bbox = clamp_bbox(cell.bbox)
+        
+        return page
+    
+    def _fix_text_spacing(self, page: PagePP) -> PagePP:
+        """Fix overlapping text by adjusting vertical positions with proper line spacing."""
+        if not page.text_runs:
+            return page
+        
+        # Sort text runs by vertical position (y coordinate)
+        text_runs = sorted(page.text_runs, key=lambda t: (t.bbox.y, t.bbox.x))
+        
+        # Group text runs by approximate y-position (within 5pt tolerance for same line)
+        lines = []
+        current_line = []
+        last_y = -100
+        
+        for run in text_runs:
+            if abs(run.bbox.y - last_y) <= 5:
+                # Same line
+                current_line.append(run)
+            else:
+                # New line
+                if current_line:
+                    lines.append(current_line)
+                current_line = [run]
+                last_y = run.bbox.y
+        
+        if current_line:
+            lines.append(current_line)
+        
+        # Apply proper spacing between lines
+        adjusted_runs = []
+        current_y = 50.0  # Start from top margin
+        
+        for line_idx, line in enumerate(lines):
+            # Determine line height based on largest font in line
+            max_font_size = max((run.style.font_size or 12) for run in line)
+            line_height = max_font_size * 1.4  # 1.4x line height
+            
+            # Check if this is a header (larger font or bold)
+            is_header = any(
+                (run.style.font_size or 12) >= 16 or 
+                run.style.font_weight == "bold"
+                for run in line
+            )
+            
+            # Add extra spacing for headers
+            if is_header and line_idx > 0:
+                current_y += 10
+            
+            # Position all runs in this line at the same y
+            for run in line:
+                run.bbox.y = current_y
+                run.bbox.h = max(run.bbox.h, line_height * 0.8)  # Ensure adequate height
+                adjusted_runs.append(run)
+            
+            # Move to next line position
+            current_y += line_height
+            
+            # Add paragraph spacing for breaks in content
+            if line_idx < len(lines) - 1:
+                next_line = lines[line_idx + 1]
+                # Check for significant gap indicating paragraph break
+                original_gap = min(run.bbox.y for run in next_line) - max(run.bbox.y + run.bbox.h for run in line)
+                if original_gap > max_font_size * 0.5:
+                    current_y += 8  # Paragraph spacing
+        
+        page.text_runs = adjusted_runs
+        return page
+
+    def _detect_columns(self, page: PagePP) -> list[list[TextRun]]:
+        """Detect and separate multi-column text layout."""
+        if not page.text_runs:
+            return []
+        
+        page_width = page.width or 595
+        middle = page_width / 2
+        
+        # Separate into left and right columns based on x-position
+        left_column = []
+        right_column = []
+        
+        for run in page.text_runs:
+            center_x = run.bbox.x + run.bbox.w / 2
+            if center_x < middle:
+                left_column.append(run)
+            else:
+                right_column.append(run)
+        
+        # Sort each column by y-position
+        columns = []
+        if left_column:
+            columns.append(sorted(left_column, key=lambda t: t.bbox.y))
+        if right_column:
+            columns.append(sorted(right_column, key=lambda t: t.bbox.y))
+        
+        return columns
+
+    def _detect_tables_from_text(self, page: PagePP) -> PagePP:
+        """Detect table structures from aligned text runs and convert them to table objects."""
+        if not page.text_runs:
+            return page
+        
+        # Find potential table regions by looking for aligned text
+        # Group text runs by y-position (rows)
+        y_groups = {}
+        tolerance = 3  # 3pt tolerance for same row
+        
+        for run in page.text_runs:
+            y = run.bbox.y
+            # Find existing group within tolerance
+            found_group = None
+            for group_y in y_groups:
+                if abs(y - group_y) <= tolerance:
+                    found_group = group_y
+                    break
+            
+            if found_group is not None:
+                y_groups[found_group].append(run)
+            else:
+                y_groups[y] = [run]
+        
+        # Look for rows with multiple aligned columns (potential table rows)
+        table_rows = []
+        for y_pos in sorted(y_groups.keys()):
+            row_runs = y_groups[y_pos]
+            if len(row_runs) >= 3:  # At least 3 columns to be considered a table row
+                # Sort by x position
+                row_runs.sort(key=lambda r: r.bbox.x)
+                # Check for regular spacing (columns)
+                x_positions = [run.bbox.x for run in row_runs]
+                gaps = [x_positions[i+1] - x_positions[i] for i in range(len(x_positions)-1)]
+                
+                # If gaps are reasonably consistent, this might be a table row
+                if len(gaps) > 1:
+                    avg_gap = sum(gaps) / len(gaps)
+                    consistent_gaps = sum(1 for gap in gaps if abs(gap - avg_gap) <= avg_gap * 0.5)
+                    if consistent_gaps >= len(gaps) * 0.7:  # 70% of gaps are consistent
+                        table_rows.append((y_pos, row_runs))
+        
+        # If we found potential table rows, convert them to tables
+        if len(table_rows) >= 2:  # Need at least 2 rows for a table
+            # Create table object
+            all_table_runs = []
+            for _, runs in table_rows:
+                all_table_runs.extend(runs)
+            
+            # Calculate table bounds
+            min_x = min(run.bbox.x for run in all_table_runs)
+            max_x = max(run.bbox.x + run.bbox.w for run in all_table_runs)
+            min_y = min(run.bbox.y for run in all_table_runs)
+            max_y = max(run.bbox.y + run.bbox.h for run in all_table_runs)
+            
+            table_bbox = BBox(x=min_x, y=min_y, w=max_x - min_x, h=max_y - min_y)
+            
+            # Create table structure
+            table_id = f"p{page.page_number}_tbl001"
+            rows = []
+            
+            for row_idx, (y_pos, row_runs) in enumerate(table_rows):
+                cells = []
+                for col_idx, run in enumerate(row_runs):
+                    cell = TableCellPP(
+                        bbox=run.bbox,
+                        text=run.text,
+                        style=run.style,
+                        dir=run.dir,
+                        lang=run.lang,
+                        rowspan=1,
+                        colspan=1,
+                        row_header=row_idx == 0,  # First row might be headers
+                        confidence=run.confidence
+                    )
+                    cells.append(cell)
+                
+                row = TableRowPP(cells=cells)
+                rows.append(row)
+            
+            table = TablePP(
+                id=table_id,
+                bbox=table_bbox,
+                rows=rows,
+                caption=None
+            )
+            
+            # Add table to page and remove the text runs that became table cells
+            page.tables.append(table)
+            
+            # Remove text runs that are now part of the table
+            page.text_runs = [run for run in page.text_runs if run not in all_table_runs]
+        
+        return page
+
+    def _detect_equations(self, page: PagePP) -> PagePP:
+        """Detect mathematical equations in text runs and mark them appropriately."""
+        import re
+        
+        # Common patterns that indicate mathematical equations
+        math_patterns = [
+            r'[=<>≤≥≠±∞∑∫∂]',  # Mathematical operators and symbols
+            r'\b\w+\s*[=]\s*\w+',  # Variable assignments like "x = y"
+            r'\b\w+\s*[/]\s*\w+',  # Fractions like "a/b"
+            r'\w+[²³⁴⁵⁶⁷⁸⁹⁰¹]',  # Superscripts
+            r'[₀₁₂₃₄₅₆₇₈₉]',  # Subscripts
+            r'[αβγδεζηθικλμνξοπρστυφχψω]',  # Greek letters
+            r'√\w+',  # Square roots
+            r'\b(sin|cos|tan|log|ln|exp|max|min|lim)\b',  # Math functions
+            r'\([^)]*[=<>≤≥±][^)]*\)',  # Expressions in parentheses with operators
+        ]
+        
+        compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in math_patterns]
+        
+        for run in page.text_runs:
+            # Check if text matches any mathematical patterns
+            is_equation = False
+            for pattern in compiled_patterns:
+                if pattern.search(run.text):
+                    is_equation = True
+                    break
+            
+            if is_equation:
+                run.equation = True
+                # Determine if inline or display based on context
+                # Display math is usually centered or isolated
+                page_center_x = (page.width or 595) / 2
+                run_center_x = run.bbox.x + run.bbox.w / 2
+                
+                # If equation is near page center and not too small, make it display
+                if (abs(run_center_x - page_center_x) < 50 and 
+                    (run.style.font_size or 12) >= 12):
+                    run.equation_inline = False
+                else:
+                    run.equation_inline = True
+                
+                # Convert common notation to LaTeX
+                run.text = PixelPerfectRenderer._convert_to_latex(run.text)
+        
+        return page
+    
+    @staticmethod
+    def _convert_to_latex(text: str) -> str:
+        """Convert common mathematical notation to LaTeX."""
+        # Basic conversions
+        replacements = [
+            (r'(\w+)/(\w+)', r'\\frac{\1}{\2}'),  # a/b → \frac{a}{b}
+            (r'²', r'^{2}'),
+            (r'³', r'^{3}'),
+            (r'⁴', r'^{4}'),
+            (r'⁵', r'^{5}'),
+            (r'≤', r'\\leq'),
+            (r'≥', r'\\geq'),
+            (r'≠', r'\\neq'),
+            (r'±', r'\\pm'),
+            (r'∞', r'\\infty'),
+            (r'∑', r'\\sum'),
+            (r'∫', r'\\int'),
+            (r'∂', r'\\partial'),
+            (r'√', r'\\sqrt'),
+        ]
+        
+        result = text
+        import re
+        for pattern, replacement in replacements:
+            result = re.sub(pattern, replacement, result)
+        
+        return result
+
+    def _classify_text_hierarchy(self, page: PagePP) -> PagePP:
+        """Classify text runs by hierarchy (header, subheader, body, etc.) based on font size and styling."""
+        if not page.text_runs:
+            return page
+        
+        # Analyze font sizes to determine hierarchy
+        font_sizes = [run.style.font_size or 12 for run in page.text_runs]
+        if not font_sizes:
+            return page
+        
+        # Calculate statistical thresholds
+        avg_size = sum(font_sizes) / len(font_sizes)
+        max_size = max(font_sizes)
+        min_size = min(font_sizes)
+        
+        # Define hierarchy thresholds
+        header_threshold = avg_size + (max_size - avg_size) * 0.5
+        subheader_threshold = avg_size + (max_size - avg_size) * 0.25
+        small_text_threshold = avg_size - (avg_size - min_size) * 0.3
+        
+        for run in page.text_runs:
+            font_size = run.style.font_size or 12
+            is_bold = run.style.font_weight in ("bold", "600", "700", "800", "900")
+            
+            # Classify text hierarchy
+            if font_size >= header_threshold or (font_size >= subheader_threshold and is_bold):
+                # Main header
+                text_class = "header"
+                run.style.font_weight = "bold"
+            elif font_size >= subheader_threshold:
+                # Subheader
+                text_class = "subheader" 
+                if not is_bold:
+                    run.style.font_weight = "600"
+            elif font_size <= small_text_threshold:
+                # Small text (captions, footnotes)
+                text_class = "small"
+            else:
+                # Body text
+                text_class = "body"
+            
+            # Store classification for rendering
+            if not hasattr(run, 'text_class'):
+                run.text_class = text_class
+        
+        return page
+
+    def _classify_headers_footers(self, page: PagePP) -> PagePP:
+        """Classify and position headers and footers based on page position."""
+        if not page.text_runs:
+            return page
+        
+        page_height = page.height or 842
+        
+        # Define header and footer zones
+        header_zone = page_height * 0.15  # Top 15% of page
+        footer_zone = page_height * 0.85  # Bottom 15% of page
+        
+        for run in page.text_runs:
+            y_pos = run.bbox.y
+            
+            # Classify based on vertical position
+            if y_pos <= header_zone:
+                # Header area
+                if not hasattr(run, 'page_region'):
+                    run.page_region = "header"
+                
+                # Check for page numbers, titles, chapter names
+                text_lower = run.text.lower().strip()
+                if (any(word in text_lower for word in ['صفحة', 'page', 'ص.']) or 
+                    run.text.strip().isdigit() or
+                    len(run.text.strip()) < 10):  # Short text likely page number
+                    run.content_type = "page_number"
+                else:
+                    run.content_type = "header_title"
+                    
+            elif y_pos >= footer_zone:
+                # Footer area
+                if not hasattr(run, 'page_region'):
+                    run.page_region = "footer"
+                
+                # Check for citations, page info, etc.
+                text_lower = run.text.lower().strip()
+                if any(word in text_lower for word in ['journal', 'مجلة', 'university', 'جامعة', '©', 'copyright']):
+                    run.content_type = "citation"
+                elif run.text.strip().isdigit():
+                    run.content_type = "page_number"
+                else:
+                    run.content_type = "footer_text"
+                    
+            else:
+                # Body area
+                if not hasattr(run, 'page_region'):
+                    run.page_region = "body"
+                run.content_type = "body_text"
+        
+        return page
+
+    def _extract_pixel_perfect(self, uploaded_file: types.File, pdf_path: str = None) -> DocumentPP:
+        """Extract complete pixel-perfect document structure.
+        
+        If parallel_pages is enabled and pdf_path is provided, each page is 
+        processed individually and concurrently for better extraction quality.
+        """
+        # First, get page count and basic metadata
+        total_pages, metadata = self._get_page_count(uploaded_file)
+        
+        logger.info(f"Starting pixel-perfect extraction of {total_pages} pages")
+        
+        # Check if we should use parallel processing
+        if self.config.parallel_pages and pdf_path and fitz:
+            return self._extract_pixel_perfect_parallel(pdf_path, total_pages, metadata)
+        
+        # Standard chunk-based processing
+        all_pages: list[PagePP] = []
+        chunk_size = self.config.pages_per_chunk
+        
+        # Process in chunks
+        for chunk_idx, start in enumerate(range(1, total_pages + 1, chunk_size), 1):
+            end = min(start + chunk_size - 1, total_pages)
+            progress = (chunk_idx / ((total_pages + chunk_size - 1) // chunk_size)) * 100
+            logger.info(f"Pixel-perfect chunk {chunk_idx}: pages {start}-{end} ({progress:.1f}%)")
+            
+            try:
+                chunk_pages = self._extract_page_range_pp(uploaded_file, start, end)
+                
+                # Ensure page numbers are correct and clamp coordinates
+                for i, page in enumerate(chunk_pages):
+                    expected_page = start + i
+                    if page.page_number != expected_page:
+                        page.page_number = expected_page
+                    # Clamp all coordinates to page bounds
+                    page = self._clamp_coordinates(page)
+                    # Fix text spacing and overlapping
+                    page = self._fix_text_spacing(page)
+                    # Detect tables from aligned text
+                    page = self._detect_tables_from_text(page)
+                    # Detect mathematical equations
+                    page = self._detect_equations(page)
+                    # Classify text hierarchy
+                    page = self._classify_text_hierarchy(page)
+                    # Classify headers and footers
+                    page = self._classify_headers_footers(page)
+                    chunk_pages[i] = page
+                
+                all_pages.extend(chunk_pages)
+                
+            except Exception as e:
+                logger.error(f"Failed to extract pages {start}-{end}: {e}")
+                # Create placeholder pages
+                for page_num in range(start, end + 1):
+                    all_pages.append(PagePP(
+                        page_number=page_num,
+                        width=612,  # Letter size default
+                        height=792,
+                        unreadable=True,
+                        unreadable_reason=f"Extraction failed: {str(e)[:100]}"
+                    ))
+        
+        # Sort by page number
+        all_pages.sort(key=lambda p: p.page_number)
+        
+        # Build document
+        return DocumentPP(
+            metadata=DocumentMetadataPP(
+                title=metadata.title,
+                author=metadata.author,
+                languages_detected=[metadata.language] if metadata.language else ["en"],
+                page_count=total_pages
+            ),
+            pages=all_pages
+        )
+    
+    def _extract_pixel_perfect_parallel(self, pdf_path: str, total_pages: int, metadata) -> DocumentPP:
+        """Extract pixel-perfect content with parallel per-page processing.
+        
+        Each page is rendered to an image and sent to Gemini independently,
+        allowing for concurrent API calls and better focus per page.
+        """
+        max_workers = self.config.max_parallel_workers
+        logger.info(f"Parallel pixel-perfect extraction: {total_pages} pages, {max_workers} workers")
+        
+        all_pages: list[PagePP] = []
+        
+        def process_page(page_num: int) -> PagePP:
+            """Process a single page - renders to image and extracts."""
+            try:
+                # Render page to PNG image
+                page_image = self._render_page_to_image(pdf_path, page_num, dpi=200)
+                logger.info(f"Rendered page {page_num} to image ({len(page_image)} bytes)")
+                
+                # Extract content from the image
+                page = self._extract_single_page_from_image(page_image, page_num)
+                
+                # Clamp coordinates
+                page = self._clamp_coordinates(page)
+                # Fix text spacing and overlapping
+                page = self._fix_text_spacing(page)
+                # Detect tables from aligned text
+                page = self._detect_tables_from_text(page)
+                # Detect mathematical equations
+                page = self._detect_equations(page)
+                # Classify text hierarchy
+                page = self._classify_text_hierarchy(page)
+                # Classify headers and footers
+                page = self._classify_headers_footers(page)
+                
+                return page
+                
+            except Exception as e:
+                logger.error(f"Failed to process page {page_num}: {e}")
+                return PagePP(
+                    page_number=page_num,
+                    width=612,
+                    height=792,
+                    unreadable=True,
+                    unreadable_reason=f"Parallel extraction failed: {str(e)[:100]}"
+                )
+        
+        # Use ThreadPoolExecutor for concurrent API calls
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all pages for processing
+            future_to_page = {
+                executor.submit(process_page, page_num): page_num
+                for page_num in range(1, total_pages + 1)
+            }
+            
+            # Collect results as they complete
+            completed = 0
+            for future in as_completed(future_to_page):
+                page_num = future_to_page[future]
+                try:
+                    page = future.result()
+                    all_pages.append(page)
+                    completed += 1
+                    progress = (completed / total_pages) * 100
+                    logger.info(f"Completed page {page_num} ({progress:.1f}% done)")
+                except Exception as e:
+                    logger.error(f"Page {page_num} future failed: {e}")
+                    all_pages.append(PagePP(
+                        page_number=page_num,
+                        width=612,
+                        height=792,
+                        unreadable=True,
+                        unreadable_reason=f"Future failed: {str(e)[:100]}"
+                    ))
+        
+        # Sort by page number
+        all_pages.sort(key=lambda p: p.page_number)
+        
+        logger.info(f"Parallel extraction complete: {len(all_pages)} pages processed")
+        
+        # Build document
+        return DocumentPP(
+            metadata=DocumentMetadataPP(
+                title=metadata.title,
+                author=metadata.author,
+                languages_detected=[metadata.language] if metadata.language else ["en"],
+                page_count=total_pages
+            ),
+            pages=all_pages
+        )
+    
     def _direct_html_extraction(self, uploaded_file: types.File) -> str:
         """Request HTML directly from Gemini (fallback method when structured extraction fails)."""
         logger.info("Using direct HTML extraction as fallback")
@@ -2067,6 +3672,79 @@ Requirements:
             uploaded_file = self._upload_pdf(pdf_path)
             self._uploaded_file = uploaded_file
             
+            # PIXEL-PERFECT MODE: Use geometry-first extraction
+            if self.config.pixel_perfect_mode:
+                try:
+                    logger.info("Using PIXEL-PERFECT extraction mode")
+                    doc_pp = self._extract_pixel_perfect(uploaded_file, pdf_path=pdf_path)
+                    result["method"] = "pixel_perfect"
+                    result["document_pp"] = doc_pp
+                    
+                    # Extract images using PyMuPDF for pixel-perfect mode
+                    if self.config.extract_images and HAS_PYMUPDF:
+                        try:
+                            with ImageExtractor(pdf_path, dpi=self.config.image_dpi) as extractor:
+                                for page in doc_pp.pages:
+                                    for image in page.images:
+                                        # Convert point coordinates to percentages for extractor
+                                        if page.width > 0 and page.height > 0:
+                                            bbox_left = (image.bbox.x / page.width) * 100
+                                            bbox_top = (image.bbox.y / page.height) * 100
+                                            bbox_width = (image.bbox.w / page.width) * 100
+                                            bbox_height = (image.bbox.h / page.height) * 100
+                                            image.data_base64 = extractor.extract_image(
+                                                page_num=page.page_number,
+                                                bbox_top=bbox_top,
+                                                bbox_left=bbox_left,
+                                                bbox_width=bbox_width,
+                                                bbox_height=bbox_height
+                                            )
+                                logger.info("Pixel-perfect image extraction completed")
+                        except Exception as e:
+                            logger.warning(f"Image extraction failed: {e}")
+                    
+                    # Render pixel-perfect HTML
+                    html_content = PixelPerfectRenderer.render(doc_pp)
+                    
+                    # Write JSON output (pixel-perfect schema)
+                    if self.config.output_format in ("json", "both"):
+                        json_path = f"{output_base}.json"
+                        with open(json_path, "w", encoding="utf-8") as f:
+                            json.dump(doc_pp.model_dump(), f, indent=2, ensure_ascii=False)
+                        result["json_path"] = json_path
+                        logger.info(f"Wrote pixel-perfect JSON: {json_path}")
+                    
+                    # Write HTML output
+                    if self.config.output_format in ("html", "both"):
+                        html_path = f"{output_base}.html"
+                        pathlib.Path(html_path).write_text(html_content, encoding="utf-8")
+                        result["html_path"] = html_path
+                        logger.info(f"Wrote pixel-perfect HTML: {html_path}")
+                    
+                    result["success"] = True
+                    result["pages"] = len(doc_pp.pages)
+                    
+                    # Cleanup to avoid serialization
+                    if "document_pp" in result:
+                        del result["document_pp"]
+                    
+                    # Add token usage
+                    if hasattr(self, '_total_input_tokens'):
+                        result["usage_metadata"] = {
+                            "total_input_tokens": self._total_input_tokens,
+                            "total_output_tokens": self._total_output_tokens,
+                            "total_tokens": self._total_input_tokens + self._total_output_tokens
+                        }
+                    
+                    return result
+                    
+                except Exception as e:
+                    logger.error(f"Pixel-perfect extraction failed: {e}")
+                    result["error"] = str(e)
+                    result["error_type"] = "pixel_perfect_error"
+                    return result
+            
+            # STANDARD MODE: Semantic extraction
             # Try structured extraction first
             try:
                 if self.config.use_chunked_processing:
@@ -2272,6 +3950,10 @@ Examples:
   %(prog)s document.pdf -j                   # Also output JSON structure
   %(prog)s document.pdf -r high              # Use high resolution processing
   %(prog)s document.pdf --format both        # Output both HTML and JSON
+  %(prog)s document.pdf --pixel-perfect      # Pixel-perfect layout reproduction
+  %(prog)s document.pdf -pp -j               # Pixel-perfect with JSON output
+  %(prog)s document.pdf -pp --parallel       # Pixel-perfect with parallel page processing
+  %(prog)s document.pdf -pp --parallel --workers 8  # Parallel with 8 workers
         """
     )
     
@@ -2296,6 +3978,14 @@ Examples:
                         help="DPI for extracted images (default: 150)")
     parser.add_argument("--experimental-gemini-html", action="store_true",
                         help="[EXPERIMENTAL] Also request HTML directly from Gemini for comparison")
+    parser.add_argument("-pp", "--pixel-perfect", action="store_true",
+                        help="Use pixel-perfect mode for exact layout reproduction (geometry-first)")
+    parser.add_argument("--scale", type=float, default=1.0,
+                        help="Scale factor for pixel-perfect mode (default: 1.0)")
+    parser.add_argument("--parallel", action="store_true",
+                        help="Process pages in parallel (one page per API call) for better extraction")
+    parser.add_argument("--workers", type=int, default=5,
+                        help="Number of parallel workers for --parallel mode (default: 5)")
     
     args = parser.parse_args()
     
@@ -2323,7 +4013,13 @@ Examples:
         extract_images=not args.no_images,
         image_dpi=args.image_dpi,
         experimental_gemini_html=args.experimental_gemini_html,
+        pixel_perfect_mode=args.pixel_perfect,
+        parallel_pages=args.parallel,
+        max_parallel_workers=args.workers,
     )
+    
+    # Store scale for pixel-perfect mode
+    pp_scale = getattr(args, 'scale', 1.0)
     
     processor = PDFProcessor(config)
     try:
@@ -2338,11 +4034,16 @@ Examples:
                 print(f"  Gemini HTML (experimental): {result['gemini_html_path']}")
             if result.get("json_path"):
                 print(f"  JSON: {result['json_path']}")
+            if result.get("pages"):
+                print(f"  Pages: {result['pages']}")
             if result.get("document"):
                 doc = result["document"]
                 print(f"  Pages: {len(doc.pages)}")
                 if doc.metadata.title:
                     print(f"  Title: {doc.metadata.title}")
+            if result.get("usage_metadata"):
+                usage = result["usage_metadata"]
+                print(f"  Tokens: {usage.get('total_tokens', 0):,}")
         else:
             print(f"\n✗ Processing failed: {result.get('error', 'Unknown error')}")
             raise SystemExit(1)
