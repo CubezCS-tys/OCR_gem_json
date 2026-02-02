@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useViewerStore } from "@/lib/store";
 import dynamic from "next/dynamic";
+import { Button } from "@/components/ui/button";
+import { ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 
 const Document = dynamic(
   () => import("react-pdf").then((mod) => mod.Document),
@@ -15,7 +17,8 @@ const Page = dynamic(
 
 export function PDFViewer() {
   const { currentFile, currentPage } = useViewerStore();
-  const [pageWidth, setPageWidth] = useState<number>(600);
+  const [pageWidth, setPageWidth] = useState<number>(500);
+  const [zoom, setZoom] = useState<number>(1.0);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -30,7 +33,7 @@ export function PDFViewer() {
     const updateWidth = () => {
       const container = document.getElementById("pdf-container");
       if (container) {
-        setPageWidth(Math.min(container.clientWidth - 48, 900));
+        setPageWidth(Math.min(container.clientWidth - 64, 700));
       }
     };
 
@@ -38,6 +41,10 @@ export function PDFViewer() {
     window.addEventListener("resize", updateWidth);
     return () => window.removeEventListener("resize", updateWidth);
   }, []);
+
+  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 0.2, 3.0));
+  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 0.2, 0.5));
+  const handleResetZoom = () => setZoom(1.0);
 
   if (!isClient) {
     return (
@@ -56,28 +63,47 @@ export function PDFViewer() {
   }
 
   return (
-    <div id="pdf-container" className="flex justify-center p-6">
-      <Document
-        file={`/api/pdf/${currentFile.name}`}
-        loading={
-          <div className="flex items-center justify-center p-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
-        }
-        error={
-          <div className="flex items-center justify-center p-8 text-destructive">
-            Failed to load PDF
-          </div>
-        }
-      >
-        <Page
-          pageNumber={currentPage}
-          width={pageWidth}
-          renderTextLayer={false}
-          renderAnnotationLayer={false}
-          className="shadow-2xl rounded-sm"
-        />
-      </Document>
+    <div className="flex flex-col h-full">
+      {/* Zoom Controls */}
+      <div className="flex items-center justify-center gap-2 p-2 border-b bg-muted/30">
+        <Button variant="outline" size="sm" onClick={handleZoomOut} disabled={zoom <= 0.5}>
+          <ZoomOut className="h-4 w-4" />
+        </Button>
+        <span className="text-sm font-medium min-w-16 text-center">{Math.round(zoom * 100)}%</span>
+        <Button variant="outline" size="sm" onClick={handleZoomIn} disabled={zoom >= 3.0}>
+          <ZoomIn className="h-4 w-4" />
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleResetZoom}>
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* PDF Container */}
+      <div id="pdf-container" className="flex-1 overflow-auto">
+        <div className="flex justify-center p-6 min-h-full">
+          <Document
+            file={`/api/pdf/${currentFile.name}`}
+            loading={
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              </div>
+            }
+            error={
+              <div className="flex items-center justify-center p-8 text-destructive">
+                Failed to load PDF
+              </div>
+            }
+          >
+            <Page
+              pageNumber={currentPage}
+              width={pageWidth * zoom}
+              renderTextLayer={false}
+              renderAnnotationLayer={false}
+              className="shadow-2xl rounded-sm"
+            />
+          </Document>
+        </div>
+      </div>
     </div>
   );
 }
