@@ -471,12 +471,15 @@ class MistralOCRPipeline:
             }
             return content, usage
         else:
-            # Mistral
+            # Mistral with JSON schema enforcement
             response = self.client.chat.complete(
                 model=self.config.structuring_model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=self.config.temperature,
                 max_tokens=max_tokens,
+                response_format={
+                    "type": "json_object"
+                }
             )
             content = response.choices[0].message.content
             usage = {
@@ -531,8 +534,21 @@ class MistralOCRPipeline:
                         "completion_tokens": response.usage_metadata.candidates_token_count,
                     }
                 else:
-                    # Fallback to Mistral
-                    raw, usage = self._call_structuring_llm(prompt, max_tokens=2048)
+                    # Fallback to Mistral with JSON mode
+                    response = self.client.chat.complete(
+                        model=self.config.structuring_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.0,
+                        max_tokens=2048,
+                        response_format={
+                            "type": "json_object"
+                        }
+                    )
+                    raw = response.choices[0].message.content
+                    usage = {
+                        "prompt_tokens": response.usage.prompt_tokens,
+                        "completion_tokens": response.usage.completion_tokens,
+                    }
                 
                 # Strip markdown fences if the model wraps them
                 raw = self._strip_json_fences(raw)
