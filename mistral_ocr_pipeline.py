@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Production-grade Mistral OCR pipeline with two-pass architecture.
 
@@ -32,6 +33,8 @@ from dataclasses import dataclass, field
 from dotenv import load_dotenv
 from mistralai import Mistral
 from pydantic import ValidationError
+from google import genai
+from google.genai import types
 
 # Reuse EXACT schemas + renderer from the Gemini pipeline
 from pdf_to_html import (
@@ -43,6 +46,7 @@ from pdf_to_html import (
     Image,
     HTMLRenderer,
 )
+from image_utils import normalise_data_uri
 
 load_dotenv()
 
@@ -77,6 +81,7 @@ class MistralPipelineConfig:
     """Configuration for the Mistral two-pass pipeline."""
     ocr_model: str = OCR_MODEL
     structuring_model: str = STRUCTURING_MODEL
+    structuring_provider: str = "mistral"  # "mistral" or "gemini"
     include_image_base64: bool = True
     pages_per_chunk: int = 5           # Pages sent to LLM per structuring call
     max_retries: int = 3
@@ -165,6 +170,7 @@ Rules:
 - Images/Figures: describe with image_type, description, caption, and bbox.
 - PRESERVE numeral systems exactly (Arabic-Indic ٠١٢٣٤٥٦٧٨٩ vs Western 0123456789).
 - For RTL text set text_direction="rtl" on the text block.
+- For text alignment set text_align to "left", "center", "right", or "justify" based on visual layout.
 - For multi-column layouts set has_multi_column=true and column_count.
 - Set page_direction="rtl" for Arabic/Hebrew pages.
 - Convert any table markdown into structured headers/rows — do NOT use HTML in tables.
@@ -232,14 +238,14 @@ def _bbox_overlap(
     """
     Compute overlap percentage between a structured Image bbox (pct 0-100)
     and a Mistral OCR image.  Returns 0-100 (IoU-ish score) or -1 if
-    the OCR image has no coords.
+    the structured image has no bbox (can't compute overlap).
     """
     pct = _ocr_img_to_pct_bbox(ocr_img)
 
     if top is None or left is None or width is None or height is None:
-        # Structured image has no bbox → return 0 so it still gets the
-        # first available OCR image (better than nothing).
-        return 0.0
+        # Structured image has no bbox → return -1 to indicate "unmatchable"
+        # Caller should handle this case separately (e.g., match by document order)
+        return -1.0
 
     # Rectangle A (structured)
     ax0, ay0 = left, top
@@ -287,6 +293,21 @@ class MistralOCRPipeline:
             )
         self.client = Mistral(api_key=api_key)
 
+        # Initialize Gemini client if using Gemini for structuring
+        self.gemini_client = None
+        if self.config.structuring_provider == "gemini":
+            gemini_key = os.environ.get("GEMINI_API_KEY")
+            if not gemini_key:
+                raise ValueError(
+                    "GEMINI_API_KEY environment variable not set. "
+                    "Get your key at https://aistudio.google.com/apikey"
+                )
+            self.gemini_client = genai.Client(api_key=gemini_key)
+            logger.info(f"Using Gemini {self.config.structuring_model} for structuring")
+
+        # Store PDF path for Gemini vision mode
+        self.current_pdf_path = None
+
         # Cost / token tracking
         self._ocr_pages = 0
         self._structuring_input_tokens = 0
@@ -330,7 +351,10 @@ class MistralOCRPipeline:
         """
         for attempt in range(self.config.max_retries):
             try:
-                logger.info(f"Running Mistral OCR (attempt {attempt + 1})…")
+                logger.info(
+                    f"Running Mistral OCR (attempt {attempt + 1})… "
+                    f"[include_image_base64={self.config.include_image_base64}]"
+                )
                 ocr_response = self.client.ocr.process(
                     model=self.config.ocr_model,
                     document={"file_id": file_id},
@@ -338,13 +362,12 @@ class MistralOCRPipeline:
                 )
 
                 pages = []
+                total_images_found = 0
                 for page in ocr_response.pages:
-                    pages.append({
-                        "page_index": page.index,
-                        "markdown": page.markdown,
-                        # images list may contain base64 data
-                        "images": [
-                            {
+                    page_images = []
+                    if hasattr(page, 'images') and page.images:
+                        for img in page.images:
+                            img_data = {
                                 "id": getattr(img, "id", None),
                                 "top_left_x": getattr(img, "top_left_x", None),
                                 "top_left_y": getattr(img, "top_left_y", None),
@@ -352,12 +375,48 @@ class MistralOCRPipeline:
                                 "bottom_right_y": getattr(img, "bottom_right_y", None),
                                 "image_base64": getattr(img, "image_base64", None),
                             }
-                            for img in (page.images or [])
-                        ],
+                            page_images.append(img_data)
+                            
+                            # Debug logging
+                            has_base64 = bool(img_data["image_base64"])
+                            total_images_found += 1
+                            if not has_base64:
+                                logger.warning(
+                                    f"⚠️  Page {page.index + 1} image '{img_data['id']}' has NO base64 data"
+                                )
+                            else:
+                                # Log prefix sample to detect format issues
+                                b64 = img_data["image_base64"]
+                                prefix_sample = b64[:60] if b64 else ""
+                                logger.info(f"Image base64 prefix sample: {prefix_sample}")
+                    
+                    pages.append({
+                        "page_index": page.index,
+                        "markdown": page.markdown,
+                        "images": page_images,
                     })
+                
+                if total_images_found > 0:
+                    logger.info(f"📸 Found {total_images_found} images across all pages")
 
                 self._ocr_pages = len(pages)
                 logger.info(f"OCR complete — {len(pages)} pages extracted")
+                
+                # Validate OCR output quality
+                empty_pages = []
+                for pg in pages:
+                    if not pg["markdown"] or len(pg["markdown"].strip()) < 10:
+                        empty_pages.append(pg["page_index"] + 1)
+                        logger.warning(
+                            f"⚠️  Page {pg['page_index'] + 1} has suspiciously short OCR output "
+                            f"({len(pg.get('markdown', ''))} chars)"
+                        )
+                
+                if empty_pages:
+                    logger.warning(
+                        f"⚠️  QUALITY WARNING: {len(empty_pages)} page(s) with minimal content: {empty_pages}"
+                    )
+                
                 return pages
 
             except Exception as e:
@@ -373,31 +432,116 @@ class MistralOCRPipeline:
     # Pass 2 — LLM structuring
     # ------------------------------------------------------------------
 
+    def _call_structuring_llm(self, prompt: str, max_tokens: int = 2048, page_range: tuple = None) -> tuple[str, dict]:
+        """
+        Call the configured structuring LLM (Mistral or Gemini).
+        For Gemini: includes the PDF file for visual context.
+        Returns: (response_text, usage_dict)
+        """
+        if self.config.structuring_provider == "gemini":
+            # Gemini can see the PDF + markdown for richer context
+            contents = []
+            
+            # Add PDF file if available
+            if self.current_pdf_path:
+                try:
+                    with open(self.current_pdf_path, 'rb') as f:
+                        pdf_data = f.read()
+                    contents.append(types.Part.from_bytes(data=pdf_data, mime_type="application/pdf"))
+                    logger.debug(f"Added PDF file to Gemini context ({len(pdf_data)} bytes)")
+                except Exception as e:
+                    logger.warning(f"Could not read PDF for Gemini: {e}")
+            
+            # Add the text prompt
+            contents.append(prompt)
+            
+            response = self.gemini_client.models.generate_content(
+                model=self.config.structuring_model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    temperature=self.config.temperature,
+                    max_output_tokens=max_tokens,
+                    response_mime_type="application/json",
+                )
+            )
+            content = response.text
+            usage = {
+                "prompt_tokens": response.usage_metadata.prompt_token_count,
+                "completion_tokens": response.usage_metadata.candidates_token_count,
+            }
+            return content, usage
+        else:
+            # Mistral
+            response = self.client.chat.complete(
+                model=self.config.structuring_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.config.temperature,
+                max_tokens=max_tokens,
+            )
+            content = response.choices[0].message.content
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+            }
+            return content, usage
+
     def _extract_metadata(
         self, first_page_md: str, total_pages: int
     ) -> DocumentMetadata:
-        """Ask LLM to produce DocumentMetadata from the first page."""
+        """Ask LLM to produce DocumentMetadata from the first page. Always uses Gemini for reliability."""
         schema_str = json.dumps(_get_metadata_schema(), indent=2)
+        # Use full first page content - no truncation for fidelity
         prompt = METADATA_PROMPT_TEMPLATE.format(
             schema=schema_str,
             total_pages=total_pages,
-            first_page_text=first_page_md[:4000],  # cap to avoid huge prompts
+            first_page_text=first_page_md,
         )
+
+        # Ensure Gemini client is initialized
+        if not self.gemini_client:
+            gemini_key = os.environ.get("GEMINI_API_KEY")
+            if not gemini_key:
+                logger.warning("GEMINI_API_KEY not set, falling back to Mistral for metadata")
+                use_gemini = False
+            else:
+                self.gemini_client = genai.Client(api_key=gemini_key)
+                use_gemini = True
+        else:
+            use_gemini = True
 
         for attempt in range(self.config.max_retries):
             try:
-                logger.info(f"Extracting metadata (attempt {attempt + 1})…")
-                resp = self.client.chat.complete(
-                    model=self.config.structuring_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=self.config.temperature,
-                    max_tokens=2048,
-                )
-                raw = resp.choices[0].message.content.strip()
+                logger.info(f"Extracting metadata with {'Gemini' if use_gemini else 'Mistral'} (attempt {attempt + 1})…")
+                
+                if use_gemini:
+                    # Use Gemini for metadata extraction (more reliable for Arabic)
+                    gemini_model = os.environ.get("MODEL_NAME", "gemini-2.0-flash-exp")
+                    response = self.gemini_client.models.generate_content(
+                        model=gemini_model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=0.0,
+                            max_output_tokens=2048,
+                            response_mime_type="application/json",
+                        )
+                    )
+                    raw = response.text
+                    usage = {
+                        "prompt_tokens": response.usage_metadata.prompt_token_count,
+                        "completion_tokens": response.usage_metadata.candidates_token_count,
+                    }
+                else:
+                    # Fallback to Mistral
+                    raw, usage = self._call_structuring_llm(prompt, max_tokens=2048)
+                
                 # Strip markdown fences if the model wraps them
                 raw = self._strip_json_fences(raw)
 
-                self._track_tokens(resp)
+                self._structuring_input_tokens += usage["prompt_tokens"]
+                self._structuring_output_tokens += usage["completion_tokens"]
+
+                # Log the raw response for debugging
+                logger.debug(f"Raw metadata response: {raw[:500]}...")
 
                 # Inject total_pages before validation (LLM often omits it)
                 raw_dict = json.loads(raw)
@@ -411,6 +555,7 @@ class MistralOCRPipeline:
 
             except (ValidationError, Exception) as e:
                 logger.warning(f"Metadata attempt {attempt + 1} failed: {e}")
+                logger.debug(f"Failed raw response: {raw[:500] if 'raw' in locals() else 'N/A'}")
                 if attempt < self.config.max_retries - 1:
                     time.sleep(self.config.retry_delay)
                 else:
@@ -455,24 +600,37 @@ class MistralOCRPipeline:
 
         for attempt in range(self.config.max_retries):
             try:
-                temp = self.config.temperature + (attempt * 0.1)
+                # Keep temperature at 0.0 for maximum fidelity - never increase on retry
+                # Higher temp = more hallucinations, less faithful extraction
                 logger.info(
                     f"Structuring pages {start_page}–{end_page} "
-                    f"(attempt {attempt + 1}, temp={temp})"
+                    f"(attempt {attempt + 1})"
                 )
-                resp = self.client.chat.complete(
-                    model=self.config.structuring_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=temp,
+                raw, usage = self._call_structuring_llm(
+                    prompt, 
                     max_tokens=self.config.max_output_tokens,
+                    page_range=(start_page, end_page)
                 )
-                raw = resp.choices[0].message.content.strip()
                 raw = self._strip_json_fences(raw)
-                self._track_tokens(resp)
+                
+                self._structuring_input_tokens += usage["prompt_tokens"]
+                self._structuring_output_tokens += usage["completion_tokens"]
 
-                # Parse wrapper {"pages": [...]}
-                wrapper = json.loads(raw)
+                # Parse wrapper {"pages": [...]} with validation
+                try:
+                    wrapper = json.loads(raw)
+                except json.JSONDecodeError as je:
+                    logger.error(
+                        f"JSON parse error at line {je.lineno}, col {je.colno}: {je.msg}\n"
+                        f"Raw output sample: {raw[:500]}..."
+                    )
+                    raise
+                
                 pages_data = wrapper.get("pages", wrapper) if isinstance(wrapper, dict) else wrapper
+                
+                if not pages_data:
+                    logger.error(f"No pages data in response. Wrapper keys: {list(wrapper.keys()) if isinstance(wrapper, dict) else 'not a dict'}")
+                    raise ValueError("Empty pages data in LLM response")
 
                 # Validate each page individually for resilience
                 validated: list[PageContent] = []
@@ -481,18 +639,37 @@ class MistralOCRPipeline:
                         page = PageContent.model_validate(pd_raw)
                         validated.append(page)
                     except ValidationError as ve:
-                        logger.warning(
-                            f"Page validation issue: {ve}. "
-                            f"Attempting partial recovery…"
-                        )
-                        # Force-create with minimal data
                         page_num = pd_raw.get("page_number", start_page)
+                        logger.error(
+                            f"⚠️  QUALITY DEGRADED - Page {page_num} validation failed\n"
+                            f"Validation errors: {ve.error_count()} issues\n"
+                            f"First error: {ve.errors()[0] if ve.errors() else 'unknown'}\n"
+                            f"Falling back to raw text extraction"
+                        )
+                        
+                        # Attempt to recover text content from various possible fields
+                        fallback_content = None
+                        for field in ["raw_text", "content", "text"]:
+                            if field in pd_raw and pd_raw[field]:
+                                fallback_content = pd_raw[field]
+                                break
+                        
+                        if not fallback_content:
+                            # Try to extract from text_blocks if partially formed
+                            if "text_blocks" in pd_raw and isinstance(pd_raw["text_blocks"], list):
+                                fallback_content = "\n\n".join(
+                                    str(block.get("content", "")) 
+                                    for block in pd_raw["text_blocks"]
+                                    if isinstance(block, dict)
+                                )
+                        
                         validated.append(PageContent(
                             page_number=page_num,
                             text_blocks=[TextBlock(
                                 block_type="paragraph",
-                                content=pd_raw.get("raw_text", "[extraction error]"),
+                                content=fallback_content or "[EXTRACTION ERROR - No recoverable content]",
                             )],
+                            raw_text=fallback_content,
                         ))
 
                 logger.info(
@@ -508,19 +685,22 @@ class MistralOCRPipeline:
                 if attempt < self.config.max_retries - 1:
                     time.sleep(self.config.retry_delay * (attempt + 1))
                 else:
-                    # Return placeholder pages for this chunk
+                    # Return full raw content pages for this chunk - NO TRUNCATION
                     logger.error(
-                        f"All attempts failed for pages {start_page}–{end_page}"
+                        f"❌ QUALITY SEVERELY DEGRADED - All structuring attempts failed for pages {start_page}–{end_page}\n"
+                        f"Returning raw OCR markdown without structure extraction"
                     )
                     placeholders = []
                     for pg in chunk:
+                        page_num = pg["page_index"] + 1
+                        full_markdown = pg["markdown"]
                         placeholders.append(PageContent(
-                            page_number=pg["page_index"] + 1,
+                            page_number=page_num,
                             text_blocks=[TextBlock(
                                 block_type="paragraph",
-                                content=pg["markdown"][:2000],
+                                content=full_markdown,  # Full content - no truncation
                             )],
-                            raw_text=pg["markdown"],
+                            raw_text=full_markdown,
                         ))
                     return placeholders
 
@@ -528,8 +708,8 @@ class MistralOCRPipeline:
     # Image extraction from Mistral OCR
     # ------------------------------------------------------------------
 
-    @staticmethod
     def _inject_ocr_images(
+        self,
         all_pages: list[PageContent],
         ocr_pages: list[dict],
     ) -> int:
@@ -565,6 +745,7 @@ class MistralOCRPipeline:
                     continue
                 best_idx = None
                 best_overlap = -1.0
+                has_bbox = image.bbox_top is not None and image.bbox_left is not None
 
                 for oi, ocr_img in enumerate(ocr_imgs):
                     if oi in used_ocr:
@@ -582,14 +763,24 @@ class MistralOCRPipeline:
                         best_overlap = overlap
                         best_idx = oi
 
-                # Accept if any positive overlap (or nearest if bbox missing)
-                if best_idx is not None and best_overlap >= 0:
-                    image.image_data = ocr_imgs[best_idx]["image_base64"]
+                # Only accept if we have positive overlap (spatial match)
+                # If no bbox (-1), skip spatial matching and let Strategy 2 handle it
+                if best_idx is not None and best_overlap > 0:
+                    image.image_data = normalise_data_uri(ocr_imgs[best_idx]["image_base64"])
                     used_ocr.add(best_idx)
                     populated += 1
                     logger.info(
                         f"Matched OCR image → page {page.page_number} "
                         f"{image.image_type} (overlap={best_overlap:.1f}%)"
+                    )
+                elif best_idx is not None and not has_bbox:
+                    # No bbox on structured image, use first available
+                    image.image_data = normalise_data_uri(ocr_imgs[best_idx]["image_base64"])
+                    used_ocr.add(best_idx)
+                    populated += 1
+                    logger.info(
+                        f"Matched OCR image → page {page.page_number} "
+                        f"{image.image_type} (no bbox, sequential match)"
                     )
 
             # --- Strategy 2: inject leftover OCR images ---
@@ -610,7 +801,7 @@ class MistralOCRPipeline:
                     bbox_left=bbox["left"],
                     bbox_width=bbox["width"],
                     bbox_height=bbox["height"],
-                    image_data=b64,
+                    image_data=normalise_data_uri(b64),
                 )
                 page.images.append(new_image)
                 populated += 1
@@ -632,6 +823,9 @@ class MistralOCRPipeline:
         Returns a DocumentStructure identical to what the Gemini pipeline returns.
         """
         start_time = time.time()
+        
+        # Store PDF path for Gemini vision mode
+        self.current_pdf_path = str(pathlib.Path(pdf_path).expanduser().resolve())
 
         # 1) Upload
         file_id = self._upload_pdf(pdf_path)
@@ -799,6 +993,12 @@ def main():
         help=f"Structuring LLM model (default: {STRUCTURING_MODEL})",
     )
     parser.add_argument(
+        "--structuring-provider",
+        choices=["mistral", "gemini"],
+        default="mistral",
+        help="LLM provider for structuring (default: mistral). Use 'gemini' for Gemini Flash with vision",
+    )
+    parser.add_argument(
         "--no-images",
         action="store_true",
         help="Skip base64 image extraction from OCR",
@@ -817,10 +1017,15 @@ def main():
 
     args = parser.parse_args()
 
+    # Auto-set model if using Gemini
+    if args.structuring_provider == "gemini" and args.structuring_model == STRUCTURING_MODEL:
+        args.structuring_model = os.environ.get("MODEL_NAME", "gemini-2.0-flash-exp")
+
     config = MistralPipelineConfig(
         output_dir=args.output_dir,
         pages_per_chunk=args.pages_per_chunk,
         structuring_model=args.structuring_model,
+        structuring_provider=args.structuring_provider,
         include_image_base64=not args.no_images,
         save_html=not args.no_html,
         temperature=args.temperature,
