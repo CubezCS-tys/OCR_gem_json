@@ -38,6 +38,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 import dotenv
+from image_utils import normalise_data_uri
 
 dotenv.load_dotenv()
 
@@ -140,6 +141,8 @@ class TextBlock(BaseModel):
     equation_number: Optional[str] = Field(default=None, description="Equation number label if present (e.g., '(1)', '(2.3)')")
     # NEW: Text direction for mixed RTL/LTR content
     text_direction: Optional[Literal["ltr", "rtl", "auto"]] = Field(default="auto", description="Text direction: ltr, rtl, or auto")
+    # NEW: Text alignment/justification
+    text_align: Optional[Literal["left", "center", "right", "justify"]] = Field(default=None, description="Text alignment: left, center, right, or justify")
     # Bounding box as percentages of page dimensions (0-100) - optional for backward compatibility
     bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage from top of page (0-100)")
     bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage from left of page (0-100)")
@@ -1223,8 +1226,9 @@ window.addEventListener('load', () => {
         parts = [f'<figure class="image-block" style="{style}" data-bbox="{image.bbox_left},{image.bbox_top},{image.bbox_width},{image.bbox_height}">']
         
         if image.image_data:
-            # We have actual image data - render as embedded image
-            parts.append(f'<img src="data:image/png;base64,{image.image_data}" '
+            # We have actual image data - normalize the data URI
+            src = normalise_data_uri(image.image_data)
+            parts.append(f'<img src="{src}" '
                         f'alt="{HTMLRenderer._escape(image.description)}" '
                         f'title="{HTMLRenderer._escape(image.description)}" />')
         else:
