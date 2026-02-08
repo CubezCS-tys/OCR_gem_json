@@ -18,6 +18,7 @@ Architecture:
 
 Usage:
     python mistral_ocr_pipeline.py <pdf_path> [--output-dir ./outputs] [--pages-per-chunk 5]
+    python mistral_ocr_pipeline.py <pdf_path> --parallel --workers 8 --pages-per-chunk 2
 """
 
 import os
@@ -29,6 +30,7 @@ import argparse
 import pathlib
 from typing import Optional
 from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from dotenv import load_dotenv
 from mistralai import Mistral
@@ -84,6 +86,8 @@ class MistralPipelineConfig:
     structuring_provider: str = "mistral"  # "mistral" or "gemini"
     include_image_base64: bool = True
     pages_per_chunk: int = 5           # Pages sent to LLM per structuring call
+    parallel: bool = False             # Enable parallel chunk processing
+    workers: int = 4                   # Number of parallel workers
     max_retries: int = 3
     retry_delay: float = 2.0
     temperature: float = 0.0          # Deterministic structuring
@@ -146,36 +150,116 @@ OCR TEXT (page 1):
 """
 
 STRUCTURING_PROMPT_TEMPLATE = """\
-You are an expert document structuring engine.
+You are an expert document structuring engine with pixel-perfect fidelity.
 
 Transform the following OCR text (pages {start_page}–{end_page}) into JSON that \
 STRICTLY follows this schema:
 
 {schema}
 
-Rules:
+CRITICAL FIDELITY RULES:
 - Output valid JSON only — no explanations, no markdown fences, no extra keys.
 - Preserve the EXACT reading order from the OCR text.
-- For each page, populate page_number, text_blocks, tables, images.
-- text_blocks must classify each element:
+
+PAGE-LEVEL EXTRACTION:
+- For each page, populate page_number, text_blocks, tables, images, lines
+- Extract separate header, footer, and page_number_text if present
+- CRITICAL: If you extract header/footer, DO NOT include that same text in text_blocks
+- Headers/footers are typically page numbers, titles, citations at top/bottom of page
+- Set page_number_position: "header-left|center|right" or "footer-left|center|right"
+- Set page dimensions: width_pts, height_pts (in PDF points if detectable)
+- Set page_direction="rtl" for Arabic/Hebrew pages, "ltr" otherwise
+- Set background_color if the page has a colored background
+
+MULTI-COLUMN LAYOUT DETECTION (CRITICAL):
+- ALWAYS check if the page has multiple columns (2-column, 3-column layouts)
+- Look for text flowing in parallel vertical sections
+- Common in: academic papers, newspapers, magazines, technical reports
+- If multi-column detected:
+    • Set has_multi_column=true
+    • Set column_count (2, 3, or more)
+    • Set column_gap (gap width in points, typically 20-40)
+    • CRITICAL: Ensure ALL pages have SAME column_count if they share the same layout style
+    • Column detection must be CONSISTENT - don't flip between 2 and 3 columns on similar pages
+- Ensure bbox_left positions distinguish columns clearly:
+    • 2 columns: column 1 (0-48%), column 2 (52-100%)
+    • 3 columns: column 1 (0-32%), column 2 (34-66%), column 3 (68-100%)
+- Reading order MUST follow column flow (top-to-bottom within each column)
+
+TEXT BLOCKS - SEMANTIC CLASSIFICATION:
+- Classify each element as:
     • "heading" (with level 1–6)
     • "paragraph"
-    • "list_item" (use list_level for nesting depth)
+    • "list_item" (use list_level for nesting depth: 1=top, 2=nested, etc.)
     • "caption"
     • "footnote"
     • "quote"
     • "code"
-    • "equation" (use LaTeX in content, set is_display_math)
-- Tables: extract headers and rows arrays. Provide bbox if discernible.
-- Images/Figures: describe with image_type, description, caption, and bbox.
-- PRESERVE numeral systems exactly (Arabic-Indic ٠١٢٣٤٥٦٧٨٩ vs Western 0123456789).
-- For RTL text set text_direction="rtl" on the text block.
-- For text alignment set text_align to "left", "center", "right", or "justify" based on visual layout.
-- For multi-column layouts set has_multi_column=true and column_count.
-- Set page_direction="rtl" for Arabic/Hebrew pages.
-- Convert any table markdown into structured headers/rows — do NOT use HTML in tables.
-- If a field is unknown, omit it or use null.
-- Ensure all JSON strings are properly escaped (quotes, backslashes).
+    • "equation" (use LaTeX in content, set is_display_math, extract equation_number if present)
+
+TEXT BLOCKS - TYPOGRAPHY & STYLING (CRITICAL FOR FIDELITY):
+- font_size: Extract font size in points if detectable from formatting
+- font_family: Extract font name if discernible (e.g., "Arial", "Times New Roman", "Amiri")
+- font_weight: Set weight (400=normal, 700=bold, or specific values 100-900)
+- line_height: Line spacing multiplier or points
+- letter_spacing, word_spacing: Character/word spacing in points if abnormal
+- text_color: Text color as hex (e.g., "#000000" for black)
+- background_color: Background color as hex if highlighted
+- text_direction: "rtl", "ltr", or "auto" for mixed content
+- text_align: "left", "center", "right", or "justify" based on visual layout
+
+TEXT BLOCKS - SPACING & INDENTATION:
+- indent_left, indent_right: Left/right margins in points or percentage
+- indent_first_line: First line indent in points
+- spacing_before, spacing_after: Vertical spacing in points
+- padding, margin: CSS-style values if special spacing
+
+TEXT BLOCKS - POSITIONING & TRANSFORMS:
+- rotation: Rotation angle in degrees for rotated text
+- z_index: Stacking order for overlapping elements (higher = on top)
+- bbox_top, bbox_left, bbox_width, bbox_height: Position as percentage (0-100)
+
+TEXT BLOCKS - RICH TEXT (CHARACTER-LEVEL STYLING):
+- spans: Array of TextSpan objects for mixed inline formatting within a block
+- Each span has: text, bold, italic, underline, strikethrough, superscript, subscript
+- Each span can have: font_size, font_family, text_color, background_color
+
+TABLES - ENHANCED FIDELITY:
+- Extract headers and rows arrays
+- column_widths: Array of column width percentages [30.0, 50.0, 20.0]
+- row_heights: Array of row height percentages if significant
+- border_style: "solid", "dashed", "dotted", "double", or "none"
+- border_width: Border thickness in points (default 1.0)
+- border_color: Border color as hex (default "#e0e0e0")
+- cell_padding: Cell padding in points (default 8.0)
+- background_color: Table background color as hex
+- bbox_top, bbox_left, bbox_width, bbox_height: Position as percentage
+
+IMAGES/FIGURES - ENHANCED PROPERTIES:
+- image_type: "chart", "graph", "diagram", "figure", "photo", "logo", "illustration", "other"
+- description: Detailed alt text
+- caption: Figure caption if present
+- CRITICAL: Avoid duplicate images - if the same image appears multiple times, only extract it once
+- Use unique bbox positions to distinguish different images
+- rotation: Rotation angle in degrees
+- z_index: Stacking order
+- width_pixels, height_pixels: Actual pixel dimensions if detectable
+- dpi: Image resolution/DPI if detectable
+- bbox_top, bbox_left, bbox_width, bbox_height: Position as percentage (0-100)
+
+LINES/SEPARATORS:
+- lines: Array of line objects for horizontal rules, borders, separators
+- Each line has: x1, y1, x2, y2 (coordinates as %), width (points), color (hex), style
+
+SPECIAL CONTENT RULES:
+- PRESERVE numeral systems exactly (Arabic-Indic ٠١٢٣٤٥٦٧٨٩ vs Western 0123456789)
+- EQUATIONS: Use LaTeX syntax, set is_display_math, extract equation_number
+- Convert any table markdown into structured headers/rows — do NOT use HTML
+- If a field is unknown or not detectable, omit it or use null
+- Ensure all JSON strings are properly escaped (quotes, backslashes)
+
+FIDELITY PRIORITY:
+Maximize extraction of typographic details (fonts, sizes, colors, spacing) for pixel-perfect reproduction.
 
 OCR TEXT:
 \"\"\"
@@ -828,6 +912,49 @@ class MistralOCRPipeline:
 
         return populated
 
+    def _structure_pages_parallel(
+        self, ocr_pages: list[dict], total_pages: int, chunk_size: int
+    ) -> list[PageContent]:
+        """
+        Structure pages in parallel using ThreadPoolExecutor.
+        
+        Returns a list of PageContent objects in page order.
+        """
+        # Build list of chunk ranges
+        chunks = []
+        for chunk_start in range(0, total_pages, chunk_size):
+            chunk_end = min(chunk_start + chunk_size, total_pages)
+            chunks.append((chunk_start, chunk_end))
+        
+        all_pages: list[PageContent] = []
+        
+        # Process chunks in parallel
+        with ThreadPoolExecutor(max_workers=self.config.workers) as executor:
+            # Submit all tasks
+            future_to_chunk = {
+                executor.submit(self._structure_pages, ocr_pages, start, end): (start, end)
+                for start, end in chunks
+            }
+            
+            # Collect results as they complete
+            completed = 0
+            for future in as_completed(future_to_chunk):
+                chunk_start, chunk_end = future_to_chunk[future]
+                try:
+                    pages = future.result()
+                    all_pages.extend(pages)
+                    completed += 1
+                    progress = (completed / len(chunks)) * 100
+                    logger.info(
+                        f"✓ Chunk [{chunk_start + 1}–{chunk_end}] complete "
+                        f"({completed}/{len(chunks)}, {progress:.0f}%)"
+                    )
+                except Exception as e:
+                    logger.error(f"✗ Chunk [{chunk_start + 1}–{chunk_end}] failed: {e}")
+                    raise
+        
+        return all_pages
+
     # ------------------------------------------------------------------
     # Main processing
     # ------------------------------------------------------------------
@@ -871,16 +998,22 @@ class MistralOCRPipeline:
         all_pages: list[PageContent] = []
         chunk_size = self.config.pages_per_chunk
 
-        for chunk_start in range(0, total_pages, chunk_size):
-            chunk_end = min(chunk_start + chunk_size, total_pages)
-            progress = min(100.0, (chunk_end / total_pages) * 100)
-            logger.info(
-                f"Structuring chunk "
-                f"[{chunk_start + 1}–{chunk_end}] of {total_pages}  "
-                f"({progress:.0f}%)"
-            )
-            pages = self._structure_pages(ocr_pages, chunk_start, chunk_end)
-            all_pages.extend(pages)
+        if self.config.parallel:
+            # Parallel processing with workers
+            logger.info(f"🚀 Using {self.config.workers} parallel workers for structuring")
+            all_pages = self._structure_pages_parallel(ocr_pages, total_pages, chunk_size)
+        else:
+            # Sequential processing
+            for chunk_start in range(0, total_pages, chunk_size):
+                chunk_end = min(chunk_start + chunk_size, total_pages)
+                progress = min(100.0, (chunk_end / total_pages) * 100)
+                logger.info(
+                    f"Structuring chunk "
+                    f"[{chunk_start + 1}–{chunk_end}] of {total_pages}  "
+                    f"({progress:.0f}%)"
+                )
+                pages = self._structure_pages(ocr_pages, chunk_start, chunk_end)
+                all_pages.extend(pages)
 
         # Ensure correct page numbering and sort
         all_pages.sort(key=lambda p: p.page_number)
@@ -1030,6 +1163,17 @@ def main():
         default=0.0,
         help="LLM temperature for structuring (default: 0.0)",
     )
+    parser.add_argument(
+        "--parallel", "-p",
+        action="store_true",
+        help="Enable parallel processing of chunks",
+    )
+    parser.add_argument(
+        "--workers", "-w",
+        type=int,
+        default=4,
+        help="Number of parallel workers (default: 4)",
+    )
 
     args = parser.parse_args()
 
@@ -1045,6 +1189,8 @@ def main():
         include_image_base64=not args.no_images,
         save_html=not args.no_html,
         temperature=args.temperature,
+        parallel=args.parallel,
+        workers=args.workers,
     )
 
     pipeline = MistralOCRPipeline(config)

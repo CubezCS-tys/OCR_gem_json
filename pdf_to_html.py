@@ -77,7 +77,7 @@ class ProcessingConfig:
     pages_per_chunk: int = 10  # Pages to process per API call (for chunked processing)
     use_chunked_processing: bool = True  # Enable chunked processing for large docs
     extract_images: bool = True  # Extract charts/graphs/figures as actual images
-    image_dpi: int = 150  # DPI for rendering pages when extracting images
+    image_dpi: int = 300  # DPI for rendering pages when extracting images (increased for better fidelity)
     request_timeout: int = 300  # Timeout for API requests in seconds (5 minutes)
     experimental_gemini_html: bool = False  # Also request HTML directly from Gemini for comparison
     
@@ -106,48 +106,85 @@ class ProcessingConfig:
 # PYDANTIC SCHEMAS FOR STRUCTURED OUTPUT
 # =============================================================================
 
+class TextSpan(BaseModel):
+    """Character-level styled text span for rich inline formatting."""
+    text: str = Field(description="The text content")
+    bold: bool = Field(default=False, description="Bold text")
+    italic: bool = Field(default=False, description="Italic text")
+    underline: bool = Field(default=False, description="Underlined text")
+    strikethrough: bool = Field(default=False, description="Strikethrough text")
+    superscript: bool = Field(default=False, description="Superscript text")
+    subscript: bool = Field(default=False, description="Subscript text")
+    font_size: Optional[float] = Field(default=None, description="Font size in points")
+    font_family: Optional[str] = Field(default=None, description="Font family name")
+    text_color: Optional[str] = Field(default=None, description="Text color as hex (#000000)")
+    background_color: Optional[str] = Field(default=None, description="Background color as hex")
+
+
 class TableCell(BaseModel):
-    """Represents a cell in a table."""
+    """Represents a cell in a table with full styling."""
     content: str = Field(description="Text content of the cell")
     row_span: int = Field(default=1, description="Number of rows this cell spans")
     col_span: int = Field(default=1, description="Number of columns this cell spans")
     is_header: bool = Field(default=False, description="Whether this is a header cell")
+    width_percent: Optional[float] = Field(default=None, description="Cell width as percentage (0-100)")
+    text_align: Optional[Literal["left", "center", "right", "justify"]] = Field(default=None, description="Horizontal alignment")
+    vertical_align: Optional[Literal["top", "middle", "bottom"]] = Field(default=None, description="Vertical alignment")
+    background_color: Optional[str] = Field(default=None, description="Background color as hex")
+    text_color: Optional[str] = Field(default=None, description="Text color as hex")
+    border_width: Optional[float] = Field(default=None, description="Border width in points")
+    border_color: Optional[str] = Field(default=None, description="Border color as hex")
 
 
 class Table(BaseModel):
     """Represents a table extracted from the document."""
     caption: Optional[str] = Field(default=None, description="Table caption if present")
-    headers: list[str] = Field(default_factory=list, description="Column headers")
-    rows: list[list[str]] = Field(default_factory=list, description="Table rows with cell contents")
-    # Bounding box as percentages of page dimensions (0-100) - for proper ordering
-    bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage from top of page (0-100)")
-    bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage from left of page (0-100)")
-    bbox_width: Optional[float] = Field(default=None, description="Width as percentage of page width (0-100)")
-    bbox_height: Optional[float] = Field(default=None, description="Height as percentage of page height (0-100)")
+    headers: list[TableCell] = Field(default_factory=list, description="Column headers with styling")
+    rows: list[list[TableCell]] = Field(default_factory=list, description="Table rows with styled cells")
+    # Styling properties (let browser handle layout)
+    border_style: Optional[Literal["none", "solid", "dashed", "dotted", "double"]] = Field(default="solid", description="Border style")
+    border_color: Optional[str] = Field(default="#e0e0e0", description="Border color as hex")
+    background_color: Optional[str] = Field(default=None, description="Table background color")
+    # Flow-based positioning
+    reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow")
+    column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
 
 
 class TextBlock(BaseModel):
-    """Represents a block of text with semantic meaning."""
+    """Represents a block of text with semantic meaning and rich formatting."""
     block_type: Literal["heading", "paragraph", "list_item", "caption", "footnote", "quote", "code", "equation"] = Field(
         description="Semantic type of the text block"
     )
     level: Optional[int] = Field(default=None, description="Heading level (1-6) if block_type is heading")
     content: str = Field(description="The text content (for equations, use LaTeX syntax)")
+    # Rich text support
+    spans: Optional[list[TextSpan]] = Field(default=None, description="Character-level spans for rich inline formatting")
     style: Optional[str] = Field(default=None, description="CSS style hints (e.g., 'bold', 'italic', 'centered')")
+    # Font and typography
+    font_size: Optional[float] = Field(default=None, description="Font size in points")
+    font_family: Optional[str] = Field(default=None, description="Font family name")
+    font_weight: Optional[int] = Field(default=400, description="Font weight (100-900, 400=normal, 700=bold)")
+    line_height: Optional[float] = Field(default=None, description="Line height multiplier (e.g., 1.5)")
+    letter_spacing: Optional[float] = Field(default=None, description="Letter spacing in ems")
+    # Colors
+    text_color: Optional[str] = Field(default=None, description="Text color as hex (#000000)")
+    background_color: Optional[str] = Field(default=None, description="Background color as hex")
+    # Spacing and indentation (in relative units)
+    indent_left: Optional[float] = Field(default=None, description="Left indent in ems or rem")
+    indent_right: Optional[float] = Field(default=None, description="Right indent in ems or rem")
+    indent_first_line: Optional[float] = Field(default=None, description="First line indent in ems")
+    spacing_before: Optional[float] = Field(default=None, description="Margin before block in ems")
+    spacing_after: Optional[float] = Field(default=None, description="Margin after block in ems")
+    # Math-specific
     is_display_math: Optional[bool] = Field(default=False, description="For equations: True for display mode (\\[...\\]), False for inline (\\(...\\))")
-    # NEW: List hierarchy support
-    list_level: Optional[int] = Field(default=1, description="Nesting level for list items (1=top level, 2=nested, etc.)")
-    # NEW: Equation numbering support
     equation_number: Optional[str] = Field(default=None, description="Equation number label if present (e.g., '(1)', '(2.3)')")
-    # NEW: Text direction for mixed RTL/LTR content
+    # List hierarchy
+    list_level: Optional[int] = Field(default=1, description="Nesting level for list items (1=top level, 2=nested, etc.)")
+    # Flow-based positioning and ordering
     text_direction: Optional[Literal["ltr", "rtl", "auto"]] = Field(default="auto", description="Text direction: ltr, rtl, or auto")
-    # NEW: Text alignment/justification
     text_align: Optional[Literal["left", "center", "right", "justify"]] = Field(default=None, description="Text alignment: left, center, right, or justify")
-    # Bounding box as percentages of page dimensions (0-100) - optional for backward compatibility
-    bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage from top of page (0-100)")
-    bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage from left of page (0-100)")
-    bbox_width: Optional[float] = Field(default=None, description="Width as percentage of page width (0-100)")
-    bbox_height: Optional[float] = Field(default=None, description="Height as percentage of page height (0-100)")
+    reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow (1, 2, 3...)")
+    column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
 
 
 class Image(BaseModel):
@@ -157,28 +194,47 @@ class Image(BaseModel):
     )
     description: str = Field(description="Description or alt text for the image")
     caption: Optional[str] = Field(default=None, description="Image caption if present")
-    # Bounding box as percentages of page dimensions (0-100)
-    bbox_top: float = Field(description="Top edge of image as percentage from top of page (0-100)")
-    bbox_left: float = Field(description="Left edge of image as percentage from left of page (0-100)")
-    bbox_width: float = Field(description="Width of image as percentage of page width (0-100)")
-    bbox_height: float = Field(description="Height of image as percentage of page height (0-100)")
+    # Flow-based positioning
+    reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow")
+    column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
+    # Alignment within flow
+    alignment: Optional[Literal["left", "center", "right", "full-width"]] = Field(default="center", description="Horizontal alignment within text flow")
+    # Actual dimensions
+    width_pixels: Optional[int] = Field(default=None, description="Actual width in pixels")
+    height_pixels: Optional[int] = Field(default=None, description="Actual height in pixels")
+    # No bbox - images flow naturally in document
     # Runtime field for extracted image data (not from Gemini)
     image_data: Optional[str] = Field(default=None, description="Base64 encoded image data (populated at runtime)")
 
 
 class PageContent(BaseModel):
-    """Structured content extracted from a single page."""
+    """Structured content extracted from a single page with full fidelity."""
     page_number: int = Field(description="1-based page number")
-    header: Optional[str] = Field(default=None, description="Header text from the page (e.g., page numbers, chapter titles)")
-    footer: Optional[str] = Field(default=None, description="Footer text from the page (e.g., page numbers, citations)")
+    # Separate header components for robust rendering
+    header: Optional[str] = Field(default=None, description="Header text from the page (e.g., chapter titles)")
+    footer: Optional[str] = Field(default=None, description="Footer text from the page (e.g., citations)")
+    page_number_text: Optional[str] = Field(default=None, description="Explicit page number as it appears in document (separate from header/footer)")
+    page_number_position: Optional[Literal["header-left", "header-center", "header-right", "footer-left", "footer-center", "footer-right"]] = Field(
+        default=None, description="Position of page number on the page"
+    )
+    # Page dimensions for precise rendering
+    width_pts: Optional[float] = Field(default=None, description="Page width in PDF points (1/72 inch)")
+    height_pts: Optional[float] = Field(default=None, description="Page height in PDF points")
+    # Content
     text_blocks: list[TextBlock] = Field(default_factory=list, description="Ordered list of text blocks")
     tables: list[Table] = Field(default_factory=list, description="Tables found on this page")
     images: list[Image] = Field(default_factory=list, description="Images/figures found on this page")
     raw_text: Optional[str] = Field(default=None, description="Raw OCR text for the page")
+    # Layout properties
     has_multi_column: bool = Field(default=False, description="Whether the page has multi-column layout")
     column_count: Optional[int] = Field(default=None, description="Number of columns if multi-column (2, 3, etc.)")
+    column_gap: Optional[float] = Field(default=None, description="Gap between columns in points or percentage")
     reading_order_notes: Optional[str] = Field(default=None, description="Notes about reading order if complex")
-    # NEW: Primary text direction for the page
+    # Appearance
+    background_color: Optional[str] = Field(default=None, description="Page background color as hex")
+    background_image: Optional[str] = Field(default=None, description="Background image as base64 data URI")
+    watermark: Optional[str] = Field(default=None, description="Watermark text if present")
+    # Text direction
     page_direction: Optional[Literal["ltr", "rtl"]] = Field(default="ltr", description="Primary text direction: ltr or rtl")
 
 
@@ -278,8 +334,15 @@ class HTMLRenderer:
         return rtl_ratio >= threshold
     
     @staticmethod
-    def render(doc: DocumentStructure, include_styles: bool = True) -> str:
-        """Render the structured document as HTML."""
+    def render(doc: DocumentStructure, 
+               include_styles: bool = True) -> str:
+        """
+        Render the structured document as HTML using natural flow layout.
+        
+        Args:
+            doc: The document structure to render
+            include_styles: Whether to include CSS styles
+        """
         parts = []
         
         # Determine document direction
@@ -394,14 +457,15 @@ window.addEventListener('load', () => {
     
     @staticmethod
     def _get_styles(is_rtl: bool = False) -> str:
-        """Return CSS styles for the document."""
+        """Return CSS styles for flow-based document rendering."""
         # RTL-specific font stack
         if is_rtl:
             font_family = "'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Traditional Arabic', 'Arabic Typesetting', 'Segoe UI', Tahoma, sans-serif"
         else:
             font_family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
         
-        return f"""<style>
+        # Base styles
+        base_styles = f"""<style>
     @import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
     
     :root {{
@@ -443,6 +507,23 @@ window.addEventListener('load', () => {
         border-bottom: none;
     }}
     
+    /* Multi-column layout support */
+    .page.multi-column {{
+        column-gap: 2rem;
+    }}
+    .page.two-column {{ columns: 2; }}
+    .page.three-column {{ columns: 3; }}
+    
+    /* Column breaks */
+    .column-break {{
+        break-after: column;
+        column-break-after: always;
+    }}"""
+        
+        # Continue with common styles
+        common_styles = f"""
+    
+    /* Page header/footer components */
     .page-header {{
         font-size: 0.75rem;
         color: #888;
@@ -453,19 +534,64 @@ window.addEventListener('load', () => {
         break-inside: avoid;
         column-break-inside: avoid;
         page-break-inside: avoid;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }}
+    
+    .page-header-left {{
+        text-align: left;
+        flex: 1;
+    }}
+    
+    .page-header-center {{
+        text-align: center;
+        flex: 1;
+    }}
+    
+    .page-header-right {{
+        text-align: right;
+        flex: 1;
     }}
 
     .page-footer {{
         font-size: 0.75rem;
         color: #888;
-        text-align: center;
         margin-top: 20px;
         padding-top: 10px;
         border-top: 1px solid var(--border-color);
         break-inside: avoid;
         column-break-inside: avoid;
         page-break-inside: avoid;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }}
+    
+    .page-footer-left {{
+        text-align: left;
+        flex: 1;
+    }}
+    
+    .page-footer-center {{
+        text-align: center;
+        flex: 1;
+    }}
+    
+    .page-footer-right {{
+        text-align: right;
+        flex: 1;
+    }}
+    
+    .page-number {{
+        font-weight: 500;
+        color: #666;
+    }}"""
+        
+        base_styles += common_styles
+        
+        # Rest of the styles (RTL, text formatting, etc.)
+        rest_styles = """
     
     /* RTL Support */
     [dir="rtl"] {{
@@ -510,13 +636,12 @@ window.addEventListener('load', () => {
     .rtl {{
         direction: rtl;
         unicode-bidi: isolate;
-    }}
-    
-    /* Force RTL for specific content */
-    .rtl {{
-        direction: rtl;
-        unicode-bidi: isolate;
-    }}
+    }}"""
+        
+        base_styles += rest_styles
+        
+        # Text styling and layout
+        styling = """
     
     /* English page styling */
     .english-text {{
@@ -548,6 +673,9 @@ window.addEventListener('load', () => {
     .bold {{ font-weight: bold; }}
     .italic {{ font-style: italic; }}
     .underline {{ text-decoration: underline; }}
+    .strikethrough {{ text-decoration: line-through; }}
+    .superscript {{ vertical-align: super; font-size: 0.75em; }}
+    .subscript {{ vertical-align: sub; font-size: 0.75em; }}
     .centered {{ 
         text-align: center !important;
         display: block;
@@ -601,6 +729,12 @@ window.addEventListener('load', () => {
         margin: 0.5rem 0;
         text-align: center;
         font-weight: 500;
+    }}"""
+        
+        base_styles += styling
+        
+        # Continue with remaining styles from the original method
+        return base_styles + """
     }}
     
     figure {{
@@ -632,11 +766,12 @@ window.addEventListener('load', () => {
     
     figure.image-block img {{
         display: block;
-        height: auto;
-        max-width: 100%;
+        width: 100%;  /* Fill the figure container */
+        height: auto;  /* Preserve aspect ratio */
         margin: 0 auto;
         image-rendering: -webkit-optimize-contrast; /* Better rendering for crisp images */
         image-rendering: crisp-edges;
+        object-fit: contain;  /* Never distort, always maintain aspect ratio */
     }}
     
     figure.image-block figcaption {{
@@ -740,34 +875,56 @@ window.addEventListener('load', () => {
         font-style: italic;
     }}
     
-    /* Multi-column layout */
+    /* Multi-column layout - fallback classes (dynamic styles preferred) */
     .has-multi-column {{
         column-count: 2;
         column-gap: 2rem;
         column-rule: 1px solid #e0e0e0;
+        column-fill: balance; /* Balance content across columns */
     }}
 
     .has-multi-column-3 {{
         column-count: 3;
         column-gap: 2rem;
         column-rule: 1px solid #e0e0e0;
+        column-fill: balance;
+    }}
+    
+    .has-multi-column-4 {{
+        column-count: 4;
+        column-gap: 1.5rem;
+        column-rule: 1px solid #e0e0e0;
+        column-fill: balance;
     }}
     
     /* For RTL multi-column, use column-fill and direction */
-    [dir="rtl"] .has-multi-column {{
+    [dir="rtl"] .has-multi-column,
+    [dir="rtl"] .has-multi-column-3,
+    [dir="rtl"] .has-multi-column-4 {{
         direction: rtl;
+        column-fill: auto;
     }}
     
     @media print {{
         body {{ background: white; padding: 0; }}
         .document-container {{ box-shadow: none; }}
         .page {{ padding: 20px; }}
+        /* Preserve columns in print */
+        .has-multi-column, .has-multi-column-3, .has-multi-column-4 {{
+            break-inside: avoid;
+        }}
+    }}
+    
+    @media (max-width: 900px) {{
+        /* Reduce to 2 columns on tablets */
+        .has-multi-column-3, .has-multi-column-4 {{ column-count: 2; }}
     }}
     
     @media (max-width: 600px) {{
+        /* Single column on mobile */
         body {{ padding: 10px; }}
         .page {{ padding: 20px; }}
-        .has-multi-column, .has-multi-column-3 {{ column-count: 1; }}
+        .has-multi-column, .has-multi-column-3, .has-multi-column-4 {{ column-count: 1; }}
     }}
 </style>"""
     
@@ -781,21 +938,184 @@ window.addEventListener('load', () => {
                 .replace('"', "&quot;"))
     
     @staticmethod
+    def _render_page_header(page: PageContent) -> str:
+        """Render robust page header with separate components for header text and page number."""
+        if not page.header and not page.page_number_text:
+            # Still show page number as fallback
+            return f'<div class="page-header"><div class="page-header-right"><span class="page-number">Page {page.page_number}</span></div></div>'
+        
+        parts = ['<div class="page-header">']
+        
+        # Determine where page number should go
+        position = page.page_number_position if hasattr(page, 'page_number_position') and page.page_number_position else None
+        
+        # Left section
+        parts.append('<div class="page-header-left">')
+        if position == "header-left" and page.page_number_text:
+            parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        parts.append('</div>')
+        
+        # Center section
+        parts.append('<div class="page-header-center">')
+        if position == "header-center" and page.page_number_text:
+            parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        elif page.header:
+            parts.append(HTMLRenderer._escape(page.header))
+        parts.append('</div>')
+        
+        # Right section
+        parts.append('<div class="page-header-right">')
+        if position == "header-right" and page.page_number_text:
+            parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        elif not page.page_number_text:
+            # Default: show numeric page number on right
+            parts.append(f'<span class="page-number">Page {page.page_number}</span>')
+        parts.append('</div>')
+        
+        parts.append('</div>')
+        return '\n'.join(parts)
+    
+    @staticmethod
+    def _render_page_footer(page: PageContent) -> str:
+        """Render robust page footer with separate components."""
+        if not page.footer and not (hasattr(page, 'page_number_position') and page.page_number_position and 'footer' in page.page_number_position):
+            return ""
+        
+        parts = ['<div class="page-footer">']
+        
+        # Determine where page number should go
+        position = page.page_number_position if hasattr(page, 'page_number_position') and page.page_number_position else None
+        
+        # Left section
+        parts.append('<div class="page-footer-left">')
+        if position == "footer-left" and page.page_number_text:
+            parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        parts.append('</div>')
+        
+        # Center section
+        parts.append('<div class="page-footer-center">')
+        if position == "footer-center" and page.page_number_text:
+            parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        elif page.footer:
+            parts.append(HTMLRenderer._escape(page.footer))
+        parts.append('</div>')
+        
+        # Right section
+        parts.append('<div class="page-footer-right">')
+        if position == "footer-right" and page.page_number_text:
+            parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        parts.append('</div>')
+        
+        parts.append('</div>')
+        return '\n'.join(parts)
+    
+    @staticmethod
     def _deduplicate_header_footer(page: PageContent) -> PageContent:
         """Remove header/footer text from text_blocks if they appear there."""
+        if not page.text_blocks:
+            return page
+        
+        # Build list of strings to remove (header, footer, page number text)
+        to_remove = []
         if page.header:
-            # Remove any text block that exactly matches the header
-            page.text_blocks = [b for b in page.text_blocks if b.content.strip() != page.header.strip()]
-        
+            to_remove.append(page.header.strip())
         if page.footer:
-            # Remove any text block that exactly matches the footer
-            page.text_blocks = [b for b in page.text_blocks if b.content.strip() != page.footer.strip()]
+            to_remove.append(page.footer.strip())
+        if page.page_number_text:
+            to_remove.append(page.page_number_text.strip())
         
+        if not to_remove:
+            return page
+        
+        # Remove text blocks that match or are contained in header/footer
+        filtered_blocks = []
+        for block in page.text_blocks:
+            content = block.content.strip()
+            should_keep = True
+            
+            for remove_str in to_remove:
+                # Exact match
+                if content == remove_str:
+                    should_keep = False
+                    break
+                # Block content is substring of header/footer (partial match)
+                elif remove_str and content in remove_str and len(content) > 10:
+                    should_keep = False
+                    break
+                # Header/footer is substring of block content
+                elif remove_str and remove_str in content and len(remove_str) > 10:
+                    should_keep = False
+                    break
+                # Check for similarity (80%+ similar)
+                elif remove_str and content and HTMLRenderer._similarity(content, remove_str) > 0.8:
+                    should_keep = False
+                    break
+            
+            if should_keep:
+                filtered_blocks.append(block)
+        
+        page.text_blocks = filtered_blocks
+        return page
+    
+    @staticmethod
+    def _similarity(str1: str, str2: str) -> float:
+        """Calculate similarity ratio between two strings (0.0 to 1.0)."""
+        if not str1 or not str2:
+            return 0.0
+        
+        # Simple character-based similarity
+        set1 = set(str1.lower())
+        set2 = set(str2.lower())
+        
+        if not set1 or not set2:
+            return 0.0
+        
+        intersection = len(set1 & set2)
+        union = len(set1 | set2)
+        
+        return intersection / union if union > 0 else 0.0
+    
+    @staticmethod
+    def _deduplicate_images(page: PageContent) -> PageContent:
+        """Remove duplicate images from the page based on position and description."""
+        if not page.images or len(page.images) <= 1:
+            return page
+        
+        unique_images = []
+        seen_positions = set()
+        seen_descriptions = set()
+        
+        for img in page.images:
+            # Create position key (rounded to 1 decimal place)
+            pos_key = (
+                round(img.bbox_top, 1) if img.bbox_top else 0,
+                round(img.bbox_left, 1) if img.bbox_left else 0,
+                round(img.bbox_width, 1) if img.bbox_width else 0,
+                round(img.bbox_height, 1) if img.bbox_height else 0
+            )
+            
+            # Check if this is a duplicate
+            is_duplicate = False
+            
+            # Same position
+            if pos_key in seen_positions and pos_key != (0, 0, 0, 0):
+                is_duplicate = True
+            # Same description (likely duplicate)
+            elif img.description in seen_descriptions and "extracted by Mistral OCR" not in img.description:
+                is_duplicate = True
+            
+            if not is_duplicate:
+                unique_images.append(img)
+                seen_positions.add(pos_key)
+                if img.description:
+                    seen_descriptions.add(img.description)
+        
+        page.images = unique_images
         return page
     
     @staticmethod
     def _render_page(page: PageContent, is_rtl: bool = False) -> str:
-        """Render a single page to HTML."""
+        """Render a single page to HTML using natural flow layout."""
         # Remove duplicate header/footer from text_blocks
         page = HTMLRenderer._deduplicate_header_footer(page)
         
@@ -808,91 +1128,96 @@ window.addEventListener('load', () => {
         is_english_page = HTMLRenderer._detect_english_content(page_text)
 
         # Override RTL for English pages
-        page_dir = "ltr" if is_english_page else ("rtl" if is_rtl else "ltr")
+        page_dir = "ltr" if is_english_page else (page.page_direction if hasattr(page, 'page_direction') else ("rtl" if is_rtl else "ltr"))
 
         # Add multi-column class to content, not page container
         if page.has_multi_column:
-            content_class += " has-multi-column"
+            if page.column_count and page.column_count == 4:
+                content_class += " has-multi-column-4"
+            elif page.column_count and page.column_count == 3:
+                content_class += " has-multi-column-3"
+            else:
+                content_class += " has-multi-column"
+            
+            # Add dynamic column styling
+            if page.column_count and page.column_count > 1:
+                column_styles = f"column-count: {page.column_count};"
+                if page.column_gap:
+                    column_styles += f" column-gap: {page.column_gap}pt;"
+                # Store for later use in content div
+                page._column_styles = column_styles
+            else:
+                page._column_styles = None
 
         # Add english-text class for English pages
         if is_english_page:
             page_class += " english-text"
+        
+        # Build page style with dimensions if available
+        page_style = "position: relative;"
+        if page.width_pts and page.height_pts:
+            page_style += f" width: {page.width_pts}pt; height: {page.height_pts}pt;"
+        if page.background_color:
+            page_style += f" background-color: {page.background_color};"
 
-        parts.append(f'<div class="{page_class}" id="page-{page.page_number}" style="position: relative;" dir="{page_dir}">')
+        parts.append(f'<div class="{page_class}" id="page-{page.page_number}" style="{page_style}" dir="{page_dir}">')
 
-        # Display actual header from PDF if available, otherwise show absolute page number
-        if page.header:
-            parts.append(f'<div class="page-header">{HTMLRenderer._escape(page.header)}</div>')
-        else:
-            parts.append(f'<div class="page-header">Page {page.page_number}</div>')
+        # Render robust header with page number support
+        header_html = HTMLRenderer._render_page_header(page)
+        if header_html:
+            parts.append(header_html)
 
         # Wrap content in a container with multi-column class if needed
-        parts.append(f'<div class="{content_class}">')
+        content_style = ""
+        if hasattr(page, '_column_styles') and page._column_styles:
+            content_style = f' style="{page._column_styles}"'
+        parts.append(f'<div class="{content_class}"{content_style}>')
         
-        # Combine all elements with bbox positions for proper ordering
-        # Sort by position to get correct reading flow
+        # Combine all elements and sort by reading_order and column_number
         elements = []
-        insertion_order = 0
+        fallback_order = 0
         
-        # Add text blocks with their positions
+        # Add text blocks
         for block in page.text_blocks:
-            y_pos = block.bbox_top if block.bbox_top is not None else (50 + insertion_order * 0.1)
-            x_pos = block.bbox_left if block.bbox_left is not None else 0
             elements.append({
                 'type': 'text',
-                'y': y_pos,
-                'x': x_pos,
-                'order': insertion_order,
+                'column': getattr(block, 'column_number', None) or 1,
+                'order': getattr(block, 'reading_order', None) or fallback_order,
                 'content': block
             })
-            insertion_order += 1
+            fallback_order += 1
         
-        # Add tables with their positions
+        # Add tables
         for table in page.tables:
-            y_pos = table.bbox_top if table.bbox_top is not None else (50 + insertion_order * 0.1)
-            x_pos = table.bbox_left if table.bbox_left is not None else 0
             elements.append({
                 'type': 'table',
-                'y': y_pos,
-                'x': x_pos,
-                'order': insertion_order,
+                'column': getattr(table, 'column_number', None) or 1,
+                'order': getattr(table, 'reading_order', None) or fallback_order,
                 'content': table
             })
-            insertion_order += 1
+            fallback_order += 1
         
-        # Add images with their positions
+        # Add images
         for image in page.images:
-            y_pos = image.bbox_top if image.bbox_top is not None else (50 + insertion_order * 0.1)
-            x_pos = image.bbox_left if image.bbox_left is not None else 0
             elements.append({
                 'type': 'image',
-                'y': y_pos,
-                'x': x_pos,
-                'order': insertion_order,
+                'column': getattr(image, 'column_number', None) or 1,
+                'order': getattr(image, 'reading_order', None) or fallback_order,
                 'content': image
             })
-            insertion_order += 1
+            fallback_order += 1
         
-        # Sort by position for correct reading flow
-        # For multi-column: group by column (x), then sort by y within column
-        # For single column: just sort by y, then x
+        # Sort by column (respecting RTL), then reading order
         if page.has_multi_column and page.column_count and page.column_count > 1:
-            # Multi-column: sort by column then y-position
-            column_width = 100.0 / page.column_count
-            
-            def get_column(x_pos: float) -> int:
-                """Determine column based on x position."""
-                col = int(x_pos / column_width)
-                return min(max(col, 0), page.column_count - 1)
-            
-            # For RTL (Arabic), rightmost column comes first
-            if is_rtl:
-                elements.sort(key=lambda e: (-(get_column(e['x'])), e['y'], e['order']))
+            # For RTL: higher column numbers come first
+            if page_dir == "rtl" and not is_english_page:
+                elements.sort(key=lambda e: (-e['column'], e['order']))
             else:
-                elements.sort(key=lambda e: (get_column(e['x']), e['y'], e['order']))
+                # For LTR: lower column numbers come first
+                elements.sort(key=lambda e: (e['column'], e['order']))
         else:
-            # Single column: sort top to bottom, left to right
-            elements.sort(key=lambda e: (e['y'], e['x'], e['order']))
+            # Single column: just use reading order
+            elements.sort(key=lambda e: e['order'])
         
         # Render elements in order, grouping consecutive list items
         footnotes = []  # Collect footnotes for end of page
@@ -929,7 +1254,7 @@ window.addEventListener('load', () => {
                 parts.append(HTMLRenderer._render_table(element['content']))
                 i += 1
             elif element['type'] == 'image':
-                parts.append(HTMLRenderer._render_image(element['content'], page))
+                parts.append(HTMLRenderer._render_image(element['content']))
                 i += 1
             else:
                 i += 1
@@ -944,11 +1269,10 @@ window.addEventListener('load', () => {
         
         parts.append('</div>')  # Close page-content
         
-        # Display actual footer from PDF if available
-        if page.footer:
-            parts.append(f'<div class="page-footer">{HTMLRenderer._escape(page.footer)}</div>')
-        
-        # Reading order notes removed - no longer needed for single-column flow
+        # Render robust footer
+        footer_html = HTMLRenderer._render_page_footer(page)
+        if footer_html:
+            parts.append(footer_html)
         
         parts.append("</div>")
         return "\n".join(parts)
@@ -1046,53 +1370,123 @@ window.addEventListener('load', () => {
         return cleaned, arabic_caption
     
     @staticmethod
+    def _render_text_spans(spans: list) -> str:
+        """Render a list of TextSpan objects as HTML with inline formatting."""
+        parts = []
+        for span in spans:
+            text = HTMLRenderer._escape(span.text)
+            
+            # Build inline styles for this span
+            styles = []
+            if span.font_size:
+                styles.append(f"font-size: {span.font_size}pt")
+            if span.font_family:
+                styles.append(f"font-family: {span.font_family}")
+            if span.text_color:
+                styles.append(f"color: {span.text_color}")
+            if span.background_color:
+                styles.append(f"background-color: {span.background_color}")
+            
+            # Build classes for styling
+            classes = []
+            if span.bold:
+                classes.append("bold")
+            if span.italic:
+                classes.append("italic")
+            if span.underline:
+                classes.append("underline")
+            if span.strikethrough:
+                classes.append("strikethrough")
+            
+            # Handle superscript/subscript
+            if span.superscript:
+                text = f'<sup>{text}</sup>'
+            elif span.subscript:
+                text = f'<sub>{text}</sub>'
+            
+            # Wrap in span if we have styles or classes
+            if styles or classes:
+                style_attr = f' style="{"; ".join(styles)}"' if styles else ""
+                class_attr = f' class="{" ".join(classes)}"' if classes else ""
+                text = f'<span{class_attr}{style_attr}>{text}</span>'
+            
+            parts.append(text)
+        
+        return ''.join(parts)
+    
+    @staticmethod
     def _render_text_block(block: TextBlock) -> str:
-        """Render a text block to HTML."""
-        content = HTMLRenderer._escape(block.content)
+        """Render a text block to HTML using natural flow layout."""
+        # Handle rich text spans if present
+        if hasattr(block, 'spans') and block.spans:
+            content = HTMLRenderer._render_text_spans(block.spans)
+        else:
+            content = HTMLRenderer._escape(block.content)
         
-        # Don't use bbox positioning for single-column flow
-        # Let content flow naturally without horizontal positioning
-        bbox_style = ""
-        bbox_class = ""
+        # Build inline style for typography
+        inline_styles = []
         
+        # Font and typography
+        if block.font_size:
+            inline_styles.append(f"font-size: {block.font_size}pt")
+        if block.font_family:
+            inline_styles.append(f"font-family: {block.font_family}")
+        if block.font_weight and block.font_weight != 400:
+            inline_styles.append(f"font-weight: {block.font_weight}")
+        if block.line_height:
+            inline_styles.append(f"line-height: {block.line_height}")
+        if block.letter_spacing:
+            inline_styles.append(f"letter-spacing: {block.letter_spacing}em")
+        
+        # Colors
+        if block.text_color:
+            inline_styles.append(f"color: {block.text_color}")
+        if block.background_color:
+            inline_styles.append(f"background-color: {block.background_color}")
+        
+        # Spacing and indentation (relative units)
+        if block.indent_left:
+            inline_styles.append(f"margin-left: {block.indent_left}em")
+        if block.indent_right:
+            inline_styles.append(f"margin-right: {block.indent_right}em")
+        if block.indent_first_line:
+            inline_styles.append(f"text-indent: {block.indent_first_line}em")
+        if block.spacing_before:
+            inline_styles.append(f"margin-top: {block.spacing_before}em")
+        if block.spacing_after:
+            inline_styles.append(f"margin-bottom: {block.spacing_after}em")
+        
+        # Text alignment
+        if block.text_align:
+            inline_styles.append(f"text-align: {block.text_align}")
+        
+        style_attr = f' style="{"; ".join(inline_styles)}"' if inline_styles else ""
+        
+        # Build classes
+        classes = []
+        if block.style:
+            classes.append(block.style)
+        
+        # Determine text direction
+        dir_attr = ""
+        if block.text_direction and block.text_direction != "auto":
+            dir_attr = f' dir="{block.text_direction}"'
+        elif HTMLRenderer._detect_english_content(block.content):
+            classes.append("ltr")
+            dir_attr = ' dir="ltr"'
+        elif HTMLRenderer._has_arabic(block.content):
+            classes.append("rtl")
+            dir_attr = ' dir="rtl"'
+        
+        class_attr = f' class="{" ".join(classes)}"' if classes else ""
+        
+        # Render based on block type
         if block.block_type == "heading":
             level = min(max(block.level or 1, 1), 6)
-            classes = []
-            if block.style:
-                classes.append(block.style)
-            if bbox_class:
-                classes.append(bbox_class.strip())
-            
-            # Add direction class/attr based on content
-            dir_attr = ""
-            if HTMLRenderer._detect_english_content(block.content):
-                classes.append("ltr")
-                dir_attr = ' dir="ltr"'
-            elif HTMLRenderer._has_arabic(block.content):
-                classes.append("rtl")
-                dir_attr = ' dir="rtl"'
-            
-            class_attr = f' class="{" ".join(classes)}"' if classes else ""
-            return f"<h{level}{class_attr}{dir_attr}{bbox_style}>{content}</h{level}>"
+            return f"<h{level}{class_attr}{dir_attr}{style_attr}>{content}</h{level}>"
         
         elif block.block_type == "paragraph":
-            classes = []
-            if block.style:
-                classes.append(block.style)
-            if bbox_class:
-                classes.append(bbox_class.strip())
-            
-            # Add direction class/attr based on content
-            dir_attr = ""
-            if HTMLRenderer._detect_english_content(block.content):
-                classes.append("ltr")
-                dir_attr = ' dir="ltr"'
-            elif HTMLRenderer._has_arabic(block.content):
-                classes.append("rtl")
-                dir_attr = ' dir="rtl"'
-            
-            class_attr = f' class="{" ".join(classes)}"' if classes else ""
-            return f"<p{class_attr}{dir_attr}{bbox_style}>{content}</p>"
+            return f"<p{class_attr}{dir_attr}{style_attr}>{content}</p>"
         
         elif block.block_type == "list_item":
             # This shouldn't be called directly anymore - lists are grouped
@@ -1153,25 +1547,35 @@ window.addEventListener('load', () => {
     
     @staticmethod
     def _render_table(table: Table) -> str:
-        """Render a table to HTML."""
+        """Render a table to HTML using natural flow layout."""
         parts = []
         
         if table.caption:
             parts.append(f'<p class="table-caption">{HTMLRenderer._escape(table.caption)}</p>')
         
-        parts.append("<table>")
+        # Build table styles (simple, flow-based)
+        table_styles = []
+        if table.background_color:
+            table_styles.append(f"background-color: {table.background_color}")
+        if table.border_color and table.border_color != "#e0e0e0":
+            table_styles.append(f"border-color: {table.border_color}")
+        if table.border_style and table.border_style != "solid":
+            table_styles.append(f"border-style: {table.border_style}")
+        
+        table_style_attr = f' style="{"; ".join(table_styles)}"' if table_styles else ""
+        parts.append(f"<table{table_style_attr}>")
         
         if table.headers:
             parts.append("<thead><tr>")
             for header in table.headers:
-                parts.append(f"<th>{HTMLRenderer._escape(header)}</th>")
+                parts.append(HTMLRenderer._render_table_cell(header, is_header=True))
             parts.append("</tr></thead>")
         
         parts.append("<tbody>")
         for row in table.rows:
             parts.append("<tr>")
             for cell in row:
-                parts.append(f"<td>{HTMLRenderer._escape(cell)}</td>")
+                parts.append(HTMLRenderer._render_table_cell(cell, is_header=False))
             parts.append("</tr>")
         parts.append("</tbody>")
         parts.append("</table>")
@@ -1179,58 +1583,85 @@ window.addEventListener('load', () => {
         return "\n".join(parts)
     
     @staticmethod
-    def _render_image(image: Image, page: Optional[PageContent] = None) -> str:
-        """Render an image to HTML - as normal in-flow block to prevent overlaps."""
-        # Use bbox dimensions for better sizing
-        bbox_width = image.bbox_width or 60.0
-
-        # For multi-column pages, scale single-column images to fill the column width
-        if page and page.has_multi_column and page.column_count and page.column_count > 1:
-            column_width = 100.0 / page.column_count
-            if bbox_width <= column_width * 1.1:
-                scale = 1.15  # Slightly enlarge within column for better visual parity
-                width = min(100.0, (bbox_width / column_width) * 100.0 * scale)
-            else:
-                width = min(95.0, bbox_width)
-        else:
-            # For wide images (>70% page width), show at full bbox width
-            # For very small images (<5%), set a minimum to keep them visible
-            # For medium images (5-80%), use actual bbox width
-            if bbox_width > 70:
-                width = min(95.0, bbox_width)
-            elif bbox_width < 5:
-                # Very small images (icons, etc.) - make visible but not huge
-                width = 15.0
-            else:
-                # Use actual size for everything else
-                width = min(80.0, bbox_width)
+    def _render_table_cell(cell: TableCell, is_header: bool = False) -> str:
+        """Render a single table cell with full styling."""
+        # Build cell styles
+        styles = []
         
-        # Determine horizontal alignment based on bbox position
-        bbox_left = image.bbox_left
-        if bbox_left < 15:
-            # Image on left side of page
-            align = "margin-left: 0; margin-right: auto;"
-        elif bbox_left > 85:
-            # Image on right side of page
-            align = "margin-left: auto; margin-right: 0;"
-        elif 35 < bbox_left < 65:
-            # Image centered
-            align = "margin: 1rem auto;"
-        else:
-            # Default to center for everything else
-            align = "margin: 1rem auto;"
+        # Colors
+        if cell.background_color:
+            styles.append(f"background-color: {cell.background_color}")
+        if cell.text_color:
+            styles.append(f"color: {cell.text_color}")
         
-        # Build inline style for sizing and positioning
-        style = f"max-width: {width}%; {align}"
+        # Alignment
+        if cell.text_align:
+            styles.append(f"text-align: {cell.text_align}")
+        if cell.vertical_align:
+            styles.append(f"vertical-align: {cell.vertical_align}")
         
-        parts = [f'<figure class="image-block" style="{style}" data-bbox="{image.bbox_left},{image.bbox_top},{image.bbox_width},{image.bbox_height}">']
+        # Width
+        if cell.width_percent:
+            styles.append(f"width: {cell.width_percent}%")
+        
+        # Borders
+        if cell.border_width:
+            border_color = cell.border_color or "#e0e0e0"
+            styles.append(f"border: {cell.border_width}px solid {border_color}")
+        elif cell.border_color:
+            styles.append(f"border-color: {cell.border_color}")
+        
+        style_attr = f' style="{"; ".join(styles)}"' if styles else ""
+        
+        # Spanning attributes
+        attrs = []
+        if cell.row_span > 1:
+            attrs.append(f'rowspan="{cell.row_span}"')
+        if cell.col_span > 1:
+            attrs.append(f'colspan="{cell.col_span}"')
+        
+        attr_str = " " + " ".join(attrs) if attrs else ""
+        
+        # Use th or td based on is_header or cell.is_header
+        tag = "th" if (is_header or cell.is_header) else "td"
+        content = HTMLRenderer._escape(cell.content)
+        
+        return f"<{tag}{attr_str}{style_attr}>{content}</{tag}>"
+    
+    @staticmethod
+    def _render_image(image: Image) -> str:
+        """Render an image to HTML using natural flow layout."""
+        # Simple alignment based on alignment field (not bbox)
+        alignment = getattr(image, 'alignment', 'center')
+        
+        # Build inline styles for flow layout
+        styles = []
+        
+        # Width: let images scale naturally, but set max-width
+        styles.append("max-width: 80%")
+        
+        # Alignment
+        if alignment == 'left':
+            styles.append("margin-left: 0; margin-right: auto")
+        elif alignment == 'right':
+            styles.append("margin-left: auto; margin-right: 0")
+        elif alignment == 'full-width':
+            styles.append("max-width: 100%; margin: 1rem 0")
+        else:  # default to center
+            styles.append("margin: 1.5rem auto")
+        
+        style = "; ".join(styles)
+        
+        parts = [f'<figure class="image-block" style="{style}">']
         
         if image.image_data:
             # We have actual image data - normalize the data URI
             src = normalise_data_uri(image.image_data)
+            # Don't add width/height attributes - let CSS handle sizing to preserve aspect ratio
             parts.append(f'<img src="{src}" '
                         f'alt="{HTMLRenderer._escape(image.description)}" '
-                        f'title="{HTMLRenderer._escape(image.description)}" />')
+                        f'title="{HTMLRenderer._escape(image.description)}" '
+                        f'style="width: 100%; height: auto;" />')
         else:
             # Fallback to placeholder
             parts.append(f'<div class="image-placeholder">[{image.image_type.title()}: {HTMLRenderer._escape(image.description)}]</div>')
@@ -1248,8 +1679,8 @@ window.addEventListener('load', () => {
 class ImageExtractor:
     """Extracts images from PDF pages using PyMuPDF based on bounding box coordinates."""
     
-    def __init__(self, pdf_path: str, dpi: int = 150):
-        """Initialize the extractor with a PDF file."""
+    def __init__(self, pdf_path: str, dpi: int = 300):
+        """Initialize the extractor with a PDF file. Default DPI increased to 300 for higher fidelity."""
         if not HAS_PYMUPDF:
             raise RuntimeError("PyMuPDF is required for image extraction. Install with: pip install PyMuPDF")
         
@@ -1589,7 +2020,8 @@ For each page in this range:
 1. Set the correct page_number (starting from {start_page})
 2. Extract the HEADER text if present (usually at the top of the page - may contain page numbers, chapter titles, section names)
 3. Extract the FOOTER text if present (usually at the bottom of the page - may contain page numbers, citations, document info)
-4. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
+4. CRITICAL: DO NOT duplicate header/footer text in text_blocks - if you extract header=\"Title\", do NOT include \"Title\" as a text_block
+5. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
    - CRITICAL: For EVERY SINGLE text block, you MUST provide BOUNDING BOX coordinates as percentages (0-100):
      * bbox_top: distance from top of page to top of text block (REQUIRED, 0-100)
      * bbox_left: distance from left of page to left of text block (REQUIRED, 0-100)
@@ -1624,15 +2056,29 @@ For each page in this range:
 9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
    - Identify the image_type (chart, graph, diagram, figure, photo, logo, illustration, other)
    - Provide a description
+   - CRITICAL: Avoid duplicate images - if same image appears multiple times, extract once
+   - Use bbox positions to distinguish different images
    - Provide BOUNDING BOX coordinates as percentages (0-100) of the page:
      * bbox_top: distance from top of page
      * bbox_left: distance from left of page  
      * bbox_width: width of the image
      * bbox_height: height of the image
-10. For MULTI-COLUMN LAYOUTS:
-   - Set has_multi_column=true and column_count (2 or 3)
+10. For MULTI-COLUMN LAYOUTS (CRITICAL DETECTION):
+   - ALWAYS check if the page has multiple columns (2-column, 3-column layouts)
+   - Look for text flowing in parallel vertical sections
+   - Common in: academic papers, newspapers, magazines, technical reports
+   - If multi-column detected:
+     * Set has_multi_column=true
+     * Set column_count (2, 3, or more)
+     * Set column_gap (gap width in points, typically 20-40)
+     * CRITICAL: Ensure ALL pages with same layout have SAME column_count
+     * Column detection must be CONSISTENT across similar pages
+   - Ensure bbox_left positions distinguish columns clearly:
+     * 2 columns: column 1 (0-48%), column 2 (52-100%)
+     * 3 columns: column 1 (0-32%), column 2 (34-66%), column 3 (68-100%)
    - CRITICAL: For LTR documents, extract columns LEFT-TO-RIGHT (complete column 1, then column 2, etc.)
    - CRITICAL: For RTL documents, extract columns RIGHT-TO-LEFT (complete rightmost column first)
+   - Reading order MUST follow column flow (top-to-bottom within each column)
    - Add reading_order_notes if the layout is complex or unusual
 11. For TEXT DIRECTION:
    - Set page_direction='rtl' for Arabic/Hebrew pages, 'ltr' for English/Western
@@ -1859,9 +2305,10 @@ Instructions:
 1. Process EVERY page from start to finish - do not skip any pages
 2. Extract the HEADER text if present (usually at the top of the page - may contain page numbers, chapter titles, section names)
 3. Extract the FOOTER text if present (usually at the bottom of the page - may contain page numbers, citations, document info)
-4. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
+4. CRITICAL: DO NOT duplicate header/footer text in text_blocks - if you extract header="Title", do NOT include "Title" as a text_block
+5. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
    - CRITICAL: For EVERY text block, you MUST provide bbox coordinates as percentages (0-100)
-5. For MATHEMATICAL EQUATIONS:
+6. For MATHEMATICAL EQUATIONS:
    - CRITICAL: TRANSCRIBE equations EXACTLY as they appear - do NOT solve, simplify, or manipulate them
    - Convert to LaTeX syntax in 'equation' blocks
    - For inline equations: set is_display_math=false
@@ -1882,11 +2329,21 @@ Instructions:
    - Provide bbox coordinates
 9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
    - Identify image_type and provide description
+   - CRITICAL: Avoid duplicate images - extract each unique image only once
    - Provide bbox coordinates as percentages (0-100)
-10. For MULTI-COLUMN LAYOUTS:
-    - Set has_multi_column=true and column_count
+10. For MULTI-COLUMN LAYOUTS (CRITICAL DETECTION):
+    - ALWAYS check if page has multiple columns (2-column, 3-column)
+    - Look for text flowing in parallel vertical sections
+    - Common in: academic papers, newspapers, magazines
+    - If detected:
+      * Set has_multi_column=true, column_count (2, 3+), column_gap (20-40 points)
+      * CRITICAL: Keep column_count CONSISTENT across pages with same layout
+    - Ensure bbox_left positions distinguish columns clearly:
+      * 2 columns: column 1 (0-48%), column 2 (52-100%)
+      * 3 columns: column 1 (0-32%), column 2 (34-66%), column 3 (68-100%)
     - For LTR docs: Extract columns LEFT-TO-RIGHT
     - For RTL docs: Extract columns RIGHT-TO-LEFT
+    - Reading order MUST follow column flow (top-to-bottom within each column)
     - Add reading_order_notes if complex
 11. For TEXT DIRECTION:
     - Set page_direction='rtl' for Arabic/Hebrew, 'ltr' for Western
