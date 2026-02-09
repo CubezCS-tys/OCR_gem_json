@@ -18,12 +18,12 @@
         "0308-036-091-007": "e1cff3d0-c877-4958-a5b3-2993e8492020",
         "1749-000-022-008": "335ec56f-e4ba-42da-bf54-81b5bf64d9a5"
       },
-      "status": "QUEUED",
+      "status": "SUCCESS",
       "created_at": 1770566904.3559165,
-      "completed_at": null,
-      "output_file_id": null,
+      "completed_at": 1770581800.2688942,
+      "output_file_id": "b3ab78d2-ef65-465d-801f-cd436eb344e0",
       "error": null
     }
   ],
-  "updated_at": 1770566904.355963
+  "updated_at": 1770581800.2689948
 }

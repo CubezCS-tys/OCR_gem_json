@@ -150,19 +150,26 @@ OCR TEXT (page 1):
 """
 
 STRUCTURING_PROMPT_TEMPLATE = """\
-You are an expert document structuring engine with pixel-perfect fidelity.
+You are an expert document structuring engine focused on semantic understanding and natural flow.
 
 Transform the following OCR text (pages {start_page}–{end_page}) into JSON that \
 STRICTLY follows this schema:
 
 {schema}
 
-CRITICAL FIDELITY RULES:
-- Output valid JSON only — no explanations, no markdown fences, no extra keys.
-- Preserve the EXACT reading order from the OCR text.
+CRITICAL JSON FORMATTING RULES:
+- Output ONLY valid RFC 8259 JSON — no explanations, no markdown fences, no extra keys
+- Use DOUBLE QUOTES for all property names and string values (never single quotes)
+- NO trailing commas after the last property in objects or arrays
+- Escape all special characters in strings: \" \\ \n \r \t
+- All property names MUST be from the schema above — no custom fields
+
+CRITICAL EXTRACTION RULES:
+- Preserve the EXACT reading order from the OCR text
+- Focus on semantic structure and content flow, NOT pixel-perfect positioning
 
 PAGE-LEVEL EXTRACTION:
-- For each page, populate page_number, text_blocks, tables, images, lines
+- For each page, populate page_number, text_blocks, tables, images
 - Extract separate header, footer, and page_number_text if present
 - CRITICAL: If you extract header/footer, DO NOT include that same text in text_blocks
 - Headers/footers are typically page numbers, titles, citations at top/bottom of page
@@ -181,10 +188,15 @@ MULTI-COLUMN LAYOUT DETECTION (CRITICAL):
     • Set column_gap (gap width in points, typically 20-40)
     • CRITICAL: Ensure ALL pages have SAME column_count if they share the same layout style
     • Column detection must be CONSISTENT - don't flip between 2 and 3 columns on similar pages
-- Ensure bbox_left positions distinguish columns clearly:
-    • 2 columns: column 1 (0-48%), column 2 (52-100%)
-    • 3 columns: column 1 (0-32%), column 2 (34-66%), column 3 (68-100%)
-- Reading order MUST follow column flow (top-to-bottom within each column)
+- For ALL text_blocks, tables, and images: set column_number (1, 2, 3, etc.)
+- Reading order MUST follow column flow (top-to-bottom within each column, left-to-right across columns for LTR)
+
+READING ORDER & FLOW (CRITICAL):
+- Set reading_order field for EVERY text_block, table, and image
+- reading_order is a sequence number (1, 2, 3...) indicating document flow
+- For multi-column: elements in column 1 should have lower reading_order than column 2
+- Within same column: top elements have lower reading_order than bottom elements
+- This controls how content flows in the rendered HTML
 
 TEXT BLOCKS - SEMANTIC CLASSIFICATION:
 - Classify each element as:
@@ -196,28 +208,30 @@ TEXT BLOCKS - SEMANTIC CLASSIFICATION:
     • "quote"
     • "code"
     • "equation" (use LaTeX in content, set is_display_math, extract equation_number if present)
+    • "hyperlink" (for clickable links - extract url and set link_type: "url", "email", or "internal")
+    • "horizontal_rule" (for dividing lines/separators between sections)
 
-TEXT BLOCKS - TYPOGRAPHY & STYLING (CRITICAL FOR FIDELITY):
+TEXT BLOCKS - TYPOGRAPHY & STYLING (for fidelity):
 - font_size: Extract font size in points if detectable from formatting
 - font_family: Extract font name if discernible (e.g., "Arial", "Times New Roman", "Amiri")
 - font_weight: Set weight (400=normal, 700=bold, or specific values 100-900)
 - line_height: Line spacing multiplier or points
-- letter_spacing, word_spacing: Character/word spacing in points if abnormal
+- letter_spacing: Character spacing in ems if abnormal
 - text_color: Text color as hex (e.g., "#000000" for black)
 - background_color: Background color as hex if highlighted
 - text_direction: "rtl", "ltr", or "auto" for mixed content
 - text_align: "left", "center", "right", or "justify" based on visual layout
+- alignment: "left", "center", "right" for alignment within flow
 
-TEXT BLOCKS - SPACING & INDENTATION:
-- indent_left, indent_right: Left/right margins in points or percentage
-- indent_first_line: First line indent in points
-- spacing_before, spacing_after: Vertical spacing in points
-- padding, margin: CSS-style values if special spacing
+TEXT BLOCKS - SPACING & INDENTATION (relative units):
+- indent_left, indent_right: Left/right margins in ems
+- indent_first_line: First line indent in ems
+- spacing_before, spacing_after: Vertical spacing in ems
 
-TEXT BLOCKS - POSITIONING & TRANSFORMS:
-- rotation: Rotation angle in degrees for rotated text
-- z_index: Stacking order for overlapping elements (higher = on top)
-- bbox_top, bbox_left, bbox_width, bbox_height: Position as percentage (0-100)
+TEXT BLOCKS - HYPERLINKS:
+- For hyperlink block_type: MUST set url field with the target URL
+- Set link_type: "url" (http/https), "email" (mailto), or "internal" (bookmark/anchor)
+- Content field contains the visible link text
 
 TEXT BLOCKS - RICH TEXT (CHARACTER-LEVEL STYLING):
 - spans: Array of TextSpan objects for mixed inline formatting within a block
@@ -225,41 +239,35 @@ TEXT BLOCKS - RICH TEXT (CHARACTER-LEVEL STYLING):
 - Each span can have: font_size, font_family, text_color, background_color
 
 TABLES - ENHANCED FIDELITY:
-- Extract headers and rows arrays
-- column_widths: Array of column width percentages [30.0, 50.0, 20.0]
-- row_heights: Array of row height percentages if significant
-- border_style: "solid", "dashed", "dotted", "double", or "none"
-- border_width: Border thickness in points (default 1.0)
-- border_color: Border color as hex (default "#e0e0e0")
-- cell_padding: Cell padding in points (default 8.0)
-- background_color: Table background color as hex
-- bbox_top, bbox_left, bbox_width, bbox_height: Position as percentage
+- headers: Array of TableCell objects (NOT plain strings)
+- rows: Array of arrays of TableCell objects
+- Each TableCell has: content, row_span, col_span, is_header
+- TableCell styling: width_percent, text_align, vertical_align, background_color, text_color, border_width, border_color
+- Table-level: border_style, border_color, background_color
+- Set reading_order and column_number for table positioning
 
-IMAGES/FIGURES - ENHANCED PROPERTIES:
+IMAGES/FIGURES - FLOW-BASED PROPERTIES:
 - image_type: "chart", "graph", "diagram", "figure", "photo", "logo", "illustration", "other"
 - description: Detailed alt text
 - caption: Figure caption if present
-- CRITICAL: Avoid duplicate images - if the same image appears multiple times, only extract it once
-- Use unique bbox positions to distinguish different images
-- rotation: Rotation angle in degrees
-- z_index: Stacking order
+- alignment: "left", "center", "right", or "full-width" within text flow
+- Set reading_order and column_number for image positioning
 - width_pixels, height_pixels: Actual pixel dimensions if detectable
-- dpi: Image resolution/DPI if detectable
-- bbox_top, bbox_left, bbox_width, bbox_height: Position as percentage (0-100)
-
-LINES/SEPARATORS:
-- lines: Array of line objects for horizontal rules, borders, separators
-- Each line has: x1, y1, x2, y2 (coordinates as %), width (points), color (hex), style
+- CRITICAL: Avoid duplicate images - same description usually means duplicate
 
 SPECIAL CONTENT RULES:
 - PRESERVE numeral systems exactly (Arabic-Indic ٠١٢٣٤٥٦٧٨٩ vs Western 0123456789)
 - EQUATIONS: Use LaTeX syntax, set is_display_math, extract equation_number
-- Convert any table markdown into structured headers/rows — do NOT use HTML
+- HYPERLINKS: Extract URLs, mailto links, internal references - use hyperlink block_type
+- HORIZONTAL RULES: Visual dividers between sections should be horizontal_rule block_type (content can be empty)
+- Convert any table markdown into structured TableCell objects — do NOT use HTML or plain strings
 - If a field is unknown or not detectable, omit it or use null
 - Ensure all JSON strings are properly escaped (quotes, backslashes)
+- Ensure hex colors are valid format: #RGB or #RRGGBB
 
 FIDELITY PRIORITY:
-Maximize extraction of typographic details (fonts, sizes, colors, spacing) for pixel-perfect reproduction.
+Maximize extraction of semantic structure, reading order, and styling details for high-quality HTML output.
+Focus on natural document flow rather than absolute positioning.
 
 OCR TEXT:
 \"\"\"
@@ -269,12 +277,15 @@ OCR TEXT:
 
 
 # ---------------------------------------------------------------------------
-# Image helpers
+# Image helpers (DEPRECATED - no longer using bbox coordinates)
 # ---------------------------------------------------------------------------
 
 def _ocr_img_to_pct_bbox(ocr_img: dict) -> dict:
     """
-    Convert Mistral OCR pixel coordinates to percentage-based bbox.
+    DEPRECATED: Convert Mistral OCR pixel coordinates to percentage-based bbox.
+    
+    This function is no longer used since we removed bbox coordinates from the
+    Image schema (flow-based positioning for OCR'd PDFs).
 
     Mistral OCR returns absolute pixel coords:
         top_left_x, top_left_y, bottom_right_x, bottom_right_y
@@ -320,9 +331,10 @@ def _bbox_overlap(
     ocr_img: dict,
 ) -> float:
     """
-    Compute overlap percentage between a structured Image bbox (pct 0-100)
-    and a Mistral OCR image.  Returns 0-100 (IoU-ish score) or -1 if
-    the structured image has no bbox (can't compute overlap).
+    DEPRECATED: Compute overlap percentage between structured Image bbox and OCR image.
+    
+    This function is no longer used since we removed bbox coordinates from the
+    Image schema (flow-based positioning for OCR'd PDFs).
     """
     pct = _ocr_img_to_pct_bbox(ocr_img)
 
@@ -720,10 +732,34 @@ class MistralOCRPipeline:
                 try:
                     wrapper = json.loads(raw)
                 except json.JSONDecodeError as je:
+                    # Show context around the error position for debugging
+                    error_pos = je.pos
+                    context_start = max(0, error_pos - 100)
+                    context_end = min(len(raw), error_pos + 100)
+                    context = raw[context_start:context_end]
+                    
+                    # Mark the error position
+                    marker_pos = error_pos - context_start
+                    context_with_marker = (
+                        context[:marker_pos] + 
+                        " <<<ERROR HERE>>> " + 
+                        context[marker_pos:]
+                    )
+                    
                     logger.error(
                         f"JSON parse error at line {je.lineno}, col {je.colno}: {je.msg}\n"
-                        f"Raw output sample: {raw[:500]}..."
+                        f"Error position (char {error_pos}):\n"
+                        f"{context_with_marker}\n"
+                        f"Full output length: {len(raw)} chars"
                     )
+                    
+                    # On last retry, save the bad JSON for debugging
+                    if attempt == self.config.max_retries - 1:
+                        debug_file = f"debug_bad_json_pages_{start_page}-{end_page}.json"
+                        with open(debug_file, 'w', encoding='utf-8') as f:
+                            f.write(raw)
+                        logger.error(f"Saved malformed JSON to {debug_file} for debugging")
+                    
                     raise
                 
                 pages_data = wrapper.get("pages", wrapper) if isinstance(wrapper, dict) else wrapper
@@ -817,9 +853,8 @@ class MistralOCRPipeline:
         Populate image_data on structured Image objects using Mistral OCR's
         base64 images.  Two strategies:
 
-        1. **Match by bbox overlap** — if the LLM created an Image entry
-           with bbox coords, find the closest OCR image on the same page
-           and attach its base64 data.
+        1. **Match by reading order** — structured Image entries are matched
+           to OCR images sequentially based on reading_order or document order.
         2. **Inject unmatched** — any OCR image that was NOT matched to an
            existing Image entry gets added as a new Image on that page.
 
@@ -839,49 +874,26 @@ class MistralOCRPipeline:
             # Track which OCR images have been consumed
             used_ocr = set()
 
-            # --- Strategy 1: match existing Image entries by bbox ---
-            for image in page.images:
-                if image.image_data:  # already populated
-                    continue
-                best_idx = None
-                best_overlap = -1.0
-                has_bbox = image.bbox_top is not None and image.bbox_left is not None
-
-                for oi, ocr_img in enumerate(ocr_imgs):
-                    if oi in used_ocr:
-                        continue
-                    if not ocr_img.get("image_base64"):
-                        continue
-
-                    # Compute simple overlap score between bbox rects
-                    overlap = _bbox_overlap(
-                        image.bbox_top, image.bbox_left,
-                        image.bbox_width, image.bbox_height,
-                        ocr_img,
-                    )
-                    if overlap > best_overlap:
-                        best_overlap = overlap
-                        best_idx = oi
-
-                # Only accept if we have positive overlap (spatial match)
-                # If no bbox (-1), skip spatial matching and let Strategy 2 handle it
-                if best_idx is not None and best_overlap > 0:
-                    image.image_data = normalise_data_uri(ocr_imgs[best_idx]["image_base64"])
-                    used_ocr.add(best_idx)
-                    populated += 1
-                    logger.info(
-                        f"Matched OCR image → page {page.page_number} "
-                        f"{image.image_type} (overlap={best_overlap:.1f}%)"
-                    )
-                elif best_idx is not None and not has_bbox:
-                    # No bbox on structured image, use first available
-                    image.image_data = normalise_data_uri(ocr_imgs[best_idx]["image_base64"])
-                    used_ocr.add(best_idx)
-                    populated += 1
-                    logger.info(
-                        f"Matched OCR image → page {page.page_number} "
-                        f"{image.image_type} (no bbox, sequential match)"
-                    )
+            # --- Strategy 1: match existing Image entries by document order ---
+            # Since we removed bbox coordinates (for OCR'd PDFs), we match by sequence
+            structured_images = [img for img in page.images if not img.image_data]
+            available_ocr = [
+                (idx, ocr_img) for idx, ocr_img in enumerate(ocr_imgs)
+                if ocr_img.get("image_base64")
+            ]
+            
+            # Sort structured images by reading_order if available
+            structured_images.sort(key=lambda img: getattr(img, 'reading_order', 999))
+            
+            # Match sequentially
+            for image, (oi, ocr_img) in zip(structured_images, available_ocr):
+                image.image_data = normalise_data_uri(ocr_img["image_base64"])
+                used_ocr.add(oi)
+                populated += 1
+                logger.info(
+                    f"Matched OCR image → page {page.page_number} "
+                    f"{image.image_type} (sequential match by reading order)"
+                )
 
             # --- Strategy 2: inject leftover OCR images ---
             for oi, ocr_img in enumerate(ocr_imgs):
@@ -891,16 +903,11 @@ class MistralOCRPipeline:
                 if not b64:
                     continue
 
-                # Convert Mistral's pixel coords to percentage bbox
-                bbox = _ocr_img_to_pct_bbox(ocr_img)
-
+                # Create image without bbox (flow-based positioning)
                 new_image = Image(
                     image_type="figure",
                     description=f"Image extracted by Mistral OCR (id={ocr_img.get('id', 'unknown')})",
-                    bbox_top=bbox["top"],
-                    bbox_left=bbox["left"],
-                    bbox_width=bbox["width"],
-                    bbox_height=bbox["height"],
+                    alignment="center",
                     image_data=normalise_data_uri(b64),
                 )
                 page.images.append(new_image)
@@ -1081,15 +1088,32 @@ class MistralOCRPipeline:
 
     @staticmethod
     def _strip_json_fences(text: str) -> str:
-        """Remove ```json ... ``` wrappers if present."""
+        """Remove ```json ... ``` wrappers and fix common JSON errors."""
+        import re
+        
         text = text.strip()
+        
+        # Remove markdown code fences
         if text.startswith("```"):
-            # Remove first line (```json or ```)
             lines = text.split("\n", 1)
             text = lines[1] if len(lines) > 1 else ""
         if text.endswith("```"):
             text = text[:-3]
-        return text.strip()
+        
+        text = text.strip()
+        
+        # Fix common JSON errors that LLMs produce:
+        
+        # 1. Remove trailing commas before closing braces/brackets
+        # Match: , followed by optional whitespace and then } or ]
+        text = re.sub(r',(\s*[}\]])', r'\1', text)
+        
+        # 2. Replace single quotes with double quotes (but be careful with apostrophes in text)
+        # This is risky but necessary if the LLM uses single quotes for property names
+        # Only do this for property names (single quote at start of line or after {, [, or comma)
+        text = re.sub(r"([{\[,]\s*)'([a-zA-Z_][a-zA-Z0-9_]*)'(\s*:)", r'\1"\2"\3', text)
+        
+        return text
 
     def _track_tokens(self, response) -> None:
         """Track token usage from a chat response."""

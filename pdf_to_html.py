@@ -152,7 +152,7 @@ class Table(BaseModel):
 
 class TextBlock(BaseModel):
     """Represents a block of text with semantic meaning and rich formatting."""
-    block_type: Literal["heading", "paragraph", "list_item", "caption", "footnote", "quote", "code", "equation"] = Field(
+    block_type: Literal["heading", "paragraph", "list_item", "caption", "footnote", "quote", "code", "equation", "hyperlink", "horizontal_rule"] = Field(
         description="Semantic type of the text block"
     )
     level: Optional[int] = Field(default=None, description="Heading level (1-6) if block_type is heading")
@@ -178,6 +178,9 @@ class TextBlock(BaseModel):
     # Math-specific
     is_display_math: Optional[bool] = Field(default=False, description="For equations: True for display mode (\\[...\\]), False for inline (\\(...\\))")
     equation_number: Optional[str] = Field(default=None, description="Equation number label if present (e.g., '(1)', '(2.3)')")
+    # Hyperlink-specific fields
+    url: Optional[str] = Field(default=None, description="URL for hyperlink block type")
+    link_type: Optional[Literal["url", "email", "internal"]] = Field(default="url", description="Type of hyperlink: external URL, email, or internal bookmark")
     # List hierarchy
     list_level: Optional[int] = Field(default=1, description="Nesting level for list items (1=top level, 2=nested, etc.)")
     # Flow-based positioning and ordering
@@ -865,6 +868,34 @@ window.addEventListener('load', () => {
         text-indent: 1rem;
     }}
     
+    /* Hyperlinks */
+    a {{
+        color: #0066cc;
+        text-decoration: none;
+        border-bottom: 1px solid transparent;
+        transition: border-color 0.2s;
+    }}
+    
+    a:hover {{
+        border-bottom-color: #0066cc;
+    }}
+    
+    a.link-email {{
+        color: #cc6600;
+    }}
+    
+    a.link-internal {{
+        color: #006633;
+    }}
+    
+    /* Horizontal rules */
+    hr.content-divider {{
+        border: none;
+        border-top: 2px solid var(--border-color);
+        margin: 2rem 0;
+        clear: both;
+    }}
+    
     .reading-order-note {{
         font-size: 0.8rem;
         color: #0066cc;
@@ -1077,38 +1108,34 @@ window.addEventListener('load', () => {
     
     @staticmethod
     def _deduplicate_images(page: PageContent) -> PageContent:
-        """Remove duplicate images from the page based on position and description."""
+        """Remove duplicate images from the page based on description similarity.
+        
+        Since we no longer use bbox coordinates (for OCR'd PDFs), we deduplicate
+        based on description content similarity.
+        """
         if not page.images or len(page.images) <= 1:
             return page
         
         unique_images = []
-        seen_positions = set()
         seen_descriptions = set()
         
         for img in page.images:
-            # Create position key (rounded to 1 decimal place)
-            pos_key = (
-                round(img.bbox_top, 1) if img.bbox_top else 0,
-                round(img.bbox_left, 1) if img.bbox_left else 0,
-                round(img.bbox_width, 1) if img.bbox_width else 0,
-                round(img.bbox_height, 1) if img.bbox_height else 0
-            )
-            
-            # Check if this is a duplicate
-            is_duplicate = False
-            
-            # Same position
-            if pos_key in seen_positions and pos_key != (0, 0, 0, 0):
-                is_duplicate = True
-            # Same description (likely duplicate)
-            elif img.description in seen_descriptions and "extracted by Mistral OCR" not in img.description:
-                is_duplicate = True
-            
-            if not is_duplicate:
+            # Skip generic/auto-generated descriptions
+            if not img.description or "extracted by Mistral OCR" in img.description:
                 unique_images.append(img)
-                seen_positions.add(pos_key)
-                if img.description:
-                    seen_descriptions.add(img.description)
+                continue
+            
+            # Normalize description for comparison
+            normalized_desc = img.description.lower().strip()
+            
+            # Check if we've seen this exact description
+            if normalized_desc in seen_descriptions:
+                # Likely a duplicate - skip it
+                continue
+            
+            # Not a duplicate - add it
+            unique_images.append(img)
+            seen_descriptions.add(normalized_desc)
         
         page.images = unique_images
         return page
@@ -1278,8 +1305,98 @@ window.addEventListener('load', () => {
         return "\n".join(parts)
     
     @staticmethod
+    def _parse_inline_sublist(content: str) -> tuple[str, list[str]]:
+        """
+        Parse inline sub-bullets from list item content.
+        
+        E.g., "Main text : - item1 - item2 - item3" 
+        Returns: ("Main text :", ["item1", "item2", "item3"])
+        
+        Handles parentheses: "text : - item (sub - text) - item2"
+        Should split on " - " but NOT when inside parentheses.
+        
+        Args:
+            content: The list item content
+            
+        Returns:
+            Tuple of (main_content, sub_items) where sub_items is empty if no sub-list found
+        """
+        import re
+        
+        # Look for pattern: text ending with colon, followed by dash-prefixed items
+        if ':' not in content and '：' not in content:
+            return content, []
+        
+        # Find the colon position
+        colon_idx = content.find(':')
+        if colon_idx == -1:
+            colon_idx = content.find('：')
+        
+        if colon_idx == -1:
+            return content, []
+        
+        main_text = content[:colon_idx + 1].strip()
+        remaining = content[colon_idx + 1:].strip()
+        
+        # Only proceed if remaining starts with a dash (indicating sub-list)
+        if not remaining.startswith('-'):
+            return content, []
+        
+        # Smart split: split on " - " but NOT when inside parentheses
+        sub_items = []
+        current_item = ""
+        paren_depth = 0
+        i = 0
+        
+        while i < len(remaining):
+            char = remaining[i]
+            
+            if char == '(':
+                paren_depth += 1
+                current_item += char
+            elif char == ')':
+                paren_depth -= 1
+                current_item += char
+            elif char == '-' and paren_depth == 0:
+                # Check if this is a list separator (preceded by space)
+                if i > 0 and remaining[i-1].isspace():
+                    # This is a separator - save current item and start new one
+                    item = current_item.strip().strip('-').strip()
+                    if item:
+                        sub_items.append(item)
+                    current_item = ""
+                    i += 1  # Skip the dash
+                    # Skip following whitespace
+                    while i < len(remaining) and remaining[i].isspace():
+                        i += 1
+                    continue
+                else:
+                    # Dash is part of content
+                    current_item += char
+            else:
+                current_item += char
+            
+            i += 1
+        
+        # Add the last item
+        item = current_item.strip().strip('-').strip()
+        if item:
+            sub_items.append(item)
+        
+        # Only return sub-list if we found multiple items (at least 2)
+        if len(sub_items) >= 2:
+            return main_text, sub_items
+        
+        # No valid sub-list found
+        return content, []
+    
+    @staticmethod
     def _render_list(list_items: list[TextBlock]) -> str:
-        """Render a group of consecutive list items as a proper HTML list."""
+        """Render a group of consecutive list items as a properly nested HTML list."""
+        if not list_items:
+            return ""
+        
+        # Detect overall direction
         english_count = sum(1 for item in list_items if HTMLRenderer._detect_english_content(item.content))
         arabic_count = sum(1 for item in list_items if HTMLRenderer._has_arabic(item.content))
         list_classes = ["list-wrapper"]
@@ -1290,18 +1407,112 @@ window.addEventListener('load', () => {
         elif arabic_count > english_count and arabic_count > 0:
             list_classes.append("rtl-list")
             dir_attr = ' dir="rtl"'
-
-        parts = [f'<ul class="{" ".join(list_classes)}"{dir_attr}>']
+        
+        # Build nested list structure based on list_level
+        parts = []
+        current_level = 0
+        
         for item in list_items:
-            content = HTMLRenderer._escape(item.content)
+            item_level = getattr(item, 'list_level', None) or 1
+            
+            # Check for inline sub-list in content
+            main_content, sub_items = HTMLRenderer._parse_inline_sublist(item.content)
+            escaped_main = HTMLRenderer._escape(main_content)
+            
+            # Detect item direction
+            item_dir = ""
             if HTMLRenderer._detect_english_content(item.content):
-                parts.append(f'<li dir="ltr">{content}</li>')
+                item_dir = ' dir="ltr"'
             elif HTMLRenderer._has_arabic(item.content):
-                parts.append(f'<li dir="rtl">{content}</li>')
+                item_dir = ' dir="rtl"'
+            
+            # Open lists as needed to reach target level
+            while current_level < item_level:
+                if current_level == 0:
+                    # First level gets the wrapper class
+                    parts.append(f'<ul class="{" ".join(list_classes)}"{dir_attr}>')
+                else:
+                    # Nested levels are plain <ul>
+                    parts.append('<ul>')
+                current_level += 1
+            
+            # Close lists as needed to reach target level
+            while current_level > item_level:
+                parts.append('</ul>')
+                current_level -= 1
+            
+            # Add the list item with potential sub-list
+            if sub_items:
+                # Item has inline sub-list - render with nested <ul>
+                parts.append(f'<li{item_dir}>')
+                parts.append(escaped_main)
+                parts.append('<ul>')
+                for sub_item in sub_items:
+                    escaped_sub = HTMLRenderer._escape(sub_item)
+                    parts.append(f'<li{item_dir}>{escaped_sub}</li>')
+                parts.append('</ul>')
+                parts.append('</li>')
             else:
-                parts.append(f"<li>{content}</li>")
-        parts.append('</ul>')
+                # Regular list item
+                parts.append(f'<li{item_dir}>{escaped_main}</li>')
+        
+        # Close all remaining open lists
+        while current_level > 0:
+            parts.append('</ul>')
+            current_level -= 1
+        
         return "\n".join(parts)
+    
+    @staticmethod
+    def _validate_color(color: Optional[str]) -> Optional[str]:
+        """Validate and sanitize hex color values to prevent CSS injection.
+        
+        Returns:
+            Valid hex color or None if invalid
+        """
+        if not color:
+            return None
+        
+        # Strip whitespace
+        color = color.strip()
+        
+        # Check if it's a valid hex color (#RGB or #RRGGBB)
+        import re
+        if re.match(r'^#[0-9A-Fa-f]{3}$', color) or re.match(r'^#[0-9A-Fa-f]{6}$', color):
+            return color.upper()
+        
+        # Check for named colors (basic set)
+        valid_names = {
+            'black', 'white', 'red', 'green', 'blue', 'yellow', 'cyan', 'magenta',
+            'gray', 'grey', 'orange', 'purple', 'pink', 'brown', 'transparent'
+        }
+        if color.lower() in valid_names:
+            return color.lower()
+        
+        # Invalid color - return None
+        return None
+    
+    @staticmethod
+    def _validate_url(url: Optional[str]) -> Optional[str]:
+        """Validate and sanitize URLs to prevent XSS.
+        
+        Returns:
+            Valid URL or None if invalid
+        """
+        if not url:
+            return None
+        
+        url = url.strip()
+        
+        # Allow http, https, mailto, and internal anchors
+        import re
+        if re.match(r'^(https?://|mailto:|#)', url, re.IGNORECASE):
+            # Basic XSS prevention - reject javascript: and data: schemes
+            if re.match(r'^(javascript|data):', url, re.IGNORECASE):
+                return None
+            return url
+        
+        return None
     
     @staticmethod
     def _detect_english_content(text: str) -> bool:
@@ -1381,11 +1592,15 @@ window.addEventListener('load', () => {
             if span.font_size:
                 styles.append(f"font-size: {span.font_size}pt")
             if span.font_family:
-                styles.append(f"font-family: {span.font_family}")
-            if span.text_color:
-                styles.append(f"color: {span.text_color}")
-            if span.background_color:
-                styles.append(f"background-color: {span.background_color}")
+                styles.append(f"font-family: {span.font_family}, sans-serif")
+            
+            # Validate colors before injection
+            text_color = HTMLRenderer._validate_color(span.text_color)
+            if text_color:
+                styles.append(f"color: {text_color}")
+            bg_color = HTMLRenderer._validate_color(span.background_color)
+            if bg_color:
+                styles.append(f"background-color: {bg_color}")
             
             # Build classes for styling
             classes = []
@@ -1417,6 +1632,13 @@ window.addEventListener('load', () => {
     @staticmethod
     def _render_text_block(block: TextBlock) -> str:
         """Render a text block to HTML using natural flow layout."""
+        # Skip empty content blocks
+        if not block.content or not block.content.strip():
+            # For horizontal_rule, render despite empty content
+            if block.block_type == "horizontal_rule":
+                return '<hr class="content-divider" />'
+            return ""  # Skip empty blocks
+        
         # Handle rich text spans if present
         if hasattr(block, 'spans') and block.spans:
             content = HTMLRenderer._render_text_spans(block.spans)
@@ -1426,11 +1648,11 @@ window.addEventListener('load', () => {
         # Build inline style for typography
         inline_styles = []
         
-        # Font and typography
+        # Font and typography (add fallback fonts)
         if block.font_size:
             inline_styles.append(f"font-size: {block.font_size}pt")
         if block.font_family:
-            inline_styles.append(f"font-family: {block.font_family}")
+            inline_styles.append(f"font-family: {block.font_family}, sans-serif")
         if block.font_weight and block.font_weight != 400:
             inline_styles.append(f"font-weight: {block.font_weight}")
         if block.line_height:
@@ -1438,11 +1660,13 @@ window.addEventListener('load', () => {
         if block.letter_spacing:
             inline_styles.append(f"letter-spacing: {block.letter_spacing}em")
         
-        # Colors
-        if block.text_color:
-            inline_styles.append(f"color: {block.text_color}")
-        if block.background_color:
-            inline_styles.append(f"background-color: {block.background_color}")
+        # Colors (with validation)
+        text_color = HTMLRenderer._validate_color(block.text_color)
+        if text_color:
+            inline_styles.append(f"color: {text_color}")
+        bg_color = HTMLRenderer._validate_color(block.background_color)
+        if bg_color:
+            inline_styles.append(f"background-color: {bg_color}")
         
         # Spacing and indentation (relative units)
         if block.indent_left:
@@ -1506,6 +1730,19 @@ window.addEventListener('load', () => {
         elif block.block_type == "code":
             return f"<pre><code>{content}</code></pre>"
         
+        elif block.block_type == "hyperlink":
+            # Render hyperlink with validation
+            validated_url = HTMLRenderer._validate_url(block.url)
+            if validated_url:
+                link_class = f'link-{block.link_type}' if block.link_type else 'link-url'
+                return f'<a href="{validated_url}" class="{link_class}" target="_blank" rel="noopener noreferrer"{dir_attr}>{content}</a>'
+            else:
+                # Invalid URL - render as plain text
+                return f"<span{class_attr}{dir_attr}{style_attr}>{content}</span>"
+        
+        elif block.block_type == "horizontal_rule":
+            return '<hr class="content-divider" />'
+        
         elif block.block_type == "equation":
             # Render LaTeX equations with MathJax
             # Don't escape the content - it's already LaTeX
@@ -1550,20 +1787,22 @@ window.addEventListener('load', () => {
         """Render a table to HTML using natural flow layout."""
         parts = []
         
+        # Detect if table contains Arabic text
+        is_rtl = False
+        if table.caption and HTMLRenderer._has_arabic(table.caption):
+            is_rtl = True
+        elif table.headers:
+            for header in table.headers:
+                if HTMLRenderer._has_arabic(header.content):
+                    is_rtl = True
+                    break
+        
+        dir_attr = 'rtl' if is_rtl else 'ltr'
+        
         if table.caption:
-            parts.append(f'<p class="table-caption">{HTMLRenderer._escape(table.caption)}</p>')
+            parts.append(f'<p class="table-caption" dir="{dir_attr}">{HTMLRenderer._escape(table.caption)}</p>')
         
-        # Build table styles (simple, flow-based)
-        table_styles = []
-        if table.background_color:
-            table_styles.append(f"background-color: {table.background_color}")
-        if table.border_color and table.border_color != "#e0e0e0":
-            table_styles.append(f"border-color: {table.border_color}")
-        if table.border_style and table.border_style != "solid":
-            table_styles.append(f"border-style: {table.border_style}")
-        
-        table_style_attr = f' style="{"; ".join(table_styles)}"' if table_styles else ""
-        parts.append(f"<table{table_style_attr}>")
+        parts.append(f'<table dir="{dir_attr}">')
         
         if table.headers:
             parts.append("<thead><tr>")
@@ -1584,34 +1823,8 @@ window.addEventListener('load', () => {
     
     @staticmethod
     def _render_table_cell(cell: TableCell, is_header: bool = False) -> str:
-        """Render a single table cell with full styling."""
-        # Build cell styles
-        styles = []
-        
-        # Colors
-        if cell.background_color:
-            styles.append(f"background-color: {cell.background_color}")
-        if cell.text_color:
-            styles.append(f"color: {cell.text_color}")
-        
-        # Alignment
-        if cell.text_align:
-            styles.append(f"text-align: {cell.text_align}")
-        if cell.vertical_align:
-            styles.append(f"vertical-align: {cell.vertical_align}")
-        
-        # Width
-        if cell.width_percent:
-            styles.append(f"width: {cell.width_percent}%")
-        
-        # Borders
-        if cell.border_width:
-            border_color = cell.border_color or "#e0e0e0"
-            styles.append(f"border: {cell.border_width}px solid {border_color}")
-        elif cell.border_color:
-            styles.append(f"border-color: {cell.border_color}")
-        
-        style_attr = f' style="{"; ".join(styles)}"' if styles else ""
+        """Render a single table cell with simple markup."""
+        style_attr = ""
         
         # Spanning attributes
         attrs = []

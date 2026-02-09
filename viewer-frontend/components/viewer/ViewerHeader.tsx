@@ -25,6 +25,9 @@ export function ViewerHeader() {
   } = useViewerStore();
 
   const totalPages = documentData?.pages.length || 0;
+  
+  // Ensure page is valid number
+  const safeCurrentPage = isNaN(currentPage) || currentPage < 1 ? 1 : currentPage;
 
   const handleOpenFileSelector = () => {
     if (typeof setIsFileSelectorOpen === 'function') {
@@ -66,18 +69,18 @@ export function ViewerHeader() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(Math.max(1, safeCurrentPage - 1))}
+                disabled={safeCurrentPage <= 1}
               >
                 Previous
               </Button>
               <Select
-                value={currentPage.toString()}
-                onValueChange={(val) => setCurrentPage(parseInt(val))}
+                value={safeCurrentPage.toString()}
+                onValueChange={(val) => setCurrentPage(parseInt(val, 10))}
               >
                 <SelectTrigger className="w-32">
                   <SelectValue>
-                    Page {currentPage} / {totalPages}
+                    Page {safeCurrentPage} / {totalPages}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -91,8 +94,8 @@ export function ViewerHeader() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(Math.min(totalPages, safeCurrentPage + 1))}
+                disabled={safeCurrentPage >= totalPages}
               >
                 Next
               </Button>
