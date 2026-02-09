@@ -74,16 +74,24 @@ export function FileSelector() {
       setLoading(true);
       setIsFileSelectorOpen(false);
 
+      console.log("📂 FileSelector: Selected file:", file);
+      console.log("📁 FileSelector: Selected folder:", selectedFolder);
+      console.log("🔗 FileSelector: Has htmlPath?", !!file.htmlPath, file.htmlPath);
+
       // Store the selected folder
       setCurrentFolder(selectedFolder);
 
       // Load document data from selected folder
       const response = await axios.get(`/api/document/${file.name}?folder=${selectedFolder}`);
+      console.log("📄 FileSelector: Document data loaded");
+
       setDocumentData(response.data);
       setCurrentFile(file);
+      console.log("✅ FileSelector: Set currentFile with htmlPath:", file.htmlPath);
+
       setCurrentPage(1);
     } catch (err) {
-      console.error("Failed to load document:", err);
+      console.error("❌ FileSelector: Failed to load document:", err);
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ Parse Mistral batch OCR results from JSONL file.
 
 import json
 import sys
+import argparse
 from pathlib import Path
 
 def parse_batch_results(jsonl_file: str, output_dir: str):
@@ -84,12 +85,9 @@ def parse_batch_results(jsonl_file: str, output_dir: str):
     print("=" * 60)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 parse_batch_results.py <jsonl_file> [output_dir]")
-        print("Example: python3 parse_batch_results.py batch_markdown/batch_*.jsonl batch_markdown/")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Parse Mistral batch OCR results from JSONL file")
+    parser.add_argument("jsonl_file", help="Path to the batch results JSONL file")
+    parser.add_argument("--output-dir", default="batch_parsed", help="Output directory (default: batch_parsed)")
+    args = parser.parse_args()
     
-    jsonl_file = sys.argv[1]
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else "batch_parsed"
-    
-    parse_batch_results(jsonl_file, output_dir)
+    parse_batch_results(args.jsonl_file, args.output_dir)

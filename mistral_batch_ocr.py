@@ -129,17 +129,17 @@ class MistralBatchOCR:
     def upload_pdf(self, pdf_path: Path, custom_id: str) -> Optional[str]:
         """
         Upload a single PDF to Mistral Files API.
-        
+
         Args:
             pdf_path: Path to PDF file
             custom_id: Unique identifier for this PDF
-        
+
         Returns:
             file_id or None if upload failed
         """
         try:
             logger.info(f"Uploading {custom_id}: {pdf_path.name}")
-            
+
             with open(pdf_path, "rb") as f:
                 uploaded = self.client.files.upload(
                     file={
@@ -148,10 +148,10 @@ class MistralBatchOCR:
                     },
                     purpose="ocr",  # Upload PDFs with "ocr" purpose for batch OCR
                 )
-            
+
             logger.info(f"✓ Uploaded {custom_id}: file_id={uploaded.id}")
             return uploaded.id
-        
+
         except Exception as e:
             logger.error(f"✗ Failed to upload {custom_id}: {e}")
             return None
@@ -454,34 +454,53 @@ class MistralBatchOCR:
     ) -> int:
         """
         Parse batch results and save markdown files per PDF.
-        
+
         Args:
             batch_job: BatchJob these results belong to
             results: List of result dicts from batch API
-        
+
         Returns:
             Number of PDFs successfully saved
         """
         saved_count = 0
-        
+        failures = []  # Track failures for manifest
+
         for result in results:
             custom_id = result.get("custom_id")
             if not custom_id:
-                logger.warning("Result missing custom_id, skipping")
+                error_msg = "Result missing custom_id"
+                logger.warning(error_msg)
+                failures.append({
+                    "custom_id": "unknown",
+                    "error": error_msg,
+                    "result": result
+                })
                 continue
-            
-            # Check for errors
-            if "error" in result:
-                logger.error(f"Error for {custom_id}: {result['error']}")
+
+            # Check for errors (only if error is not None)
+            if result.get("error") is not None:
+                error_msg = str(result['error'])
+                logger.error(f"Error for {custom_id}: {error_msg}")
+                failures.append({
+                    "custom_id": custom_id,
+                    "error": error_msg,
+                    "result": result
+                })
                 continue
-            
+
             # Extract OCR response
             response = result.get("response", {})
             body = response.get("body", {})
             pages = body.get("pages", [])
-            
+
             if not pages:
-                logger.warning(f"No pages found for {custom_id}")
+                error_msg = "No pages found in OCR response"
+                logger.warning(f"{error_msg} for {custom_id}")
+                failures.append({
+                    "custom_id": custom_id,
+                    "error": error_msg,
+                    "result": result
+                })
                 continue
             
             # Combine markdown from all pages
@@ -502,7 +521,19 @@ class MistralBatchOCR:
                 
                 logger.info(f"✓ Saved {custom_id} ({len(pages)} pages, {len(full_markdown)} chars)")
                 saved_count += 1
-        
+
+        # Save failures manifest if any failures occurred
+        if failures:
+            failures_path = self.output_dir / f"batch_{batch_job.job_id}_failures.json"
+            with open(failures_path, 'w', encoding='utf-8') as f:
+                json.dump({
+                    "batch_job_id": batch_job.job_id,
+                    "total_failures": len(failures),
+                    "failures": failures,
+                    "timestamp": time.time()
+                }, f, indent=2, ensure_ascii=False)
+            logger.warning(f"Saved {len(failures)} failures to {failures_path}")
+
         return saved_count
     
     def process_all_results(self) -> Dict[str, int]:
@@ -544,14 +575,28 @@ class MistralBatchOCR:
     # ------------------------------------------------------------------
     
     def _save_batch_state(self):
-        """Save batch job state to disk for recovery."""
+        """Save batch job state to disk for recovery (atomic write)."""
         state_file = self.output_dir / "batch_state.json"
+        temp_file = self.output_dir / "batch_state.json.tmp"
+
         state = {
             "batch_jobs": [job.to_dict() for job in self.batch_jobs],
             "updated_at": time.time(),
         }
-        with open(state_file, 'w') as f:
-            json.dump(state, f, indent=2)
+
+        # Atomic write: write to temp file, then rename
+        # This prevents corruption if process is killed mid-write
+        try:
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=2)
+
+            # Atomic rename (POSIX guarantees atomicity)
+            temp_file.replace(state_file)
+        except Exception as e:
+            logger.error(f"Failed to save batch state: {e}")
+            # Clean up temp file if it exists
+            if temp_file.exists():
+                temp_file.unlink()
     
     def _load_batch_state(self):
         """Load batch job state from disk."""

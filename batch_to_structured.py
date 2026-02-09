@@ -123,6 +123,46 @@ class BatchStructurer:
         """Get DocumentStructure schema as string."""
         return json.dumps(DocumentStructure.model_json_schema(), indent=2)
     
+    def _merge_image_data(self, doc_structure: DocumentStructure, ocr_data: dict) -> DocumentStructure:
+        """
+        Merge base64 image data from original OCR JSON into structured document.
+        
+        Args:
+            doc_structure: Structured document from LLM
+            ocr_data: Original OCR JSON with image_base64 data
+            
+        Returns:
+            Updated doc_structure with image_data populated
+        """
+        # Build a map of OCR images by page index
+        ocr_images_by_page = {}
+        for page in ocr_data.get('pages', []):
+            page_idx = page.get('index', -1)
+            images = page.get('images', [])
+            if images and page_idx >= 0:
+                ocr_images_by_page[page_idx] = [
+                    img for img in images 
+                    if img.get('image_base64')
+                ]
+        
+        # Match and merge images into structured document
+        for page in doc_structure.pages:
+            # Map page_number (1-indexed) to page index (0-indexed)
+            page_idx = page.page_number - 1
+            ocr_images = ocr_images_by_page.get(page_idx, [])
+            
+            if not ocr_images:
+                continue
+            
+            # Assign image data to structured images
+            # Simple strategy: assign in order
+            for i, struct_img in enumerate(page.images):
+                if i < len(ocr_images):
+                    struct_img.image_data = ocr_images[i].get('image_base64')
+                    logger.debug(f"Merged image data for page {page.page_number}, image {i+1}")
+        
+        return doc_structure
+    
     def _call_llm(self, markdown: str) -> tuple[str, dict]:
         """Call LLM to structure the markdown."""
         schema_str = self._get_schema_string()
@@ -235,6 +275,9 @@ class BatchStructurer:
                 raise
             
             doc_structure = DocumentStructure(**structured_data)
+            
+            # Merge image data from original OCR JSON
+            doc_structure = self._merge_image_data(doc_structure, ocr_data)
             
             logger.info(f"✅ Validation passed: {len(doc_structure.pages)} pages")
             logger.info(f"📊 Tokens: {usage['prompt_tokens']:,} in, {usage['completion_tokens']:,} out")

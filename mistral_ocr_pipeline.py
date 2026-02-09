@@ -289,97 +289,6 @@ OCR TEXT:
 
 
 # ---------------------------------------------------------------------------
-# Image helpers (DEPRECATED - no longer using bbox coordinates)
-# ---------------------------------------------------------------------------
-
-def _ocr_img_to_pct_bbox(ocr_img: dict) -> dict:
-    """
-    DEPRECATED: Convert Mistral OCR pixel coordinates to percentage-based bbox.
-    
-    This function is no longer used since we removed bbox coordinates from the
-    Image schema (flow-based positioning for OCR'd PDFs).
-
-    Mistral OCR returns absolute pixel coords:
-        top_left_x, top_left_y, bottom_right_x, bottom_right_y
-
-    We normalise to 0-100 percentages.  Since we don't know the page
-    pixel dimensions from the OCR response, we estimate from the coords
-    themselves (images near edges give a reasonable page-size estimate).
-    If coords are missing, return a centered default.
-    """
-    tlx = ocr_img.get("top_left_x")
-    tly = ocr_img.get("top_left_y")
-    brx = ocr_img.get("bottom_right_x")
-    bry = ocr_img.get("bottom_right_y")
-
-    if None in (tlx, tly, brx, bry):
-        # No coords → centre of page, 50% wide
-        return {"top": 25.0, "left": 25.0, "width": 50.0, "height": 50.0}
-
-    # Mistral OCR coords are typically normalised 0-1 already,
-    # but some versions use pixel values.  Detect by magnitude.
-    if max(brx, bry) <= 1.5:
-        # Normalised 0-1
-        return {
-            "top":    round(tly * 100, 1),
-            "left":   round(tlx * 100, 1),
-            "width":  round((brx - tlx) * 100, 1),
-            "height": round((bry - tly) * 100, 1),
-        }
-    else:
-        # Pixel values — estimate page size as max coord + small margin
-        est_w = max(brx, 1) * 1.05
-        est_h = max(bry, 1) * 1.05
-        return {
-            "top":    round((tly / est_h) * 100, 1),
-            "left":   round((tlx / est_w) * 100, 1),
-            "width":  round(((brx - tlx) / est_w) * 100, 1),
-            "height": round(((bry - tly) / est_h) * 100, 1),
-        }
-
-
-def _bbox_overlap(
-    top: float, left: float, width: float, height: float,
-    ocr_img: dict,
-) -> float:
-    """
-    DEPRECATED: Compute overlap percentage between structured Image bbox and OCR image.
-    
-    This function is no longer used since we removed bbox coordinates from the
-    Image schema (flow-based positioning for OCR'd PDFs).
-    """
-    pct = _ocr_img_to_pct_bbox(ocr_img)
-
-    if top is None or left is None or width is None or height is None:
-        # Structured image has no bbox → return -1 to indicate "unmatchable"
-        # Caller should handle this case separately (e.g., match by document order)
-        return -1.0
-
-    # Rectangle A (structured)
-    ax0, ay0 = left, top
-    ax1, ay1 = left + width, top + height
-    # Rectangle B (OCR)
-    bx0, by0 = pct["left"], pct["top"]
-    bx1, by1 = pct["left"] + pct["width"], pct["top"] + pct["height"]
-
-    # Intersection
-    ix0 = max(ax0, bx0)
-    iy0 = max(ay0, by0)
-    ix1 = min(ax1, bx1)
-    iy1 = min(ay1, by1)
-
-    if ix1 <= ix0 or iy1 <= iy0:
-        return 0.0
-
-    inter = (ix1 - ix0) * (iy1 - iy0)
-    area_a = max(width * height, 1e-6)
-    area_b = max(pct["width"] * pct["height"], 1e-6)
-    union = area_a + area_b - inter
-
-    return round((inter / union) * 100, 1) if union > 0 else 0.0
-
-
-# ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
 
@@ -416,6 +325,9 @@ class MistralOCRPipeline:
         # Store PDF path for Gemini vision mode
         self.current_pdf_path = None
 
+        # Track uploaded file for cleanup
+        self._uploaded_file_id = None
+
         # Cost / token tracking
         self._ocr_pages = 0
         self._structuring_input_tokens = 0
@@ -434,14 +346,16 @@ class MistralOCRPipeline:
         for attempt in range(self.config.max_retries):
             try:
                 logger.info(f"Uploading PDF: {pdf_path} (attempt {attempt + 1})")
-                uploaded = self.client.files.upload(
-                    file={
-                        "file_name": os.path.basename(pdf_path),
-                        "content": open(pdf_path, "rb"),
-                    },
-                    purpose="ocr",
-                )
+                with open(pdf_path, "rb") as f:
+                    uploaded = self.client.files.upload(
+                        file={
+                            "file_name": os.path.basename(pdf_path),
+                            "content": f,
+                        },
+                        purpose="ocr",
+                    )
                 logger.info(f"Upload OK — file_id: {uploaded.id}")
+                self._uploaded_file_id = uploaded.id  # Track for cleanup
                 return uploaded.id
             except Exception as e:
                 logger.warning(f"Upload attempt {attempt + 1} failed: {e}")
@@ -724,11 +638,13 @@ class MistralOCRPipeline:
 
         for attempt in range(self.config.max_retries):
             try:
-                # Keep temperature at 0.0 for maximum fidelity - never increase on retry
-                # Higher temp = more hallucinations, less faithful extraction
+                # CRITICAL: Keep temperature at 0.0 for OCR transcription fidelity
+                # DO NOT increase on retry - higher temp = hallucinations & less accurate OCR
+                # If JSON parsing fails, the issue is formatting (not transcription quality)
+                # and higher temperature won't fix it - it will make OCR worse
                 logger.info(
                     f"Structuring pages {start_page}–{end_page} "
-                    f"(attempt {attempt + 1})"
+                    f"(attempt {attempt + 1}, temp={self.config.temperature})"
                 )
                 raw, usage = self._call_structuring_llm(
                     prompt, 
@@ -985,114 +901,134 @@ class MistralOCRPipeline:
         Returns a DocumentStructure identical to what the Gemini pipeline returns.
         """
         start_time = time.time()
-        
+
         # Store PDF path for Gemini vision mode
         self.current_pdf_path = str(pathlib.Path(pdf_path).expanduser().resolve())
 
-        # 1) Upload
-        file_id = self._upload_pdf(pdf_path)
+        try:
+            # 1) Upload
+            file_id = self._upload_pdf(pdf_path)
 
-        # 2) OCR (Pass 1)
-        ocr_pages = self._run_ocr(file_id)
-        total_pages = len(ocr_pages)
+            # 2) OCR (Pass 1)
+            ocr_pages = self._run_ocr(file_id)
+            total_pages = len(ocr_pages)
 
-        # Save raw markdown if configured
-        stem = pathlib.Path(pdf_path).stem
-        output_dir = pathlib.Path(self.config.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+            # Save raw markdown if configured
+            stem = pathlib.Path(pdf_path).stem
+            output_dir = pathlib.Path(self.config.output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-        if self.config.save_raw_markdown:
-            raw_md_path = output_dir / f"{stem}_raw_ocr.md"
-            with open(raw_md_path, "w", encoding="utf-8") as f:
-                for pg in ocr_pages:
-                    f.write(f"\n\n---\n## PAGE {pg['page_index'] + 1}\n\n")
-                    f.write(pg["markdown"])
-            logger.info(f"Raw OCR saved → {raw_md_path}")
+            if self.config.save_raw_markdown:
+                raw_md_path = output_dir / f"{stem}_raw_ocr.md"
+                with open(raw_md_path, "w", encoding="utf-8") as f:
+                    for pg in ocr_pages:
+                        f.write(f"\n\n---\n## PAGE {pg['page_index'] + 1}\n\n")
+                        f.write(pg["markdown"])
+                logger.info(f"Raw OCR saved → {raw_md_path}")
 
-        # 3) Extract metadata (Pass 2a)
-        first_md = ocr_pages[0]["markdown"] if ocr_pages else ""
-        metadata = self._extract_metadata(first_md, total_pages)
+            # 3) Extract metadata (Pass 2a)
+            first_md = ocr_pages[0]["markdown"] if ocr_pages else ""
+            metadata = self._extract_metadata(first_md, total_pages)
 
-        # 4) Structure pages in chunks (Pass 2b)
-        all_pages: list[PageContent] = []
-        chunk_size = self.config.pages_per_chunk
+            # 4) Structure pages in chunks (Pass 2b)
+            all_pages: list[PageContent] = []
+            chunk_size = self.config.pages_per_chunk
 
-        if self.config.parallel:
-            # Parallel processing with workers
-            logger.info(f"🚀 Using {self.config.workers} parallel workers for structuring")
-            all_pages = self._structure_pages_parallel(ocr_pages, total_pages, chunk_size)
-        else:
-            # Sequential processing
-            for chunk_start in range(0, total_pages, chunk_size):
-                chunk_end = min(chunk_start + chunk_size, total_pages)
-                progress = min(100.0, (chunk_end / total_pages) * 100)
-                logger.info(
-                    f"Structuring chunk "
-                    f"[{chunk_start + 1}–{chunk_end}] of {total_pages}  "
-                    f"({progress:.0f}%)"
-                )
-                pages = self._structure_pages(ocr_pages, chunk_start, chunk_end)
-                all_pages.extend(pages)
+            if self.config.parallel:
+                # Parallel processing with workers
+                logger.info(f"🚀 Using {self.config.workers} parallel workers for structuring")
+                all_pages = self._structure_pages_parallel(ocr_pages, total_pages, chunk_size)
+            else:
+                # Sequential processing
+                for chunk_start in range(0, total_pages, chunk_size):
+                    chunk_end = min(chunk_start + chunk_size, total_pages)
+                    progress = min(100.0, (chunk_end / total_pages) * 100)
+                    logger.info(
+                        f"Structuring chunk "
+                        f"[{chunk_start + 1}–{chunk_end}] of {total_pages}  "
+                        f"({progress:.0f}%)"
+                    )
+                    pages = self._structure_pages(ocr_pages, chunk_start, chunk_end)
+                    all_pages.extend(pages)
 
-        # Ensure correct page numbering and sort
-        all_pages.sort(key=lambda p: p.page_number)
+            # Ensure correct page numbering and sort
+            all_pages.sort(key=lambda p: p.page_number)
 
-        # Inject raw_text from OCR into each page (for auditing / reprocessing)
-        for page in all_pages:
-            pg_idx = page.page_number - 1
-            if 0 <= pg_idx < len(ocr_pages):
-                page.raw_text = ocr_pages[pg_idx]["markdown"]
+            # Inject raw_text from OCR into each page (for auditing / reprocessing)
+            for page in all_pages:
+                pg_idx = page.page_number - 1
+                if 0 <= pg_idx < len(ocr_pages):
+                    page.raw_text = ocr_pages[pg_idx]["markdown"]
 
-        # 5) Inject Mistral OCR images into structured pages
-        if self.config.include_image_base64:
-            img_count = self._inject_ocr_images(all_pages, ocr_pages)
-            logger.info(f"Image injection complete — {img_count} images populated")
+            # 5) Inject Mistral OCR images into structured pages
+            if self.config.include_image_base64:
+                img_count = self._inject_ocr_images(all_pages, ocr_pages)
+                logger.info(f"Image injection complete — {img_count} images populated")
 
-        elapsed = time.time() - start_time
-        cost = self._calculate_cost()
+            elapsed = time.time() - start_time
+            cost = self._calculate_cost()
 
-        extraction_notes = (
-            f"Mistral two-pass pipeline. "
-            f"OCR model: {self.config.ocr_model}. "
-            f"Structuring model: {self.config.structuring_model}. "
-            f"Processing time: {elapsed:.1f}s. "
-            f"Estimated cost: ${cost['total_cost_usd']:.4f}. "
-            f"Pages: {total_pages}."
-        )
+            extraction_notes = (
+                f"Mistral two-pass pipeline. "
+                f"OCR model: {self.config.ocr_model}. "
+                f"Structuring model: {self.config.structuring_model}. "
+                f"Processing time: {elapsed:.1f}s. "
+                f"Estimated cost: ${cost['total_cost_usd']:.4f}. "
+                f"Pages: {total_pages}."
+            )
 
-        doc = DocumentStructure(
-            metadata=metadata,
-            pages=all_pages,
-            extraction_notes=extraction_notes,
-        )
+            doc = DocumentStructure(
+                metadata=metadata,
+                pages=all_pages,
+                extraction_notes=extraction_notes,
+            )
 
-        # 5) Save outputs
-        if self.config.save_structured_json:
-            json_path = output_dir / f"{stem}.json"
-            with open(json_path, "w", encoding="utf-8") as f:
-                f.write(doc.model_dump_json(indent=2))
-            logger.info(f"Structured JSON saved → {json_path}")
+            # 5) Save outputs
+            if self.config.save_structured_json:
+                json_path = output_dir / f"{stem}.json"
+                with open(json_path, "w", encoding="utf-8") as f:
+                    f.write(doc.model_dump_json(indent=2))
+                logger.info(f"Structured JSON saved → {json_path}")
 
-        if self.config.save_html:
-            html_path = output_dir / f"{stem}.html"
-            html_content = HTMLRenderer.render(doc)
-            with open(html_path, "w", encoding="utf-8") as f:
-                f.write(html_content)
-            logger.info(f"HTML saved → {html_path}")
+            if self.config.save_html:
+                html_path = output_dir / f"{stem}.html"
+                html_content = HTMLRenderer.render(doc)
+                with open(html_path, "w", encoding="utf-8") as f:
+                    f.write(html_content)
+                logger.info(f"HTML saved → {html_path}")
 
-        # Summary
-        logger.info(
-            f"\n{'='*60}\n"
-            f"  ✅ Pipeline complete\n"
-            f"  PDF:    {pdf_path}\n"
-            f"  Pages:  {total_pages}\n"
-            f"  Time:   {elapsed:.1f}s\n"
-            f"  Cost:   ${cost['total_cost_usd']:.4f}\n"
-            f"  Output: {output_dir}/\n"
-            f"{'='*60}"
-        )
+            # Summary
+            logger.info(
+                f"\n{'='*60}\n"
+                f"  ✅ Pipeline complete\n"
+                f"  PDF:    {pdf_path}\n"
+                f"  Pages:  {total_pages}\n"
+                f"  Time:   {elapsed:.1f}s\n"
+                f"  Cost:   ${cost['total_cost_usd']:.4f}\n"
+                f"  Output: {output_dir}/\n"
+                f"{'='*60}"
+            )
 
-        return doc
+            return doc
+
+        finally:
+            # Always cleanup uploaded file
+            self.cleanup()
+
+    # ------------------------------------------------------------------
+    # Cleanup
+    # ------------------------------------------------------------------
+
+    def cleanup(self):
+        """Clean up uploaded file from Mistral Files API."""
+        if self._uploaded_file_id:
+            try:
+                # Mistral SDK doesn't have a public delete method - files auto-expire after 24h
+                # For now, just log - Mistral automatically cleans up old files
+                logger.info(f"Uploaded file {self._uploaded_file_id} will auto-expire (Mistral cleans up after 24h)")
+                self._uploaded_file_id = None
+            except Exception as e:
+                logger.warning(f"Cleanup note: {e}")
 
     # ------------------------------------------------------------------
     # Helpers
@@ -1100,31 +1036,35 @@ class MistralOCRPipeline:
 
     @staticmethod
     def _strip_json_fences(text: str) -> str:
-        """Remove ```json ... ``` wrappers and fix common JSON errors."""
+        """Remove ```json ... ``` wrappers and fix common JSON errors.
+
+        CRITICAL: This function only fixes structural JSON issues, not content.
+        It should NOT modify string content inside JSON values.
+        """
         import re
-        
+
         text = text.strip()
-        
+
         # Remove markdown code fences
         if text.startswith("```"):
             lines = text.split("\n", 1)
             text = lines[1] if len(lines) > 1 else ""
         if text.endswith("```"):
             text = text[:-3]
-        
+
         text = text.strip()
-        
+
         # Fix common JSON errors that LLMs produce:
-        
+
         # 1. Remove trailing commas before closing braces/brackets
         # Match: , followed by optional whitespace and then } or ]
         text = re.sub(r',(\s*[}\]])', r'\1', text)
-        
-        # 2. Replace single quotes with double quotes (but be careful with apostrophes in text)
-        # This is risky but necessary if the LLM uses single quotes for property names
-        # Only do this for property names (single quote at start of line or after {, [, or comma)
-        text = re.sub(r"([{\[,]\s*)'([a-zA-Z_][a-zA-Z0-9_]*)'(\s*:)", r'\1"\2"\3', text)
-        
+
+        # 2. Single-quote property name fix - DISABLED
+        # This regex is too aggressive and can corrupt string content.
+        # LLMs should be prompted to use double quotes via system instructions.
+        # If single quotes are a persistent issue, use a proper JSON parser with recovery.
+
         return text
 
     def _track_tokens(self, response) -> None:

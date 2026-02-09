@@ -21,8 +21,11 @@ python3 mistral_batch_ocr.py --pdfs-dir ./pdfs --output-dir batch_markdown
 ## Step 2: Check Batch Status
 
 ```bash
-# Monitor batch job progress
+# Monitor batch job progress (default: batch_markdown)
 python3 check_batch_status.py
+
+# Or specify custom output directory
+python3 check_batch_status.py --output-dir batch_markdown2
 ```
 
 Wait until status shows `SUCCESS`.
@@ -33,7 +36,10 @@ Extract individual markdown and JSON files from the batch JSONL:
 
 ```bash
 # Replace YOUR_JOB_ID with actual batch job ID
-python3 parse_batch_results.py batch_markdown/batch_YOUR_JOB_ID_raw.jsonl
+python3 parse_batch_results.py batch_markdown/batch_YOUR_JOB_ID_raw.jsonl --output-dir batch_markdown
+
+# Or for custom output directory (e.g., batch_markdown2)
+python3 parse_batch_results.py batch_markdown2/batch_YOUR_JOB_ID_raw.jsonl --output-dir batch_markdown2
 ```
 
 **Output:** For each PDF:
@@ -59,7 +65,7 @@ Once batch job completes:
 
 ```bash
 source venv/bin/activate
-python3 parse_batch_results.py batch_markdown/batch_YOUR_JOB_ID_raw.jsonl
+python3 parse_batch_results.py batch_markdown/batch_YOUR_JOB_ID_raw.jsonl --output-dir batch_markdown
 python3 batch_to_structured.py batch_markdown/*.json --provider gemini --parallel --workers 3
 ```
 
@@ -67,6 +73,6 @@ python3 batch_to_structured.py batch_markdown/*.json --provider gemini --paralle
 
 ```bash
 source venv/bin/activate
-python3 parse_batch_results.py batch_markdown/batch_f549d117-7757-4c37-9e5b-3d71264d17a8_raw.jsonl
+python3 parse_batch_results.py batch_markdown/batch_f549d117-7757-4c37-9e5b-3d71264d17a8_raw.jsonl --output-dir batch_markdown
 python3 batch_to_structured.py batch_markdown/*.json --provider gemini --parallel --workers 3
 ```

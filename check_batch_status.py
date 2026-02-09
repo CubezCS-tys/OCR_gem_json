@@ -6,8 +6,14 @@ Quick status check for batch job.
 from pathlib import Path
 from mistral_batch_ocr import MistralBatchOCR, BatchOCRConfig
 import json
+import argparse
 
-config = BatchOCRConfig(output_dir="batch_markdown")
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="Check batch job status and download results")
+parser.add_argument("--output-dir", default="batch_markdown", help="Output directory (default: batch_markdown)")
+args = parser.parse_args()
+
+config = BatchOCRConfig(output_dir=args.output_dir)
 pipeline = MistralBatchOCR(config)
 
 print("="*60)
@@ -41,7 +47,7 @@ else:
                 results = pipeline.download_batch_results(job)
                 if results:
                     saved = pipeline.parse_and_save_results(job, results)
-                    print(f"  ✓ Saved {saved} PDFs to batch_markdown/")
+                    print(f"  ✓ Saved {saved} PDFs to {args.output_dir}/")
         else:
             print(f"  ⏳ Still processing... check again in 5-10 minutes")
 

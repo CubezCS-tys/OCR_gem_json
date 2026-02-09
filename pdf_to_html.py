@@ -150,6 +150,45 @@ class Table(BaseModel):
     column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
     multi_column_group_id: Optional[str] = Field(default=None, description="ID for grouping elements that form an inline multi-column section")
 
+    def validate_structure(self) -> tuple[bool, list[str]]:
+        """Validate table structure for consistency.
+
+        Returns:
+            (is_valid, list_of_errors)
+        """
+        errors = []
+
+        # Check if table has content
+        if not self.headers and not self.rows:
+            errors.append("Table has no headers or rows")
+            return (False, errors)
+
+        # Determine expected column count
+        expected_cols = len(self.headers) if self.headers else (len(self.rows[0]) if self.rows else 0)
+
+        if expected_cols == 0:
+            errors.append("Cannot determine column count")
+            return (False, errors)
+
+        # Validate all rows have consistent column count (accounting for col_span)
+        for row_idx, row in enumerate(self.rows):
+            total_cols = sum(cell.col_span for cell in row)
+            if total_cols != expected_cols:
+                errors.append(
+                    f"Row {row_idx} has {total_cols} columns (expected {expected_cols})"
+                )
+
+        # Check for overlapping cells due to invalid row_span/col_span
+        # (This is a simplified check - full validation would require grid tracking)
+        for row in self.rows:
+            for cell in row:
+                if cell.row_span < 1:
+                    errors.append(f"Invalid row_span {cell.row_span} (must be >= 1)")
+                if cell.col_span < 1:
+                    errors.append(f"Invalid col_span {cell.col_span} (must be >= 1)")
+
+        return (len(errors) == 0, errors)
+
 
 class TextBlock(BaseModel):
     """Represents a block of text with semantic meaning and rich formatting."""
@@ -740,11 +779,10 @@ window.addEventListener('load', () => {
     }}"""
         
         base_styles += styling
-        
+
         # Continue with remaining styles from the original method
         return base_styles + """
-    }}
-    
+
     figure {{
         margin: 1.5rem 0;
         text-align: center;
@@ -1123,21 +1161,19 @@ window.addEventListener('load', () => {
     
     @staticmethod
     def _similarity(str1: str, str2: str) -> float:
-        """Calculate similarity ratio between two strings (0.0 to 1.0)."""
+        """Calculate similarity ratio between two strings (0.0 to 1.0) using sequence matching.
+
+        Uses difflib.SequenceMatcher for accurate string similarity (not character set).
+        This correctly handles strings like "abc" vs "cba" (low similarity) and
+        "hello world" vs "hello there" (medium similarity).
+        """
         if not str1 or not str2:
             return 0.0
-        
-        # Simple character-based similarity
-        set1 = set(str1.lower())
-        set2 = set(str2.lower())
-        
-        if not set1 or not set2:
-            return 0.0
-        
-        intersection = len(set1 & set2)
-        union = len(set1 | set2)
-        
-        return intersection / union if union > 0 else 0.0
+
+        # Use difflib for proper string sequence similarity
+        from difflib import SequenceMatcher
+        matcher = SequenceMatcher(None, str1.lower(), str2.lower())
+        return matcher.ratio()
     
     @staticmethod
     def _deduplicate_images(page: PageContent) -> PageContent:
@@ -2063,30 +2099,22 @@ class ImageExtractor:
     
     def extract_images_for_document(self, doc: DocumentStructure) -> DocumentStructure:
         """
-        Extract all images from the document and populate image_data fields.
-        
+        DEPRECATED: Image bbox fields were removed in favor of flow-based positioning.
+
+        This method is kept for API compatibility but does nothing.
+        Images should be populated by the OCR pipeline (Mistral) directly.
+
         Args:
-            doc: DocumentStructure with image bounding boxes from Gemini
-        
+            doc: DocumentStructure
+
         Returns:
-            DocumentStructure with image_data populated
+            Unmodified DocumentStructure
         """
-        for page in doc.pages:
-            for image in page.images:
-                try:
-                    image_data = self.extract_image(
-                        page_num=page.page_number,
-                        bbox_top=image.bbox_top,
-                        bbox_left=image.bbox_left,
-                        bbox_width=image.bbox_width,
-                        bbox_height=image.bbox_height
-                    )
-                    image.image_data = image_data
-                    if image_data:
-                        logger.info(f"Extracted {image.image_type} from page {page.page_number}")
-                except Exception as e:
-                    logger.warning(f"Failed to extract image from page {page.page_number}: {e}")
-        
+        logger.warning(
+            "ImageExtractor.extract_images_for_document is deprecated. "
+            "Image bbox fields no longer exist - images are flow-based. "
+            "Use Mistral OCR pipeline for image extraction."
+        )
         return doc
     
     def close(self):
@@ -2143,10 +2171,11 @@ class PDFProcessor:
     def _upload_pdf(self, pdf_path: str) -> types.File:
         """Upload PDF to Gemini Files API with retry logic."""
         pdf_path = str(pathlib.Path(pdf_path).expanduser().resolve())
-        
+
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"PDF file not found: {pdf_path}")
-        
+
+        # Upload by path - Gemini SDK handles file opening internally
         for attempt in range(self.config.max_retries):
             try:
                 logger.info(f"Uploading PDF: {pdf_path} (attempt {attempt + 1})")
@@ -2172,15 +2201,17 @@ IMPORTANT:
 - If unable to determine page count, return -1
 - If PDF is encrypted or corrupted, set total_pages to -1 and note in document_type"""
 
-        # Try multiple times with different temperatures if JSON parsing fails
-        # Start with low temperature for accurate transcription, increase slightly if it fails
-        # Temperature ceiling lowered to 0.7 (metadata should be factual, not creative)
-        temperatures = [0.3, 0.5, 0.7]
+        # CRITICAL: Keep temperature at 0.0 for OCR/metadata extraction
+        # Metadata extraction is transcription (not creative writing)
+        # Higher temperature = more hallucinations, less accurate extraction
+        # If JSON fails, retry with same temp (issue is formatting, not content quality)
+        temperature = 0.0
+        max_attempts = self.config.max_retries
         last_error = None
-        
-        for attempt, temperature in enumerate(temperatures, 1):
+
+        for attempt in range(1, max_attempts + 1):
             try:
-                logger.info(f"Extracting metadata (attempt {attempt}/{len(temperatures)}, temperature={temperature})")
+                logger.info(f"Extracting metadata (attempt {attempt}/{max_attempts}, temperature={temperature})")
                 
                 response = self.client.models.generate_content(
                     model=self.config.model,
@@ -2206,16 +2237,16 @@ IMPORTANT:
                 # Check if it's a JSON parsing error
                 if "json" in error_msg.lower() or "parsing" in error_msg.lower() or "invalid" in error_msg.lower():
                     logger.warning(f"JSON parsing error on attempt {attempt}: {error_msg[:200]}")
-                    if attempt < len(temperatures):
-                        logger.info(f"Retrying with lower temperature ({temperatures[attempt]})...")
+                    if attempt < max_attempts:
+                        logger.info(f"Retrying (keeping temp={temperature} for OCR fidelity)...")
                         time.sleep(1)  # Brief delay before retry
                         continue
                 else:
                     # Non-parsing error, re-raise immediately
                     raise
-        
+
         # All retries exhausted
-        logger.error(f"Failed to extract valid metadata after {len(temperatures)} attempts")
+        logger.error(f"Failed to extract valid metadata after {max_attempts} attempts")
         raise RuntimeError(f"Metadata extraction failed: {last_error}")
     
     def _estimate_cost(self, total_pages: int) -> dict:
@@ -2320,13 +2351,9 @@ For each page in this range:
    - Set page_number_position to one of: \"header-left\", \"header-center\", \"header-right\", \"footer-left\", \"footer-center\", \"footer-right\"
 5. CRITICAL: DO NOT duplicate header/footer text in text_blocks - if you extract header=\"Title\", do NOT include \"Title\" as a text_block
 6. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
-   - CRITICAL: For EVERY SINGLE text block, you MUST provide BOUNDING BOX coordinates as percentages (0-100):
-     * bbox_top: distance from top of page to top of text block (REQUIRED, 0-100)
-     * bbox_left: distance from left of page to left of text block (REQUIRED, 0-100)
-     * bbox_width: width of the text block (REQUIRED, 0-100)
-     * bbox_height: height of the text block (REQUIRED, 0-100)
-   - These coordinates are MANDATORY for proper rendering, not optional
-5. For MATHEMATICAL EQUATIONS:
+   - Set reading_order field for proper content flow (1, 2, 3...)
+   - For multi-column layouts, also set column_number (1, 2, 3...)
+7. For MATHEMATICAL EQUATIONS:
    - CRITICAL: TRANSCRIBE equations EXACTLY as they appear - do NOT solve, simplify, or manipulate them
    - Extract the equation as it is written in the PDF, preserving all notation and structure
    - Convert to LaTeX syntax in an 'equation' block
@@ -2335,33 +2362,27 @@ For each page in this range:
    - For NUMBERED EQUATIONS (e.g., labeled (1), (2), (3)): Extract number in equation_number field
    - Use standard LaTeX notation: \\frac{{}}{{}}, \\sum, \\int, \\sqrt{{}}, \\text{{}}, ^{{}}, _{{}}, etc.
    - For superscripts/subscripts: Use ^{{}} and _{{}} syntax (e.g., x^{{2}}, H_{{2}}O)
-   - Include bbox coordinates for equation blocks
    - Example: If PDF shows "س = د/ط" transcribe it as-is, don't simplify or solve
-6. For NUMBERS AND NUMERALS:
+8. For NUMBERS AND NUMERALS:
    - CRITICAL: Preserve the EXACT numeral system from the PDF
    - If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), transcribe them EXACTLY - do NOT convert to Western numerals (0123456789)
    - If PDF uses Western numerals (0123456789), keep them as Western numerals
    - Example: "٢.٥٠" must stay "٢.٥٠", NOT "2.50"
    - Example: "١٠.٠٠" must stay "١٠.٠٠", NOT "10.00"
    - This applies to ALL content: tables, text, equations, captions, page numbers
-7. For LISTS (numbered, bulleted, nested):
+9. For LISTS (numbered, bulleted, nested):
    - For NESTED LISTS: Set list_level field (1=top level, 2=first nesting, 3=deeper nesting, etc.)
    - Preserve hierarchy and proper indentation structure
-8. For TABLES: OCR all text content and structure it with headers and rows. Do NOT treat tables as images.
+10. For TABLES: OCR all text content and structure it with headers and rows. Do NOT treat tables as images.
    - For MERGED CELLS: Set row_span and col_span values (default is 1 for regular cells)
    - For table captions: Extract separately from table content
-   - Provide BOUNDING BOX coordinates (bbox_top, bbox_left, bbox_width, bbox_height) as percentages (0-100) of the page.
-9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
+   - Set reading_order and column_number for proper positioning
+11. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
    - Identify the image_type (chart, graph, diagram, figure, photo, logo, illustration, other)
    - Provide a description
    - CRITICAL: Avoid duplicate images - if same image appears multiple times, extract once
-   - Use bbox positions to distinguish different images
-   - Provide BOUNDING BOX coordinates as percentages (0-100) of the page:
-     * bbox_top: distance from top of page
-     * bbox_left: distance from left of page  
-     * bbox_width: width of the image
-     * bbox_height: height of the image
-10. For MULTI-COLUMN LAYOUTS (CRITICAL DETECTION):
+   - Set reading_order and column_number for proper positioning
+12. For MULTI-COLUMN LAYOUTS (CRITICAL DETECTION):
    - ALWAYS distinguish between TWO types of multi-column layouts:
    
    TYPE 1: FULL-PAGE MULTI-COLUMN (entire page is multi-column)
@@ -2384,32 +2405,31 @@ For each page in this range:
        - Set multi_column_group_id="group1" (or "group2", "group3" for multiple inline sections)
        - Set column_number (1, 2, etc.) for elements within that group
      * Elements outside the group should NOT have multi_column_group_id
-   
-   - Ensure bbox_left positions distinguish columns clearly:
-     * 2 columns: column 1 (0-48%), column 2 (52-100%)
-     * 3 columns: column 1 (0-32%), column 2 (34-66%), column 3 (68-100%)
+
    - CRITICAL: For LTR documents, extract columns LEFT-TO-RIGHT
    - CRITICAL: For RTL documents, extract columns RIGHT-TO-LEFT
    - Add reading_order_notes if the layout is complex or unusual
-11. For TEXT DIRECTION:
+13. For TEXT DIRECTION:
    - Set page_direction='rtl' for Arabic/Hebrew pages, 'ltr' for English/Western
    - For mixed RTL/LTR text blocks, set text_direction='rtl' or 'ltr' on individual text blocks
-12. For WATERMARKS and BACKGROUND TEXT:
+14. For WATERMARKS and BACKGROUND TEXT:
    - Ignore decorative watermarks (e.g., "DRAFT", "CONFIDENTIAL")
    - Extract meaningful background text only if it's actual content
-13. Preserve natural reading flow and content accuracy
+15. Preserve natural reading flow and content accuracy
 
-REMEMBER: 
-- ALL elements (text blocks, images, tables) need bbox coordinates for proper ordering
-- Tables = OCR the text AND provide bounding box coordinates
-- Charts/Graphs/Figures = provide bounding box for extraction
+REMEMBER:
+- ALL elements (text blocks, images, tables) need reading_order for proper flow
+- Tables = OCR the text with proper structure
+- Charts/Graphs/Figures = describe them accurately
 - Preserve numeral systems EXACTLY as they appear
 - TRANSCRIBE equations exactly, don't solve or simplify them"""
 
         for attempt in range(self.config.max_retries):
             try:
-                # Start with low temperature for accurate transcription (not creative writing)
-                temperature = 0.3 + (attempt * 0.2)  # 0.3 -> 0.5 -> 0.7 on retries
+                # CRITICAL: Keep temperature at 0.0 for OCR transcription
+                # DO NOT increase on retry - this is transcription, not creative writing
+                # Higher temp = more hallucinations & less accurate OCR
+                temperature = 0.0
                 logger.info(f"Extracting pages {start_page}-{end_page} (attempt {attempt + 1}, temperature={temperature})")
                 
                 response = self.client.models.generate_content(
@@ -2432,11 +2452,8 @@ REMEMBER:
                             "For MULTI-COLUMN LAYOUTS in LTR docs: Extract left-to-right column order. For RTL docs: right-to-left. "
                             "For MIXED RTL/LTR TEXT: Set text_direction on individual text blocks. "
                             "For WATERMARKS: Ignore decorative watermarks like 'DRAFT', 'CONFIDENTIAL'. "
-                            "For EVERY element (text blocks, tables, images), provide bbox coordinates (top, left, width, height) as percentages. "
-                            "CRITICAL BBOX RULES: ALWAYS measure bbox_left from the PHYSICAL LEFT EDGE of the page (0% = left edge, 100% = right edge). "
-                            "This applies regardless of text direction (RTL or LTR). For Arabic/Hebrew RTL text that appears on the right side of the page, bbox_left should be 70-90%, NOT 10-30%. "
-                            "For charts, graphs, diagrams, and figures provide accurate bounding box coordinates as percentages. "
-                            "For tables, also provide bbox coordinates for proper ordering. "
+                            "For EVERY element (text blocks, tables, images), set reading_order for proper content flow. "
+                            "For multi-column layouts, also set column_number (1, 2, 3...) for each element. "
                             "CRITICAL: Ensure all JSON strings are properly escaped, especially quotes and special characters."
                         ),
                         media_resolution=self._get_media_resolution(),
@@ -2446,12 +2463,22 @@ REMEMBER:
                 )
                 
                 chunk = ChunkExtraction.model_validate_json(response.text)
-                
+
                 # Track token usage
                 if hasattr(response, 'usage_metadata'):
                     self._total_input_tokens += getattr(response.usage_metadata, 'prompt_token_count', 0)
                     self._total_output_tokens += getattr(response.usage_metadata, 'candidates_token_count', 0)
-                
+
+                # Validate table structures
+                for page in chunk.pages:
+                    for table in page.tables:
+                        is_valid, errors = table.validate_structure()
+                        if not is_valid:
+                            logger.warning(
+                                f"Table structure validation failed on page {page.page_number}: "
+                                f"{'; '.join(errors)}"
+                            )
+
                 logger.info(f"Extracted {len(chunk.pages)} pages from range {start_page}-{end_page}")
                 return chunk.pages
                 
@@ -2625,8 +2652,9 @@ Instructions:
    - Set page_number_position to one of: \"header-left\", \"header-center\", \"header-right\", \"footer-left\", \"footer-center\", \"footer-right\"
 6. CRITICAL: DO NOT duplicate header/footer text in text_blocks - if you extract header="Title", do NOT include "Title" as a text_block
 7. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
-   - CRITICAL: For EVERY text block, you MUST provide bbox coordinates as percentages (0-100)
-6. For MATHEMATICAL EQUATIONS:
+   - Set reading_order field for proper content flow (1, 2, 3...)
+   - For multi-column layouts, also set column_number (1, 2, 3...)
+8. For MATHEMATICAL EQUATIONS:
    - CRITICAL: TRANSCRIBE equations EXACTLY as they appear - do NOT solve, simplify, or manipulate them
    - Convert to LaTeX syntax in 'equation' blocks
    - For inline equations: set is_display_math=false
@@ -2634,22 +2662,22 @@ Instructions:
    - For NUMBERED EQUATIONS: Extract number in equation_number field
    - Use LaTeX notation: \\frac{{}}{{}}, \\sum, \\int, \\sqrt{{}}, ^{{}}, _{{}}, etc.
    - Example: If PDF shows "س = د/ط" transcribe it as-is, don't solve
-6. For NUMBERS AND NUMERALS:
+9. For NUMBERS AND NUMERALS:
    - CRITICAL: Preserve EXACT numeral system from PDF
    - If PDF uses Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩), keep them EXACTLY
    - Do NOT convert to Western numerals (0123456789)
-7. For LISTS (numbered, bulleted, nested):
+10. For LISTS (numbered, bulleted, nested):
    - For NESTED LISTS: Set list_level field (1=top, 2=nested, etc.)
    - Preserve hierarchy structure
-8. For TABLES: OCR all text content. Do NOT treat tables as images.
+11. For TABLES: OCR all text content. Do NOT treat tables as images.
    - For MERGED CELLS: Set row_span and col_span values
    - For table captions: Extract separately
-   - Provide bbox coordinates
-9. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
+   - Set reading_order and column_number for proper positioning
+12. For VISUAL ELEMENTS (charts, graphs, diagrams, figures, photos):
    - Identify image_type and provide description
    - CRITICAL: Avoid duplicate images - extract each unique image only once
-   - Provide bbox coordinates as percentages (0-100)
-10. For MULTI-COLUMN LAYOUTS (CRITICAL DETECTION):
+   - Set reading_order and column_number for proper positioning
+13. For MULTI-COLUMN LAYOUTS (CRITICAL DETECTION):
     - Distinguish between TWO types:
     
     TYPE 1: FULL-PAGE MULTI-COLUMN (entire page is multi-column)
@@ -2661,33 +2689,34 @@ Instructions:
     - Set has_multi_column=FALSE for page
     - For elements in inline section only: set multi_column_group_id="group1" and column_number
     - Elements outside group: no multi_column_group_id
-    - If detected:
+
+    - If full-page multi-column detected:
       * Set has_multi_column=true, column_count (2, 3+), column_gap (20-40 points)
       * CRITICAL: Keep column_count CONSISTENT across pages with same layout
-    - Ensure bbox_left positions distinguish columns clearly:
-      * 2 columns: column 1 (0-48%), column 2 (52-100%)
-      * 3 columns: column 1 (0-32%), column 2 (34-66%), column 3 (68-100%)
     - For LTR docs: Extract columns LEFT-TO-RIGHT
     - For RTL docs: Extract columns RIGHT-TO-LEFT
     - Reading order MUST follow column flow (top-to-bottom within each column)
     - Add reading_order_notes if complex
-11. For TEXT DIRECTION:
+14. For TEXT DIRECTION:
     - Set page_direction='rtl' for Arabic/Hebrew, 'ltr' for Western
     - For mixed RTL/LTR: Set text_direction on individual blocks
-12. For WATERMARKS: Ignore decorative watermarks
-13. OCR all scanned text accurately
-14. Detect document metadata: title, author, language, document type
+15. For WATERMARKS: Ignore decorative watermarks
+16. OCR all scanned text accurately
+17. Detect document metadata: title, author, language, document type
 
 REMEMBER:
-- Tables = OCR the text. Charts/Graphs = provide bbox for extraction
+- Tables = OCR the text with proper structure
+- Charts/Graphs = describe them accurately
 - Preserve numeral systems EXACTLY
 - TRANSCRIBE equations exactly, don't solve them
+- Set reading_order for all elements
 - If document is too large for context, prioritize first pages and set truncated=true"""
 
         for attempt in range(self.config.max_retries):
             try:
-                # Start with low temperature for accurate transcription (not creative writing)
-                temperature = 0.3 + (attempt * 0.2)  # 0.3 -> 0.5 -> 0.7 on retries
+                # CRITICAL: Keep temperature at 0.0 for OCR transcription
+                # DO NOT increase on retry - this is document transcription, not creative generation
+                temperature = 0.0
                 logger.info(f"Extracting structured content (attempt {attempt + 1}, temperature={temperature})")
                 
                 response = self.client.models.generate_content(
@@ -2711,9 +2740,8 @@ REMEMBER:
                             "For MULTI-COLUMN LAYOUTS in LTR docs: Extract left-to-right column order. For RTL docs: right-to-left. "
                             "For MIXED RTL/LTR TEXT: Set text_direction on individual text blocks. "
                             "For WATERMARKS: Ignore decorative watermarks like 'DRAFT', 'CONFIDENTIAL'. "
-                            "For ALL elements (text blocks, tables, images), provide bbox coordinates (top, left, width, height) as percentages. "
-                            "CRITICAL BBOX RULES: ALWAYS measure bbox_left from the PHYSICAL LEFT EDGE of the page (0% = left edge, 100% = right edge). "
-                            "This applies regardless of text direction (RTL or LTR). For Arabic/Hebrew RTL text that appears on the right side of the page, bbox_left should be 70-90%, NOT 10-30%. "
+                            "For ALL elements (text blocks, tables, images), set reading_order for proper content flow. "
+                            "For multi-column layouts, also set column_number (1, 2, 3...) for each element. "
                             "Preserve all content, formatting, and semantic structure. "
                             "Be thorough - process every page completely. "
                             "CRITICAL: Ensure all JSON strings are properly escaped, especially quotes and special characters."
@@ -2737,10 +2765,11 @@ REMEMBER:
                     logger.warning(f"JSON parsing error on attempt {attempt + 1}: {error_msg[:200]}")
                 else:
                     logger.warning(f"Extraction attempt {attempt + 1} failed: {error_msg[:200]}")
-                
+
+
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.retry_delay * (attempt + 1)
-                    logger.info(f"Retrying in {delay}s with lower temperature...")
+                    logger.info(f"Retrying in {delay}s (keeping temp={temperature} for OCR fidelity)...")
                     time.sleep(delay)
                 else:
                     raise RuntimeError(f"Failed to extract content after {self.config.max_retries} attempts") from e
@@ -2769,11 +2798,11 @@ Requirements:
 - OCR all scanned content accurately
 - Preserve all content, do not omit any text or tables"""
 
-        # Use retry loop with temperature progression like other methods
+        # Use retry loop - keep temperature at 0.0 for accurate transcription
         for attempt in range(self.config.max_retries):
             try:
-                # Start with low temperature for accurate transcription
-                temperature = 0.3 + (attempt * 0.2)  # 0.3 -> 0.5 -> 0.7 on retries
+                # CRITICAL: Keep temperature at 0.0 for accurate OCR transcription
+                temperature = 0.0
                 logger.info(f"Direct HTML extraction (attempt {attempt + 1}, temperature={temperature})")
                 
                 response = self.client.models.generate_content(
@@ -2810,10 +2839,11 @@ Requirements:
             except Exception as e:
                 error_msg = str(e)
                 logger.warning(f"Direct HTML attempt {attempt + 1} failed: {error_msg[:200]}")
-                
+
+
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.retry_delay * (attempt + 1)
-                    logger.info(f"Retrying in {delay}s with higher temperature...")
+                    logger.info(f"Retrying in {delay}s (keeping temp={temperature} for fidelity)...")
                     time.sleep(delay)
                 else:
                     logger.error(f"All {self.config.max_retries} direct HTML attempts failed")
