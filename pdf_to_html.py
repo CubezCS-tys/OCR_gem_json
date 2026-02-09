@@ -148,6 +148,7 @@ class Table(BaseModel):
     # Flow-based positioning
     reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow")
     column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
+    multi_column_group_id: Optional[str] = Field(default=None, description="ID for grouping elements that form an inline multi-column section")
 
 
 class TextBlock(BaseModel):
@@ -188,6 +189,7 @@ class TextBlock(BaseModel):
     text_align: Optional[Literal["left", "center", "right", "justify"]] = Field(default=None, description="Text alignment: left, center, right, or justify")
     reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow (1, 2, 3...)")
     column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
+    multi_column_group_id: Optional[str] = Field(default=None, description="ID for grouping elements that form an inline multi-column section (e.g., 'group1', 'group2')")
 
 
 class Image(BaseModel):
@@ -200,6 +202,7 @@ class Image(BaseModel):
     # Flow-based positioning
     reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow")
     column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
+    multi_column_group_id: Optional[str] = Field(default=None, description="ID for grouping elements that form an inline multi-column section")
     # Alignment within flow
     alignment: Optional[Literal["left", "center", "right", "full-width"]] = Field(default="center", description="Horizontal alignment within text flow")
     # Actual dimensions
@@ -215,7 +218,9 @@ class PageContent(BaseModel):
     page_number: int = Field(description="1-based page number")
     # Separate header components for robust rendering
     header: Optional[str] = Field(default=None, description="Header text from the page (e.g., chapter titles)")
+    header_position: Optional[Literal["left", "center", "right"]] = Field(default="center", description="Position of header text: left, center, or right")
     footer: Optional[str] = Field(default=None, description="Footer text from the page (e.g., citations)")
+    footer_position: Optional[Literal["left", "center", "right"]] = Field(default="center", description="Position of footer text: left, center, or right")
     page_number_text: Optional[str] = Field(default=None, description="Explicit page number as it appears in document (separate from header/footer)")
     page_number_position: Optional[Literal["header-left", "header-center", "header-right", "footer-left", "footer-center", "footer-right"]] = Field(
         default=None, description="Position of page number on the page"
@@ -928,6 +933,22 @@ window.addEventListener('load', () => {
         column-fill: balance;
     }}
     
+    /* Inline multi-column sections - for embedded multi-column elements within single-column pages */
+    .inline-multi-column {{
+        margin: 1rem 0;
+        padding: 1rem;
+        column-gap: 2rem;
+        column-rule: 1px solid #e0e0e0;
+        column-fill: balance;
+        break-inside: avoid-column;
+        page-break-inside: avoid;
+    }}
+    
+    .inline-multi-column > * {{
+        break-inside: avoid-column;
+        page-break-inside: avoid;
+    }}
+    
     /* For RTL multi-column, use column-fill and direction */
     [dir="rtl"] .has-multi-column,
     [dir="rtl"] .has-multi-column-3,
@@ -978,26 +999,32 @@ window.addEventListener('load', () => {
         parts = ['<div class="page-header">']
         
         # Determine where page number should go
-        position = page.page_number_position if hasattr(page, 'page_number_position') and page.page_number_position else None
+        page_num_position = page.page_number_position if hasattr(page, 'page_number_position') and page.page_number_position else None
+        # Determine where header text should go
+        header_pos = page.header_position if hasattr(page, 'header_position') and page.header_position else "center"
         
         # Left section
         parts.append('<div class="page-header-left">')
-        if position == "header-left" and page.page_number_text:
+        if page_num_position == "header-left" and page.page_number_text:
             parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        elif page.header and header_pos == "left":
+            parts.append(HTMLRenderer._escape(page.header))
         parts.append('</div>')
         
         # Center section
         parts.append('<div class="page-header-center">')
-        if position == "header-center" and page.page_number_text:
+        if page_num_position == "header-center" and page.page_number_text:
             parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
-        elif page.header:
+        elif page.header and header_pos == "center":
             parts.append(HTMLRenderer._escape(page.header))
         parts.append('</div>')
         
         # Right section
         parts.append('<div class="page-header-right">')
-        if position == "header-right" and page.page_number_text:
+        if page_num_position == "header-right" and page.page_number_text:
             parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        elif page.header and header_pos == "right":
+            parts.append(HTMLRenderer._escape(page.header))
         elif not page.page_number_text:
             # Default: show numeric page number on right
             parts.append(f'<span class="page-number">Page {page.page_number}</span>')
@@ -1015,26 +1042,32 @@ window.addEventListener('load', () => {
         parts = ['<div class="page-footer">']
         
         # Determine where page number should go
-        position = page.page_number_position if hasattr(page, 'page_number_position') and page.page_number_position else None
+        page_num_position = page.page_number_position if hasattr(page, 'page_number_position') and page.page_number_position else None
+        # Determine where footer text should go
+        footer_pos = page.footer_position if hasattr(page, 'footer_position') and page.footer_position else "center"
         
         # Left section
         parts.append('<div class="page-footer-left">')
-        if position == "footer-left" and page.page_number_text:
+        if page_num_position == "footer-left" and page.page_number_text:
             parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        elif page.footer and footer_pos == "left":
+            parts.append(HTMLRenderer._escape(page.footer))
         parts.append('</div>')
         
         # Center section
         parts.append('<div class="page-footer-center">')
-        if position == "footer-center" and page.page_number_text:
+        if page_num_position == "footer-center" and page.page_number_text:
             parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
-        elif page.footer:
+        elif page.footer and footer_pos == "center":
             parts.append(HTMLRenderer._escape(page.footer))
         parts.append('</div>')
         
         # Right section
         parts.append('<div class="page-footer-right">')
-        if position == "footer-right" and page.page_number_text:
+        if page_num_position == "footer-right" and page.page_number_text:
             parts.append(f'<span class="page-number">{HTMLRenderer._escape(page.page_number_text)}</span>')
+        elif page.footer and footer_pos == "right":
+            parts.append(HTMLRenderer._escape(page.footer))
         parts.append('</div>')
         
         parts.append('</div>')
@@ -1246,11 +1279,51 @@ window.addEventListener('load', () => {
             # Single column: just use reading order
             elements.sort(key=lambda e: e['order'])
         
-        # Render elements in order, grouping consecutive list items
+        # Render elements in order, handling multi-column groups and list grouping
         footnotes = []  # Collect footnotes for end of page
         i = 0
         while i < len(elements):
             element = elements[i]
+            
+            # Check if this element starts a multi-column group
+            group_id = getattr(element['content'], 'multi_column_group_id', None)
+            
+            if group_id:
+                # Collect all consecutive elements with the same group_id
+                group_elements = [element]
+                j = i + 1
+                while j < len(elements):
+                    next_group_id = getattr(elements[j]['content'], 'multi_column_group_id', None)
+                    if next_group_id == group_id:
+                        group_elements.append(elements[j])
+                        j += 1
+                    else:
+                        break
+                
+                # Determine column count from the group
+                max_col = max((getattr(e['content'], 'column_number', None) or 1) for e in group_elements)
+                
+                # Render the group with multi-column layout
+                parts.append(f'<div class="inline-multi-column" style="column-count: {max_col}; column-gap: 2rem;">')
+                
+                for grp_elem in group_elements:
+                    if grp_elem['type'] == 'text':
+                        block = grp_elem['content']
+                        if block.block_type == 'list_item':
+                            # Handle list items within group
+                            list_items = [block]
+                            # Don't look ahead for more list items outside this loop
+                            parts.append(HTMLRenderer._render_list(list_items))
+                        elif block.block_type != 'footnote':
+                            parts.append(HTMLRenderer._render_text_block(block))
+                    elif grp_elem['type'] == 'table':
+                        parts.append(HTMLRenderer._render_table(grp_elem['content']))
+                    elif grp_elem['type'] == 'image':
+                        parts.append(HTMLRenderer._render_image(grp_elem['content']))
+                
+                parts.append('</div>')
+                i = j  # Skip past all elements we just processed
+                continue
             
             if element['type'] == 'text':
                 block = element['content']
@@ -1265,10 +1338,17 @@ window.addEventListener('load', () => {
                 if block.block_type == 'list_item':
                     list_items = [block]
                     j = i + 1
-                    # Collect consecutive list items
-                    while j < len(elements) and elements[j]['type'] == 'text' and elements[j]['content'].block_type == 'list_item':
-                        list_items.append(elements[j]['content'])
-                        j += 1
+                    # Collect consecutive list items (but not those in a multi-column group)
+                    while j < len(elements):
+                        next_elem = elements[j]
+                        # Stop if we hit a multi-column group or non-list item
+                        if getattr(next_elem['content'], 'multi_column_group_id', None):
+                            break
+                        if next_elem['type'] == 'text' and next_elem['content'].block_type == 'list_item':
+                            list_items.append(next_elem['content'])
+                            j += 1
+                        else:
+                            break
                     
                     # Render as a proper list
                     parts.append(HTMLRenderer._render_list(list_items))
@@ -2232,9 +2312,14 @@ IMPORTANT: Only process pages {start_page} through {end_page}. Skip all other pa
 For each page in this range:
 1. Set the correct page_number (starting from {start_page})
 2. Extract the HEADER text if present (usually at the top of the page - may contain page numbers, chapter titles, section names)
+   - Set header_position=\"left\", \"center\", or \"right\" based on where header text appears horizontally
 3. Extract the FOOTER text if present (usually at the bottom of the page - may contain page numbers, citations, document info)
-4. CRITICAL: DO NOT duplicate header/footer text in text_blocks - if you extract header=\"Title\", do NOT include \"Title\" as a text_block
-5. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
+   - Set footer_position=\"left\", \"center\", or \"right\" based on where footer text appears horizontally
+4. If page number appears separately from header/footer text:
+   - Extract it in page_number_text field
+   - Set page_number_position to one of: \"header-left\", \"header-center\", \"header-right\", \"footer-left\", \"footer-center\", \"footer-right\"
+5. CRITICAL: DO NOT duplicate header/footer text in text_blocks - if you extract header=\"Title\", do NOT include \"Title\" as a text_block
+6. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
    - CRITICAL: For EVERY SINGLE text block, you MUST provide BOUNDING BOX coordinates as percentages (0-100):
      * bbox_top: distance from top of page to top of text block (REQUIRED, 0-100)
      * bbox_left: distance from left of page to left of text block (REQUIRED, 0-100)
@@ -2277,21 +2362,34 @@ For each page in this range:
      * bbox_width: width of the image
      * bbox_height: height of the image
 10. For MULTI-COLUMN LAYOUTS (CRITICAL DETECTION):
-   - ALWAYS check if the page has multiple columns (2-column, 3-column layouts)
-   - Look for text flowing in parallel vertical sections
-   - Common in: academic papers, newspapers, magazines, technical reports
-   - If multi-column detected:
+   - ALWAYS distinguish between TWO types of multi-column layouts:
+   
+   TYPE 1: FULL-PAGE MULTI-COLUMN (entire page is multi-column)
+   - Common in: academic papers, newspapers, magazines where ENTIRE page has columns
+   - Look for text flowing in parallel vertical sections across the whole page
+   - If detected:
      * Set has_multi_column=true
      * Set column_count (2, 3, or more)
      * Set column_gap (gap width in points, typically 20-40)
+     * For ALL text_blocks, tables, images: set column_number (1, 2, 3, etc.)
      * CRITICAL: Ensure ALL pages with same layout have SAME column_count
-     * Column detection must be CONSISTENT across similar pages
+     * Reading order MUST follow column flow (top-to-bottom within each column)
+   
+   TYPE 2: INLINE MULTI-COLUMN SECTION (embedded multi-column element in single-column page)
+   - Common in: lists of items, contact info, reference lists embedded in otherwise single-column text
+   - Example: A page with regular single-column paragraphs, but ONE section (like a list) in 2 columns
+   - If detected:
+     * Set has_multi_column=FALSE for the page (page is single-column overall)
+     * For elements in the inline multi-column section ONLY:
+       - Set multi_column_group_id="group1" (or "group2", "group3" for multiple inline sections)
+       - Set column_number (1, 2, etc.) for elements within that group
+     * Elements outside the group should NOT have multi_column_group_id
+   
    - Ensure bbox_left positions distinguish columns clearly:
      * 2 columns: column 1 (0-48%), column 2 (52-100%)
      * 3 columns: column 1 (0-32%), column 2 (34-66%), column 3 (68-100%)
-   - CRITICAL: For LTR documents, extract columns LEFT-TO-RIGHT (complete column 1, then column 2, etc.)
-   - CRITICAL: For RTL documents, extract columns RIGHT-TO-LEFT (complete rightmost column first)
-   - Reading order MUST follow column flow (top-to-bottom within each column)
+   - CRITICAL: For LTR documents, extract columns LEFT-TO-RIGHT
+   - CRITICAL: For RTL documents, extract columns RIGHT-TO-LEFT
    - Add reading_order_notes if the layout is complex or unusual
 11. For TEXT DIRECTION:
    - Set page_direction='rtl' for Arabic/Hebrew pages, 'ltr' for English/Western
@@ -2516,10 +2614,17 @@ REMEMBER:
 
 Instructions:
 1. Process EVERY page from start to finish - do not skip any pages
-2. Extract the HEADER text if present (usually at the top of the page - may contain page numbers, chapter titles, section names)
-3. Extract the FOOTER text if present (usually at the bottom of the page - may contain page numbers, citations, document info)
-4. CRITICAL: DO NOT duplicate header/footer text in text_blocks - if you extract header="Title", do NOT include "Title" as a text_block
-5. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
+2. For each page:
+   - Set the correct page_number (1, 2, 3, etc.)
+3. Extract the HEADER text if present (usually at the top of the page - may contain page numbers, chapter titles, section names)
+   - Set header_position=\"left\", \"center\", or \"right\" based on where header text appears horizontally
+4. Extract the FOOTER text if present (usually at the bottom of the page - may contain page numbers, citations, document info)
+   - Set footer_position=\"left\", \"center\", or \"right\" based on where footer text appears horizontally
+5. If page number appears separately from header/footer text:
+   - Extract it in page_number_text field
+   - Set page_number_position to one of: \"header-left\", \"header-center\", \"header-right\", \"footer-left\", \"footer-center\", \"footer-right\"
+6. CRITICAL: DO NOT duplicate header/footer text in text_blocks - if you extract header="Title", do NOT include "Title" as a text_block
+7. Extract all text blocks with semantic types (heading, paragraph, list_item, equation, etc.)
    - CRITICAL: For EVERY text block, you MUST provide bbox coordinates as percentages (0-100)
 6. For MATHEMATICAL EQUATIONS:
    - CRITICAL: TRANSCRIBE equations EXACTLY as they appear - do NOT solve, simplify, or manipulate them
@@ -2545,9 +2650,17 @@ Instructions:
    - CRITICAL: Avoid duplicate images - extract each unique image only once
    - Provide bbox coordinates as percentages (0-100)
 10. For MULTI-COLUMN LAYOUTS (CRITICAL DETECTION):
-    - ALWAYS check if page has multiple columns (2-column, 3-column)
-    - Look for text flowing in parallel vertical sections
-    - Common in: academic papers, newspapers, magazines
+    - Distinguish between TWO types:
+    
+    TYPE 1: FULL-PAGE MULTI-COLUMN (entire page is multi-column)
+    - If entire page has columns: Set has_multi_column=true, column_count, column_gap
+    - Set column_number for all elements
+    
+    TYPE 2: INLINE MULTI-COLUMN SECTION (embedded multi-column in single-column page)
+    - Example: Single-column page with one 2-column list section
+    - Set has_multi_column=FALSE for page
+    - For elements in inline section only: set multi_column_group_id="group1" and column_number
+    - Elements outside group: no multi_column_group_id
     - If detected:
       * Set has_multi_column=true, column_count (2, 3+), column_gap (20-40 points)
       * CRITICAL: Keep column_count CONSISTENT across pages with same layout
