@@ -20,6 +20,9 @@ export function PDFViewer() {
   const [pageWidth, setPageWidth] = useState<number>(500);
   const [zoom, setZoom] = useState<number>(1.0);
   const [isClient, setIsClient] = useState(false);
+  
+  // Ensure page number is valid
+  const safePageNumber = isNaN(currentPage) || currentPage < 1 ? 1 : currentPage;
 
   useEffect(() => {
     setIsClient(true);
@@ -95,7 +98,7 @@ export function PDFViewer() {
             }
           >
             <Page
-              pageNumber={currentPage}
+              pageNumber={safePageNumber}
               width={pageWidth * zoom}
               renderTextLayer={false}
               renderAnnotationLayer={false}

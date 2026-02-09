@@ -1,0 +1,130 @@
+{
+  "metadata": {
+    "title": "الظهير المائي والحجم الأمثل للمدينة السعودية: وجهة نظر جغرافية",
+    "author": "د. محمد مصلح الثمالي",
+    "total_pages": 23,
+    "language": "ar",
+    "document_type": "article",
+    "is_scanned": true
+  },
+  "pages": [
+    {
+      "page_number": 1,
+      "header": "مجلة جامعة أم القرى للعلوم التربوية والاجتماعية والإنسانية",
+      "images": [
+        {
+          "image_type": "logo",
+          "description": "Logo of Umm Al-Qura University",
+          "reading_order": 1
+        }
+      ],
+      "has_multi_column": false,
+      "page_direction": "rtl"
+    },
+    {
+      "page_number": 2,
+      "page_number_text": "١٧٨",
+      "page_number_position": "footer-right",
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "اطلخص",
+          "reading_order": 1
+        },
+        {
+          "block_type": "paragraph",
+          "content": "يتضمن هذا البحث مقترح لإطار نظري لمعالجة أزمة المياه في مدن المملكة العربية السعودية. ويقوم هذا الإطار على أساس محاولة التوفيق بين حجم المدينة والإمكانات المائية لظهيرها. والهدف الرئيس للربط بين حجم المدينة والإمكانات المائية المحيطة بها هو تجنيبها مواصلة السير على طريق الاعتماد الكلي على مصادر خارجية مكلفة ومؤقتة وغير مأمونة.",
+          "reading_order": 2
+        }
+      ],
+      "has_multi_column": false,
+      "page_direction": "rtl"
+    },
+    {
+      "page_number": 3,
+      "page_number_text": "١٧٩",
+      "page_number_position": "footer-left",
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "Water Hinterland and Optimal Saudi City Size",
+          "reading_order": 1
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "Abstract",
+          "reading_order": 2
+        },
+        {
+          "block_type": "paragraph",
+          "content": "We present in this paper a theoretical framework to tackle the problem of water shortage in Saudi cities. The framework is based on the notion that city size and surrounding water resources should be matched, in order to avoid total dependency on external resources, which are costly, unsustainable and subject to interruptions in the long run.",
+          "reading_order": 3
+        }
+      ],
+      "has_multi_column": false,
+      "page_direction": "ltr"
+    },
+    {
+      "page_number": 12,
+      "page_number_text": "١٨٨",
+      "page_number_position": "footer-right",
+      "images": [
+        {
+          "image_type": "diagram",
+          "description": "Hydrological studies diagram",
+          "caption": "الدراسات الهيدرولوجية",
+          "reading_order": 1
+        },
+        {
+          "image_type": "graph",
+          "description": "Hypothetical distribution of cities based on size differences",
+          "caption": "شكل رقم (1) توزيع افتراضي للمدن حسب الفروق بين أحجامها الفعلية والافتراضية",
+          "reading_order": 2
+        },
+        {
+          "image_type": "diagram",
+          "description": "Representation of water hinterland shapes for cities",
+          "caption": "شكل (2) تمثيل أشكال الظهير المائي للمدن",
+          "reading_order": 3
+        }
+      ],
+      "has_multi_column": false,
+      "page_direction": "rtl"
+    },
+    {
+      "page_number": 18,
+      "page_number_text": "١٩٤",
+      "page_number_position": "footer-right",
+      "tables": [
+        {
+          "caption": "جدول رقم (١) متوسط نصيب الفرد من الموارد المائية المتجددة و نسبة التحضر و متوسط أحجام المدن للمملكة و مجموعة من الدول الواقعة في عروض جغرافية مشابهة",
+          "headers": [
+            {"content": "الدولة", "is_header": true},
+            {"content": "متوسط نصيب الفرد من الموارد المائية المتجددة ٢٠١٣م *", "is_header": true},
+            {"content": "نسبة التحضر ١٩٩٧ *", "is_header": true},
+            {"content": "التحضر", "is_header": true}
+          ],
+          "rows": [
+            [{"content": "تشيلي"}, {"content": "٣٢٠٠٧"}, {"content": "٨٤"}, {"content": "٣٠٣"}],
+            [{"content": "كازاخستان"}, {"content": "٨٦٩٦"}, {"content": "٦٠"}, {"content": "٣٢٣"}],
+            [{"content": "بيرو"}, {"content": "١٦٤١"}, {"content": "٧٢"}, {"content": "٣٩٦"}],
+            [{"content": "إيران"}, {"content": "١٣٣٩"}, {"content": "٦٠"}, {"content": "٢٥١"}],
+            [{"content": "المغرب"}, {"content": "١٠٨٨"}, {"content": "٥٣"}, {"content": "٢٦٩"}],
+            [{"content": "مصر"}, {"content": "٩٦٦"}, {"content": "٤٥"}, {"content": "٢٧٨"}],
+            [{"content": "الجزائر"}, {"content": "٤٦٣"}, {"content": "٥٧"}, {"content": "١٤٣"}],
+            [{"content": "الأردن"}, {"content": "١٩٨"}, {"content": "٧٣"}, {"content": "١٩٠"}],
+            [{"content": "المملكة العربية السعودية"}, {"content": "١٢٠"}, {"content": "٨٤"}, {"content": "٣٣٨"}],
+            [{"content": "الإمارات العربية المتحدة"}, {"content": "٦١"}, {"content": "٨٥"}, {"content": "٣٠٠"}]
+          ],
+          "reading_order": 1
+        }
+      ],
+      "has_multi_column": false,
+      "page_direction": "rtl"
+    }
+  ],
+  "extraction_notes": "The document is a scholarly article from Umm Al-Qura University Journal. It discusses the relationship between city size and water resources in Saudi Arabia. Page numbers follow Arabic-Indic numbering in the footer. Table 1 on page 18 provides comparative international data."
+}

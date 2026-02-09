@@ -1,0 +1,1468 @@
+{
+  "metadata": {
+    "title": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+    "author": "أ. كلتوم محمد ابوراس، أ. ليلى علي القرازي، أ. منال عبد الكريم جليطة",
+    "total_pages": 23,
+    "language": "ar",
+    "document_type": "article",
+    "is_scanned": true
+  },
+  "pages": [
+    {
+      "page_number": 1,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018—131",
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 1,
+          "content": "المعادلات التفاضلية الجزئية وتطبيقاتها"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "أ. كلتوم محمد ابوراس أ. ليلى علي القرازي أ. منال عبد الكريم جليطة"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "كلية التقنية الهندسية - جنزور"
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "ملخص:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "في هذا البحث قمنا بتعريف المعادلة التفاضلية الجزئية وكيفية استنتاجها وتصنيفها والتعرف علي الحلول الخاصة والعامة لهذه المعادلات وكذلك طرق حل هذه المعادلات كفصل المتغيرات وسلاسل فوربير وتحويل لابلاس ودوال لجندر التفاضلية والطرائق العددية والمعادلات التكاملية وتحويلاتها وكذلك عرفنا القيم الحدية التي لها أهمية كبيرة عند الحل، وكذلك قمنا بسرد تطبيقات للمعادلات التفاضلية الجزئية المشهورة التي لها أهمية كبيرة في شتى العلوم."
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "المقدمة:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "تعد المعادلات التفاضلية الجزئية منشأ أوسع وأعم من منشأ المعادلات التفاضلية العادية ومن هذه المعادلات الجزئية ما ينتج عن حل مسائل ميكانيكية وهندسية وفيزيائية بحيث أصبحنا نجدها في كل فرع من فروع العلوم هذا وقد تشبعت هذه المعادلات بشكل خاص في جميع فروع الفيزياء لتشكل فرعا مهما هو المعادلات الرياضية الفيزيائية التي من ابرز أنماطها الرئيسية المعادلة التفاضلية الجزئية الزائدية والناقصية والمكافئة."
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "أهداف البحث:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "تهدف هذه الورقة إلي التعرف علي مفهوم المعادلة التفاضلية الجزئية وطرق حل هذا النوع من المعادلات التفاضلية والمعنى الهندسي لهذه الحلول سواء كان عام أو خاص وكيف يتم تصنيف هذه المعادلات والتعرف علي التطبيقات الرياضية الفيزيائية للمعادلات التفاضلية الجزئية."
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "أهمية البحث:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "هذه الورقة البحثية ليس مرجعا نظريا من اجل المتخصصين في مجالات الرياضيات المختلفة ولكن أعدت لتحقيق الآتي:"
+        },
+        {
+          "block_type": "list_item",
+          "content": "1. أن يتوفر للطالب المتخصص في مجالات العلوم النظرية والتطبيقية وخاصة طلبة الرياضيات والفيزياء تفهم معقول وبأسلوب سهل وبسيط للمعادلات التفاضلية الجزئية حيث استخدمنا الأمثلة والتطبيقات للتوضيح.",
+          "list_level": 1
+        }
+      ]
+    },
+    {
+      "page_number": 2,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 — 132 — الجوانب:",
+      "text_blocks": [
+        {
+          "block_type": "list_item",
+          "content": "2. ان نبين للطالب كيف تكون المعادلات التفاضلية الجزئية مفيدة في حل أنواع عديدة من المسائل وخاصة ان يعرف للطالب الآتي:",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "أ ( كيف يترجم المسائل إلي لغة المعادلات التفاضلية الجزئية أي الصيغة الرياضية لهذه المسائل.",
+          "list_level": 2
+        },
+        {
+          "block_type": "list_item",
+          "content": "ب) حل المعادلات التفاضلية الجزئية الناتجة والخاضعة لشروط معطاة كالشروط الحدية.",
+          "list_level": 2
+        },
+        {
+          "block_type": "list_item",
+          "content": "ج) تفسير الحلول المتحصل عليها.",
+          "list_level": 2
+        },
+        {
+          "block_type": "list_item",
+          "content": "3. تقديم عدد بسيط من طرق حل المعادلات التفاضلية الجزئية والتي نعرف أنها يمكن أن تطبق في مجموعات واسعة من الحالات.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "4. فتح المجال أيضا أمام الطالب الذي يرغب في التعرف على طرق وأفكار اكثر تقدما أو مسائل وتطبيقات وأساليب أكثر تعقيدا وذلك من خلال مسائل وتطبيقات تندرج في صعوبتها وعمقها النظري.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "5. التعرف على طرق تصنيف المعادلات التفاضلية الجزئية وكيفية استخدامها في تطبيقات رياضية وفيزيائية والاستفادة منها في هذا المجال.",
+          "list_level": 1
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "مشكلة البحث:"
+        },
+        {
+          "block_type": "list_item",
+          "content": "1. التعرف على المعادلات التفاضلية الجزئية وطرق حلها.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "2. ربط العلوم الرياضية بالفيزيائية باستخدام التطبيقات وحل المسائل باستخدام المعادلات التفاضلية الجزئية.",
+          "list_level": 1
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "حدود البحث:"
+        },
+        {
+          "block_type": "list_item",
+          "content": "1. بيان أهمية المعادلات التفاضلية الجزئية في حل الكثير من المسائل المعقدة.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "2. كيفية استخدام المعادلات التفاضلية الجزئية في حل بعض المسائل الرياضية الفيزيائية وتطبيقاتها.",
+          "list_level": 1
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "المعادلات التفاضلية الجزئية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "المعادلات التفاضلية الجزئية: هي معادلة تحتوي على دالة غير معلومة في متغيرين أو أكثر ومشتقاتها الجزئية بالنسبة الى هذه المتغيرات. بمعنى أن المعادلة التفاضلية الجزئية تتضمن على متغير تابع واحد وأكثر من متغير مستقل وتعرف كذلك على أنها معادلات تفاضلية تحتوي على دالة واحدة وأكثر من الدوال المجهولة ومشتقاتها الجزئية وتكون على الصورة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "f(x, y, u, u_x, u_y, u_{xx}, u_{yy}, \\dots) = 0",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 3,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 133 — مجله المتدني الجامعى",
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "content": "ومن أمثلتها"
+        },
+        {
+          "block_type": "equation",
+          "content": "z_{xy} + 2z_x + 3z_y + 5z = 2x + \\cos(x - y)",
+          "is_display_math": true,
+          "equation_number": "(1)"
+        },
+        {
+          "block_type": "equation",
+          "content": "z_{xx} + z_{yy} = x^2 y^2",
+          "is_display_math": true,
+          "equation_number": "(2)"
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "تصنيف المعادلات التفاضلية الجزئية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "تصنف المعادلات التفاضلية بناءًا على اعتبارات عدة والتصنيف ذو مفهوم مهم لأن النظرية العامة وطرائق الحل عادة تطبق على صنف معني من المعادلات وهي:"
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "1- رتبة ودرجة المعادلة التفاضلية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الرتبة وهي اعلى مشتقة جزئية في المعادلة مثل:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من الرتبة الثانية"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_t = u_{xx}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من الرتبة الأولى"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_t = u_x",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من الرتبة الثالثة"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_t = u_{xxx} + \\sin x",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الدرجة وهي اس اعلى مشتقة موجودة في المعادلة بشرط ان يكون ذلك الاس عدد صحيح موجب مثل:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من الدرجة الأولى"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_x = y",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من الدرجة الثانية"
+        },
+        {
+          "block_type": "equation",
+          "content": "x(u_x) - y(u_{xy}) = 6x u_{xy}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "2- عدد المتغيرات:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وهو عدد المتغيرات المستقلة مثل:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "متغيرات وهما t،x"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_t = u_{xx}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "متغيرات وهم Θ،r،t"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_t = u_{rr} + \\frac{1}{r} u_{\\Theta\\Theta}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "3- الخطية:"
+        }
+      ]
+    },
+    {
+      "page_number": 4,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 - مجلة المبتدئ الجامع 134",
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "content": "u_{tt} = e^{-t} u_{xx} + \\sin t",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "خطية: $u_{xx} + y u_y + u^2 = 0$"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "غير خطية: $u_y + u_z = 0$"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وبصورة أدق فإن المعادلة التفاضلية الجزئية الخطية من الرتبة الثانية ذات المتغيرين هي معادلة من الصيغة."
+        },
+        {
+          "block_type": "equation",
+          "content": "A u_{xx} + B u_{xy} + C u_{yy} + D u_x + F u_y + F u = G",
+          "is_display_math": true,
+          "equation_number": "(1)"
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "4- التجانس:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "المعادلة التفاضلية الجزئية (1) تكون متجانسة إذا كان الطرف الأيمن يساوي صفر. أما إذا لم يكن يساوي الصفر فتسمى المعادلة غير متجانسة."
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "5- أنواع المعاملات:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "في المعادلة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "A u_{xx} + B u_{xy} + C u_x + D u_x + E u_y + F u = G",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ب- النوع المتآلف: وهو النوع الذي يصف سريان الحرارة و عمليات الانتشار و تحقق الخاصية."
+        },
+        {
+          "block_type": "equation",
+          "content": "B^2 - 4AC = 0",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "u_t = u_{xx}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ب- النوع التزايدي: وهو النوع الذي يصف حركات الاهتزاز و حركات الموجة و يحقق الخاصية."
+        },
+        {
+          "block_type": "equation",
+          "content": "B^2 - 4AC > 0",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ومن أمثلتها معادلة الموجة"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_{tt} = u_{xx}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ج- النوع التناقصي: وهذا النوع يصف ظواهر الحالة المستقرة و يحقق الخاصية."
+        },
+        {
+          "block_type": "equation",
+          "content": "B^2 - 4AC < 0",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ومن أمثلتها معادلة لابلاس"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_{tt} + u_{xx} = 0",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 5,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 — 135",
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "حلول المعادلات التفاضلية الجزئية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "إن معظم الظواهر الفيزيائية سواء كانت في حقل سريان الموائع الكهربائية، الميكانيكية، البصريات أو سريان الحرارة يمكن أن توصف بصورة عامة بمعادلات تفاضلية جزئية وفي الحقيقة أن معظم الفيزياء الرياضية هي معادلات تفاضلية جزئية وعلى الرغم من التبسيطات تحول المعادلات قيد الدراسة على معادلات تفاضلية اعتيادية إلا أن الوصف الكامل لهذه المنظومات يقع ضمن المجال العام للمعادلات التفاضلية الجزئية."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "فحل المعادلة التفاضلية هو تلك الدالة أو المتطابقة بين المتغير المعتمد والمتغيرات المستقلة وتكون خالية من المشتقات الجزئية وتحقق المعادلة التفاضلية الجزئية، بمعنى هو أي دالة تحقق المعادلة بالتطابق."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "لتكن العلاقة"
+        },
+        {
+          "block_type": "equation",
+          "content": "z = a x^3 + b y^3 \\quad \\text{(a)}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "حيث أن $a, b$ ثابتان اختياريان، تحصل على معادلة تفاضلية جزئية من هذه العلاقة."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الحل: نعتبر متغير تابع لدينا"
+        },
+        {
+          "block_type": "equation",
+          "content": "z_x = 3ax^2 \\quad , z_y = 3by^2",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وبذلك نجد أن"
+        },
+        {
+          "block_type": "equation",
+          "content": "a = \\frac{1}{3x^2} z_x \\quad , b = \\frac{1}{3y^2} z_y \\quad \\text{(b)}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "نعوض بهذه القيم في (a)"
+        },
+        {
+          "block_type": "equation",
+          "content": "z = \\frac{1}{3x^2} z_x x^3 + \\frac{1}{3y^2} z_y y^3",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "أو"
+        },
+        {
+          "block_type": "equation",
+          "content": "3z = xz_x + yz_y \\quad \\text{(c)}",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 6,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "- مجلة المبتدئ الجامعيين — 136 — العدد (22) سبتمبر 2018",
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "content": "وهي المعادلة التفاضلية الجزئية المطلوبة وإذا أخذنا كمتغير تابع فإننا نحصل بإشتقاق a بالنسبة إلى z،y"
+        },
+        {
+          "block_type": "equation",
+          "content": "0 = 3ax^2 x_y + 3by^2 \\quad , \\quad 1 = 3ax^2 x_z \\quad \\text{(d)}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "نحل المعادلتين من اجل b،a فنحصل"
+        },
+        {
+          "block_type": "equation",
+          "content": "a = \\frac {1}{3 x ^ {2} x _ {z}} \\quad , b = - \\frac {x _ {y}}{3 y ^ {2} x _ {z}} \\tag {e}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "نعوض في العلاقة الأصلية a فنحصل"
+        },
+        {
+          "block_type": "equation",
+          "content": "y x _ {y} + 3 x x _ {z} = x \\tag {f}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وهي معادلة تفاضلية جزئية تختلف في الشكل عن المعادلة (c)."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وبالتالي من المثال السابق نصل إلى أن حل معادلة تفاضلية هو علاقة تحول المعادلة إلى متطابقة ويكون الحل على انواع وهي :"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الحل العام: هو حل يحتوي على عدد من الدوال المستقلة الاختيارية يساوي رتبة المعادلة بمعنى أن الحل العام لمعادلة تفاضلية من رتبة n هو حل يحتوي على n من الثوابت الاختيارية وبالطبع يحقق المعادلة التفاضلية."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الحل الخاص: هو حل يمكن الحصول عليه من الحل العام باختيار خاص للدالة الاختيارية بمعنى أن الحل الخاص هو أن حل يحقق المعادلة التفاضلية لا يشمل على أي ثوابت اختيارية وقد نحصل عليه أحيانا بالتعويض على الثوابت الاختيارية في الحل العام بقيم محددة."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "فمثلا استخرج حلولا للمعادلة التفاضلية الجزئية الاتية:"
+        },
+        {
+          "block_type": "equation",
+          "content": "u _ {x y} = 6 x + 1 2 y ^ {2} \\tag {1}",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 7,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 137 - مجلة المبتدئ الجامع",
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "content": "u = 3x^2y + 4xy^3 + \\int F(y)dy + G(x) \\tag{4}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "في هذه المرة اضفنا دالة اختيارية لـ $x$ معطاة بـ $G(x)$ بما أن تكامل دالة اختيارية لـ $y$ هو عبارة عن دالة اختيارية لـ $y$ فاننا نستطيع أن نكتب (4) كالآتي:"
+        },
+        {
+          "block_type": "equation",
+          "content": "u = 3x^2y + 4xy^3 + H(y) + G(x) \\tag{5}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "يمكن التحقق من (5) بتعويضها في (1) والحصول على متطابقة، بما أن (1) هي معادلة تفاضلية جزئية من الرتبة الثانية بينما الحل (5) له دالتان اختياريتان فان هذا (1) يقودنا مقارنة بالمعادلات التفاضلية العادية إلى تسمية (5) بالحل العام ولـ (1) وباستخدام نفس التشابه من الطبيعي أن نسمي أي حل مستخرج من الحل العام (5) بواسطة اختيارات خاصة للدوال الاختيارية، فمثلا:"
+        },
+        {
+          "block_type": "equation",
+          "content": "G(x) = \\sin 2x \\quad , \\quad H(y) = y^3",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "بالحل الخاص، ففي الغالب نحتاج إلى تحديد حلول للمعادلات التفاضلية الجزئية التي تحقق شروط معينة فمثلاً إذا افترضنا أننا نريد حل المعادلة (1) خاضعة للشرطين"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(1,y) = y^2 - 2y \\quad , \\quad u(x,2) = 5x - 5 \\tag{6}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "بذلك يقودنا الحل العام (5) والشرط الأول في (6) إلى:"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(1,y) = 3(1)^2y + 4(1)y^3 + H(y) + G(1) = y^2 - 2y",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "H(y) = y^2 - 5y - 4y^3 - G(1)",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "لذلك فان:"
+        },
+        {
+          "block_type": "equation",
+          "content": "u = 3x^2y + 4xy^3 + y^2 - 5y - 4y^3 - G(1) + G(x) \\tag{7}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "إذا استخدمنا الآن الشرط الثاني في (6) فان:"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(x,2) = 3x^2(2) + 4x(2)^3 + (2)^2 - 5(2) - 4(2)^3 - G(1) + G(x) = 5x - 5",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "التي منها نحصل على:"
+        },
+        {
+          "block_type": "equation",
+          "content": "G(x) = 33 - 27x - 6x^2 + G(1)",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وباستخدام هذه الاخيرة في (7) نحصل على الحل المطلوب."
+        },
+        {
+          "block_type": "equation",
+          "content": "u = 3x^2y + 4xy^3 + y^2 - 5y - 4y^3 - 27x - 6x^2 + 33 \\tag{8}",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 8,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 138 — الجارح الجارح الجارح 2018-220",
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "طرق حل المعادلات التفاضلية الجزئية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "هناك عدة طرق مطبقة علميا وأعظمها أهمية تلك الطرق التي بأتباعها تتحول المعادلة التفاضلية الجزئية إلى معادلات تفاضلية اعتيادية ومنها."
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "1- فصل المتغيرات:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "بهذه الطريقة يتم تحويل المعادلة التفاضلية الجزئية ذات n المتغيرات المستقلة إلى n من المعادلات التفاضلية الاعتيادية. ففي هذه الطريقة يكون من المفروض إمكانية التعبير عن الحل كحاصل ضرب دوال مجهولة كل منها يعتمد على متغير واحد فقط من المتغيرات. ونجاح هذه الطريقة يعتمد على إمكانية كتابة المعادلة الناتجة بحيث يعتمد أحد الطرفين على متغير واحد بينما يعتمد الطرف الآخر على باقي المتغيرات وبذلك يجب أن يكون كل طرف مساويا مقدار ثابتا وبتكرار هذه العملية يمكن تتعين الدوال المجهولة."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وتستخدم هذه الطريقة عادة متسلسلات فوربير وتكاملات فوربير ومتسلسلات لجندر."
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "2- سلاسل فوربير:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "إن أهمية سلاسل فوربير في نظرية المعادلات التفاضلية الجزئية هي أن الدوال الدورية f(x) المعرفة على (0،∞) أو الدوال المعرفة على فترة منتهية يمكن تمثيلها بسلسلة لانهاية من الجيوب و جيوب التمام و بهذه الطريقة يمكن تجزئة المسائل إلى أخرى مبسطة و يتعين بالصيغة..."
+        },
+        {
+          "block_type": "equation",
+          "content": "f(x) = \\frac{a_0}{2} + \\sum_{n=1}^{\\infty} a_n \\cos n\\pi x + b_n \\sin(n\\pi x)",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "حيث أن:"
+        },
+        {
+          "block_type": "equation",
+          "content": "a_n = \\frac{1}{L} \\int_{-L}^{L} f(x) \\cos \\frac{n}{L} x \\, dx",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "b_n = \\frac{1}{L} \\int_{-L}^{L} f(x) \\sin \\frac{n}{L} x \\, dx",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "3- دوال لجندر التفاضلية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "تنشأ دوال لجندر كحلول للمعادلة التفاضلية:"
+        },
+        {
+          "block_type": "equation",
+          "content": "(1 - x^2)y'' - 2xy' + n(n+1)y = 0",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 9,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 — 139 — الجارح الجارح",
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "content": "والتي تسمى بمعادلة لجندر التفاضلية حيث إن الحل العام للمعادلة أعلاه في الحالة التي فيها تعطي بالعلاقة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "y = c_1 p_n(x) + c_2 q_n(x)",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "4- الطرائق العددية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "تتم في هذه الطريقة عمليه تحويل المعادلة التفاضلية الجزئية إلى مجموعه من المعادلات الفرقيه التي يمكن حلها بعمليات حسابية متكررة بواسطة الحاسبة الالكترونية ومنها."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "طريقة العناصر المنتهية: وهي طريقة تحليل عددي لايجاد الحلول التقريبية للمعادلات التفاضلية الجزئية، بالاضافة الى الحلول التكاملية ويعتمد الحل على الغاء المعادلات التفاضلية الجزئية نهائيا او تقريبي المعادلات التفاضلية الجزئية الى معادلات تفاضلية عادية والتي يمكن حلها باستخدام عدة طرق كطريقة اويلر او رونكه كوتا."
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "5- المعادلات التكاملية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "حيث تحول المعادلة الجزئية المطلوبة إلى معادلة تفاضلية تكاملية تم تحل المعادلة التكاملية بطريقة مختلفة ومن انواع المعادلات التكاملية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "1- معادلة فريدلهولم التكامليه"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(x) = f(x) + \\lambda \\int_a^b k(x, t) u(t) dt",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "2- معادلة فولتيرا التكاملية"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(x) = f(x) + \\lambda \\int_a^x k(x, t) u(t) dt",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 10,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 — 140 — الجارح الجارح",
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "8- التحويلات التكاملية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "حيث تحول المعادلة التفاضلية الجزئية ذات n من المتغيرات المستقلة إلى معادله جزئية ذات n-1 من المتغيرات المستقلة، وبالتالي تتحول المعادلة التفاضلية الجزئية ذات المتغيرين إلى معادلة تفاضلية اعتيادية، وملخص القول ان التحويلات التكاملية تغير التفاضل إلى ضرب وعليه تتحول المشتقات الجزئية إلى مقادير جبرية، ويعرف التحويل التكاملي بانه تحويل يقرن لكل دالة F(s) داله جديدة"
+        },
+        {
+          "block_type": "equation",
+          "content": "F(s) = \\int_{A}^{B} K(s, t) f(t) dt",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "1- تحويل فورير"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "في متسلسلة فورير إذا كانت $L \\to \\infty$ في هذه الحالة تتحول متسلسلة فورير إلى تحويلات فورير حيث إن تحويلات فورير هي:"
+        },
+        {
+          "block_type": "equation",
+          "content": "F(\\xi) = \\frac{1}{\\sqrt{2\\pi}} \\int_{-\\infty}^{\\infty} f(x) e^{i\\xi x} dx",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وتكمن أهمية تحويل فورير في تحويل التفاضل إلى ضرب وعليه تتحول المعادلة التفاضلية إلى معادلة جبرية."
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "مثال:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "اوجد جواب المعادلة التفاضلية التالية مستعيناً بتحويلات فورير"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\frac{\\partial u}{\\partial t} = K \\frac{\\partial^2 u}{\\partial x^2}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الشرائط الحدية"
+        },
+        {
+          "block_type": "equation",
+          "content": "|u(x, t)| < m \\quad , \\quad u(x, 0) = f(x)",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 11,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 - العدد (22) 141 - مجلة المنتدى الجامعي",
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "content": "بحيث"
+        },
+        {
+          "block_type": "equation",
+          "content": "- \\infty < x < \\infty \\quad , \\quad t > 0",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الحل:"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\left\\{ \\begin{array}{l} \\frac {\\partial u}{\\partial t} = \\frac {d}{d t} F (u) \\\\ K \\frac {\\partial^ {2} u}{\\partial x ^ {2}} = - K \\lambda^ {2} F (u) \\end{array} \\right. \\to \\frac {d}{d t} F (u) = - K \\lambda^ {2} F (u)",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "هذه المعادلة التفاضلية هو"
+        },
+        {
+          "block_type": "equation",
+          "content": "F (u) = C e ^ {- k \\lambda^ {2} t}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "F \\left\\{u (x, t) \\right\\} = C e ^ {- k \\lambda^ {2} t}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "u (x, 0) = f (x) \\rightarrow F \\{f (x) \\} = C",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "F (u) = F \\{f (x) \\} e ^ {- k \\lambda^ {2} t}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "e ^ {- k \\lambda^ {2} t} = F \\left\\{\\sqrt {\\frac {1}{4 \\pi k t}} e ^ {- \\left(\\frac {x ^ {2}}{4 k t}\\right)} \\right\\}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "u (x, t) = f (x) * \\sqrt {\\frac {1}{4 \\pi k t}} e ^ {- \\left(\\frac {x ^ {2}}{4 k t}\\right)}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "u (x, t) = \\int_ {- \\infty} ^ {\\infty} f (w) \\sqrt {\\frac {1}{4 \\pi k t}} e ^ {- \\left(\\frac {(x - w) ^ {2}}{4 k t}\\right)} d w",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "نستعين بتغيير المتغير هذا"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\frac {(x - w) ^ {2}}{4 k t} = Z ^ {2} \\rightarrow \\frac {x - w}{2 \\sqrt {k t}} = Z",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 12,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "142 — العدد (22) سبتمبر 2018 - مجلة المبتدئ الجامعوان",
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "content": "u(x, t) = \\frac{1}{\\sqrt{\\pi}} \\int_{-\\infty}^{\\infty} e^{-z^2} f(x - 2z\\sqrt{kt}) \\, dz",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "2- تحويل لابلاس:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "تحويل لابلاس له فائدة يمتاز بها على تحويل فوربير باحتوائه على عامل التضاؤل $e^{-st}$ الذي يتيح لنا تحويل صنف أوسع من الدوال ويتعين بالصيغة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\mathcal{L}[f] = \\int_{0}^{\\infty} f(t) e^{-st} \\, dt",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ففي هذه الطريقة نحصل أولا على تحويل لابلاس للمعادلات التفاضلية الجزئية والشروط الحدية المرافقة بالنسبة إلى أحد المتغيرات المستقلة بعد ذلك نحل المعادلة الناتجة للحصول على تحويل لابلاس للحل المطلوب الذي نحصل عليه باخد تحويل لابلاس العكسي."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "تحويل لابلاس العكسي: إذا كانت $\\mathcal{L}\\{f(t)\\} = F(s)$ فان $f(t)$ تسمى تحويل لابلاس العكسي للدالة $F(s)$ و تكتب $\\mathcal{L}^{-1}\\{F(s)\\} = f(t)$"
+        },
+        {
+          "block_type": "heading",
+          "level": 4,
+          "content": "مثال:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "باستخدام تحويل لابلاس حل المعادلة التالية:"
+        },
+        {
+          "block_type": "equation",
+          "content": "u_y = u_{xx} + u + B \\cos x",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "u(0, y) = A e^{-3y}, \\quad u_x(0, y) = 0",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "0 < x < \\infty, \\quad 0 < y < \\infty",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الحل: باخد تحويل لابلاس للطرفين بالنسبة إلى $x$"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\bar{u}(s, y) = \\int_{0}^{\\infty} e^{-sx} u(x, y) \\, dx",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "\\bar{u}_y(s, y) = \\left[ s^2 \\bar{u} - s u(0, y) - u_x(0, y) \\right] + \\bar{u} + \\frac{B s}{1 + s^2}",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 13,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "143 — العدد (22) سبتمبر 2018 - مجلة المبتدئ الجامع",
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "content": "\\bar{u}_y (s, y) = (s^2 + 1) \\bar{u} + \\frac{Bs}{s^2 + 1} - sAe^{-3y}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "\\bar{u}_y - (s^2 + 1)\\bar{u} = \\frac{Bs}{s^2 + 1} - sAe^{-3y}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "\\bar{u} (s, y) = Ce^{(s^2 + 1)y} - \\frac{Bs}{(s^2 + 1)^2} + \\frac{As}{(s^2 + 4)} e^{-3y}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ولكي يكون $\\lim_{y \\to \\infty} \\bar{u} (s, y) = 0$ فان $C = 0$"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\bar{u} (s, y) = \\frac{-Bs}{(s^2 + 1)^2} + \\frac{Ase^{-3y}}{s^2 + 4}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وبالحد تحويل لابلاس العكسي"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\bar{u} (s, y) = \\frac{1}{2} B \\frac{d}{ds} \\left(\\frac{1}{s^2 + 1}\\right) + A \\frac{s}{s^2 + 4} e^{-3y}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "u (x, y) = -\\frac{1}{2} Bx \\sin x + A \\cos 2x e^{-3y}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "القيم الحدية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "نحتاج غالبا ان يحقق الحل شروطا معينة تعطي بالاضافة الى المعادلات التفاضلية، فمثلا في المسائل المشتملة على متغير مستقل كالزمن يكون من الافضل أن نعطي المتغير التابع عند زمن الابتداء او اية شروط أخرى يمكن اعطاءها في البداية. هنا في مثل هذه المسألة يطلق عليها عادة مسائل القيم الابتدائية. أما عندما يكون الحل المطلوب معرفا في نطاق معين فيه قيم الحل تكون قد وصفت على حدود النطاق فهذه المسائل يطلق عليها مسائل القيم الحدية. ويجب ان نلاحظ انه في المعادلات التفاضلية العادية مسألة القيمة الابتدائية او الحدية يمكن حلها بإيجاد الحل العام تم تحديد التوايت الاختيارية حتى تكون الشروط المعطاة محقة اما الحل لمسائل القيم الابتدائية أو الحدية في المعادلات التفاضلية الجزئية يكون أكثر تعقيدا لانه ليس بالامكان دائما ايجاد الحل العام للمعادلة التفاضلية الجزئية."
+        }
+      ]
+    },
+    {
+      "page_number": 14,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "- مجلة المبتدئ الجامعوان — 144 — العدد (22) سبتمبر 2018",
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "content": "مثال: حل المسألة الحدية"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(0,y) = 8e^{-3y} \\quad \\frac{\\partial u}{\\partial x} = 4 \\frac{\\partial u}{\\partial y}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الحل: بطريقة فصل المتغيرات: ضع $u=XY$ في المعادلة المعطاة نحصل على $X'Y = 4XY'$ أو $\\frac{X'}{4X} = \\frac{Y'}{Y}$ وبما أن $X$ تعتمد فقط على $x$، $Y$ تعتمد فقط على $y$ وبما أن $y,x$ متغيرين مستقلين فإن كل طرف يجب أن يساوي مقدارا ثابتا $c$."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "إذن $Y' - cY = 0$ و $X' - 4cX = 0$ وهذه حلولها هي $X = Ae^{4cx}, Y = Be^{cy}$ وعلى ذلك فإن الحل يعطى بالعلاقة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(x,y) = XY = ABe^{c(4x+y)} = Ke^{c(4x+y)}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ومن الشرط الحدي $u(0,y) = Ke^{cy} = 8e^{-3y}$ وهذا ممكن إذا كانت $K=8$ و $c=-3$ يكون هو الحل المطلوب على ذلك $u(x,y) = 8e^{-3(4x+y)} = 8e^{-12x-3y}$"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "مثال: حل باستخدام تحويلات لابلاس مسألة القيمة الحدية"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\frac{\\partial u}{\\partial t} = 4 \\frac{\\partial^2 u}{\\partial x^2}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "u(x,0) = 10\\sin 2\\pi x - 6\\sin 4\\pi x \\quad , \\quad u(0,t) = 0 \\quad , \\quad u(3,t) = 0",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الحل: بأخذ تحويل لابلاس للمعادلة التفاضلية المعطاة بالنسبة إلى $t$ يكون لدينا"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\int_0^\\infty e^{-st} \\left( \\frac{\\partial u}{\\partial t} \\right) dt = \\int_0^\\infty e^{-st} \\left( 4 \\frac{\\partial^2 u}{\\partial x^2} \\right) dt",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وهذه يمكن كتابتها على الصورة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "s \\int_0^\\infty e^{-st} u dt - u(x,0) = 4 \\frac{d^2}{dx^2} \\int_0^\\infty e^{-st} u dt",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 15,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 — 145",
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "content": "SU - u(x, 0) = 4 \\frac{d^2 U}{dx^2} \\tag{1}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "U = U(x, s) = \\mathcal{L}\\left\\{u(x, t)\\right\\} = \\int_0^\\infty e^{-st} u \\, dt",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وباستخدام الشرط المعطى أن $u(x, 0) = 10 \\sin 2\\pi x - 6 \\sin 4\\pi x$ تصبح (1) في الصورة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "4 \\frac{d^2 U}{dx^2} - SU = 6 \\sin 4\\pi x - 10 \\sin 2\\pi x \\tag{2}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "بأخذ تحويل لابلاس للشروط $u(0, t) = 0, u(3, t) = 0$ نحصل على"
+        },
+        {
+          "block_type": "equation",
+          "content": "U(0, s) = 0, \\quad U(3, s) = 0 \\tag{3}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "بحل المعادلة التفاضلية العادية (2) تحت الشروط (3) بالطرق الابتدائية المعتادة نجد أن:"
+        },
+        {
+          "block_type": "equation",
+          "content": "U(x, s) = \\frac{10 \\sin 2\\pi x}{s + 16\\pi^2} - \\frac{6 \\sin 4\\pi x}{s + 64\\pi^2}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وعلى ذلك بأخذ تحويل لابلاس العكسي نجد أن"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(x, t) = \\mathcal{L}^{-1}\\{U(x, s)\\} = 10 e^{-16\\pi^2 t} \\sin 2\\pi x - 6 e^{-64\\pi^2 t} \\sin 4\\pi x",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "تطبيقات المعادلات التفاضلية الجزئية:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "يوجد عدد من المعادلات التفاضلية الجزئية المشهورة والتي لها أهمية كبيرة لما لها من تطبيقات في شتى العلوم، على سبيل المثال نذكر بعض هذه المعادلات:"
+        }
+      ]
+    },
+    {
+      "page_number": 16,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 — 146 — مجلد المتدرب الجامع",
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "1- معادلة الموجة:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "معادلة الموجة هي النموذج الاصلي للمعادلات التفاضلية الجزئية الزائدية."
+        },
+        {
+          "block_type": "equation",
+          "content": "\\frac{\\partial^2 y}{\\partial t^2} = a^2 \\frac{\\partial^2 y}{\\partial x^2} \\tag{1}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وللمعادلات التفاضلية الجزئية الزائدية مميزات وهي خطوط للثابت (x-ct) وتلك التوابت من الثابت (x+ct) وهذا يعني أن ذلك الحل العام للمعادلة السابقة يأخذ الصورة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "y(x, t) = f(x-ct) + g(x+ct) \\tag{2}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "عندما تكون f،g اختيارية تامة، والدالة y(x, t) هي الازاحة عند اي نقطة x عند الزمن t. وبالنظر الى أن x كمتغير موضعي و t كزمن نستطيع أن نفسر f(x-ct) كموجة متحركة بسرعة c في الاتجاه (+x)، وبهذا نعني أن الصورة الكلية للدالة f كدالة في x عندما t=0 سوف تنزاح بانتظام نحو (x) الموجب بمقدار c عندما t=1 كما بالشكل التالي:"
+        }
+      ],
+      "images": [
+        {
+          "image_type": "graph",
+          "description": "Moving wave f(x-ct) showing displacement over time.",
+          "caption": "شكل (1) يوضح الموجة المتحركة f(x-ct). الخط المنقط يكون عند t>0، الخط الكامل يكون عند t=0.",
+          "reading_order": 1
+        }
+      ]
+    },
+    {
+      "page_number": 17,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "- مجلة المبتدئ الجامع (22) سبتمبر 2018",
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "content": "يمكن تطبيق المعادلة (1) في حالة الذبذبات الصغيرة لسلك مرن عندما يكون موضوعا في وضع ابتدائي على محور x تم أطلق للحركة والثابت $a^2 = \\frac{T}{\\mu}$ حيث T هو الشد في السلك، $\\mu$ هي الكتلة الثابتة لوحدة الطول من السلك."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "مثال: سلك طوله L مشدود بين النقطتين (0،0)، (L،0) الواقعتين على محور x عند الزمن t = 0 كان له شكل الدالة f(x) حيث 0 < x < L وترك ليتحرك من حالة سكون.أوجد إزاحة السلك عند أي زمن لاحق."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "الحل معادلة السلك المتذبذب"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\frac{\\partial^2 y}{\\partial t^2} = a^2 \\frac{\\partial^2 y}{\\partial x^2} \\quad 0 < x < L, \\quad t > 0",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "حيث y تساوي الإزاحة من محور x عند الزمن t، بما أن نهايتي السلك مثبتة عند x=0, x=L فإن $y(0,t)=0, y(L,t)=0$ وبما أن الشكل الابتدائي للسلك معطى بالدالة f(x) فإن $y(x,0) = f(x)$"
+        }
+      ],
+      "images": [
+        {
+          "image_type": "diagram",
+          "description": "A string of length L stretched between two points on the x-axis.",
+          "caption": "شكل (2) يوضح سلك طوله L مشدود بين نقطتين",
+          "reading_order": 1
+        }
+      ]
+    },
+    {
+      "page_number": 18,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "- مجلة المبتدئ الجامع (22) سبتمبر 2018 — العدد 148",
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "content": "T = A_1 \\sin \\lambda at + B_1 \\cos \\lambda at \\quad X = A_2 \\sin \\lambda x + B_2 \\cos \\lambda x",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وعلى ذلك فإن الحل يعطى بالعلاقة"
+        },
+        {
+          "block_type": "equation",
+          "content": "y(x, t) = XT = (A_2 \\sin \\lambda x + B_2 \\cos \\lambda x)(A_1 \\sin \\lambda at + B_1 \\cos \\lambda at)",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من $y(0, t) = 0$ نجد $B_2 = 0$ ومنه $y(x, t) = \\sin \\lambda x (A \\sin \\lambda at + B \\cos \\lambda at)$"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من $y(L, t) = 0$ يكون لدينا $\\sin \\lambda L = 0$ أي $\\lambda = \\frac{m\\pi}{L}$"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "بما أن السرعة الابتدائية $y_t(x, 0) = 0$ فإن $A = 0$ ومنه $y(x, t) = B \\sin \\frac{m\\pi x}{L} \\cos \\frac{m\\pi at}{L}$"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "لتحقيق الشرط $y(x, 0) = f(x)$ فإنه من الضروري تراكب الحلول:"
+        },
+        {
+          "block_type": "equation",
+          "content": "y(x, t) = \\sum_{m=1}^{\\infty} B_m \\sin \\frac{m\\pi x}{L} \\cos \\frac{m\\pi at}{L}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "ومن نظرية متسلسلة فورييه"
+        },
+        {
+          "block_type": "equation",
+          "content": "B_m = \\frac{2}{L} \\int_0^L f(x) \\sin \\frac{m\\pi x}{L} dx",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 19,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "- مجلة المبتدئ الجامعيين 149 العدد (22) سبتمبر 2018",
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "content": "الحدود في هذه المتسلسلة تمثل النسق العادي، أو الطبيعي للذبذبات ونحصل على تردد النسق العادي $f_m$ الذي ترتيبه $m$ من الحد الذي يحتوي $\\cos \\frac{m\\pi at}{L}$ وتعطى بالعلاقة:"
+        },
+        {
+          "block_type": "equation",
+          "content": "f_m = \\frac{ma}{2L} = \\frac{m}{2L} \\sqrt{\\frac{T}{\\mu}}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "2 - سريان الحرارة:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "وللتبسيط نحل المعادلة التفاضلية الجزئية المعتمدة على الزمن والمتجانسة في وسط ذو محور واحد خلال قضيب معدني في اتجاه محور $x$ والتي تكون فيه المعادلة التفاضلية الجزئية هي:"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\frac{\\partial u}{\\partial t} = k \\frac{\\partial^2 u}{\\partial x^2}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "حيث $u$ هي درجة حرارة جسم مصمت عند الموضع ($x$) والزمن ($t$) الثابت $k$ يسمى الانتشارية وهو يساوي $\\frac{K}{\\sigma\\rho}$ حيث $K$ معامل التوصيل الحراري، $\\sigma$ الحرارة النوعية، $\\rho$ الكثافة."
+        },
+        {
+          "block_type": "paragraph",
+          "content": "مثال: قضيب رفيع نصف لانهائي $x \\geq 0$ سطحه معزول حيث درجة الحرارة الابتدائية تساوي $f(x)$ أثر فجأة على الطرف $x=0$ بدرجة حرارة تساوي صفرا واحتفظ بها."
+        }
+      ]
+    },
+    {
+      "page_number": 20,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 150 - مجلة المبتدئ الجامعوان",
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "content": "\\frac{\\partial u}{\\partial t} = k \\frac{\\partial^2 u}{\\partial x^2} \\quad t > 0, \\quad x > 0 \\tag{1}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "|u(x,t)| < M, \\quad u(x,0) = f(x), \\quad u(0,t) = 0 \\tag{2}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "إن حل المعادلة (1) بفصل المتغيرات هو: $u(x,t) = e^{-k\\lambda^2 t} (A \\cos \\lambda x + B \\sin \\lambda x)$"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من الشروط الحدية نجد أن $A = 0$ وعلى ذلك: $u(x,t) = B e^{-k\\lambda^2 t} \\sin \\lambda x$"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "بالتكامل بالنسبة إلى $\\lambda$ نصل إلى الحل الممكن:"
+        },
+        {
+          "block_type": "equation",
+          "content": "u(x,t) = \\int_0^\\infty B(\\lambda) e^{-k\\lambda^2 t} \\sin \\lambda x \\, d\\lambda \\tag{4}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "من الشرط الحدي نجد أن: $f(x) = \\int_0^\\infty B(\\lambda) \\sin \\lambda x \\, d\\lambda$ ومنه:"
+        },
+        {
+          "block_type": "equation",
+          "content": "B(\\lambda) = \\frac{2}{\\pi} \\int_0^\\infty f(v) \\sin \\lambda v \\, dv",
+          "is_display_math": true
+        },
+        {
+          "block_type": "heading",
+          "level": 3,
+          "content": "3- معادلة لابلاس:"
+        },
+        {
+          "block_type": "paragraph",
+          "content": "تحدث هذه المعادلة في مجالات متعددة فمثلاً في نظرية التوصيل الحراري تكون $u$ هي درجة الحرارة في حالة الاستقرار."
+        },
+        {
+          "block_type": "equation",
+          "content": "\\nabla^2 u = \\frac{\\partial^2 u}{\\partial x^2} + \\frac{\\partial^2 u}{\\partial y^2} + \\frac{\\partial^2 u}{\\partial z^2} = 0",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 21,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "- مجلة الملتدئ الجامع (22) سبتمبر 2018",
+      "text_blocks": [
+        {
+          "block_type": "paragraph",
+          "content": "مثال:- أوجد حلول معادلة لابلاس في إحداثيات كروية عندما لا تعتمد على $\\Phi$."
+        },
+        {
+          "block_type": "equation",
+          "content": "r \\frac{\\partial}{\\partial r} \\left(r \\frac{\\partial v}{\\partial r}\\right) + \\frac{1}{\\sin\\theta} \\frac{\\partial}{\\partial\\theta} \\left(\\sin\\theta \\frac{\\partial v}{\\partial\\theta}\\right) = 0 \\tag{1}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "بعد فصل المتغيرات $v = R\\Theta$:"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\frac{r}{R} \\frac{d}{dr} \\left(r \\frac{dR}{dr}\\right) = -\\frac{1}{\\Theta \\sin\\theta} \\frac{d}{d\\theta} (\\sin\\theta \\frac{d\\Theta}{d\\theta}) = \\lambda^2",
+          "is_display_math": true
+        },
+        {
+          "block_type": "equation",
+          "content": "r^2 R'' + 2r R' - \\lambda^2 R = 0 \\tag{4}",
+          "is_display_math": true
+        }
+      ]
+    },
+    {
+      "page_number": 22,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "العدد (22) سبتمبر 2018 152",
+      "text_blocks": [
+        {
+          "block_type": "equation",
+          "content": "R = A_1 r^n + \\frac{B_1}{r^{n+1}} \\tag{5}",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "حيث $\\lambda^2 = n(n+1)$. وبالتعويض في معادلة $\\Theta$ والتحويل إلى $x = \\cos\\theta$ نحصل على معادلة لجندر:"
+        },
+        {
+          "block_type": "equation",
+          "content": "\\frac{d}{dx} \\left[ (1 - x^2) \\frac{d\\Theta}{dx} \\right] + n(n+1)\\Theta = 0",
+          "is_display_math": true
+        },
+        {
+          "block_type": "paragraph",
+          "content": "والتي حلها هو $\\Theta = A_2 P_n(x) + B_2 Q_n(x)$."
+        },
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "النتائج:"
+        },
+        {
+          "block_type": "list_item",
+          "content": "1- تؤكد الدراسة أنه بإمكان الطالب أن يكون معادلات تفاضلية جزئية في حل وترجمة أنواع عديدة من المسائل والصيغ الرياضية الخاضعة لشروط معطاة كالشروط الحدية.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "2- من خلال معالجة بعض الأمثلة والتطبيقات استطاعت هذه الدراسة ربط العلوم الرياضية بالفيزيائية باستخدام التطبيقات وحلها، باستخدام المعادلات التفاضلية الجزئية.",
+          "list_level": 1
+        }
+      ]
+    },
+    {
+      "page_number": 23,
+      "header": "المعادلات التفاضلية الجزئية وتطبيقاتها",
+      "footer": "مجلة الملتان: الجامع 22 (22 سبتمبر 2018)",
+      "text_blocks": [
+        {
+          "block_type": "heading",
+          "level": 2,
+          "content": "المراجع:"
+        },
+        {
+          "block_type": "list_item",
+          "content": "1- الرياضيات المتقدمة للمهندسين والعلميين، مواري. ر. شبيحل، الدار الدولية للنشر والتوزيع، لبنان، 1991.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "2- المعادلات التفاضلية الجزئية للاقسام العلمية والهندسية، الزوام أحمد دلة، ادارة المطبوعات والنشر جامعة الفاتح، ليبيا، 1998.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "3- المعادلات التفاضلية الجزئية، اس فارلو، ترجمة: مها عواض الكبيسي، منشورات جامعة عمر المختار البيضاء، ليبيا، 2005.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "4- مبادئ المعادلات التفاضلية الجزئية وبعض تطبيقاتها، عمر الخليل عثمان اسحق، السودان، 2015.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "5- المعادلات التفاضلية الجزئية، ناجي بن صالح، شعبان بن رسلان، السعودية، 2007.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "6- المعادلات التفاضلية، محمد رجب الجزيري، ادارة المطبوعات والنشر جامعة الفاتح، ليبيا، 2010.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "7- المعادلة التفاضلية مقاربة تطبيقية، علي مصطفى بن الاشهر، منشورات اكاديمية الدراسات العليا، ليبيا، 2005.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "8- المعادلات التفاضلية، حسن مصطفى العويضي، عبد الوهاب عباس رجب، سناء علي زارع، السعودية، 2005.",
+          "list_level": 1
+        },
+        {
+          "block_type": "list_item",
+          "content": "9- Hans ، George B.Arfken، Mathematical Methods For Physicists USA، Frank E.Haris، J.Weber 2013.",
+          "list_level": 1
+        }
+      ]
+    }
+  ],
+  "extraction_notes": "The document is a research paper on Partial Differential Equations. Equations were converted to LaTeX. Arabic text was preserved as per the OCR output."
+}

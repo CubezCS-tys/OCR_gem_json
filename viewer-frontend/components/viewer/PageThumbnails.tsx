@@ -8,6 +8,9 @@ export function PageThumbnails() {
   const { documentData, currentPage, setCurrentPage } = useViewerStore();
 
   if (!documentData) return null;
+  
+  // Ensure page is a valid number
+  const safeCurrentPage = isNaN(currentPage) || currentPage < 1 ? 1 : currentPage;
 
   return (
     <div className="h-full border-r bg-muted/20">
@@ -20,7 +23,7 @@ export function PageThumbnails() {
       <ScrollArea className="h-[calc(100%-4rem)]">
         <div className="p-2 space-y-2">
           {documentData.pages.map((page) => {
-            const isActive = page.page_number === currentPage;
+            const isActive = page.page_number === safeCurrentPage;
             return (
               <button
                 key={page.page_number}
