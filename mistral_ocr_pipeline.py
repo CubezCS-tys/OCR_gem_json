@@ -173,21 +173,33 @@ PAGE-LEVEL EXTRACTION:
 - Extract separate header, footer, and page_number_text if present
 - CRITICAL: If you extract header/footer, DO NOT include that same text in text_blocks
 - Headers/footers are typically page numbers, titles, citations at top/bottom of page
+- Set header_position="left", "center", or "right" based on where header text appears horizontally
+- Set footer_position="left", "center", or "right" based on where footer text appears horizontally
 - Set page_number_position: "header-left|center|right" or "footer-left|center|right"
 - Set page dimensions: width_pts, height_pts (in PDF points if detectable)
 - Set page_direction="rtl" for Arabic/Hebrew pages, "ltr" otherwise
 - Set background_color if the page has a colored background
 
 MULTI-COLUMN LAYOUT DETECTION (CRITICAL):
-- ALWAYS check if the page has multiple columns (2-column, 3-column layouts)
-- Look for text flowing in parallel vertical sections
-- Common in: academic papers, newspapers, magazines, technical reports
-- If multi-column detected:
-    • Set has_multi_column=true
-    • Set column_count (2, 3, or more)
-    • Set column_gap (gap width in points, typically 20-40)
-    • CRITICAL: Ensure ALL pages have SAME column_count if they share the same layout style
-    • Column detection must be CONSISTENT - don't flip between 2 and 3 columns on similar pages
+- ALWAYS distinguish between TWO types of multi-column layouts:
+  
+  TYPE 1: FULL-PAGE MULTI-COLUMN (entire page is multi-column)
+  - Common in: academic papers, newspapers, magazines where ENTIRE page has columns
+  - If detected: Set has_multi_column=true, column_count, column_gap
+  - For ALL text_blocks, tables, images: set column_number (1, 2, 3, etc.)
+  
+  TYPE 2: INLINE MULTI-COLUMN SECTION (embedded multi-column element in single-column page)
+  - Common in: lists of items, contact info, reference lists embedded in otherwise single-column text
+  - Example: A page with regular single-column text, but ONE section (like a list) appears in 2 columns
+  - If detected:
+    • Set has_multi_column=FALSE for the page (page is single-column overall)
+    • For elements in the inline multi-column section ONLY:
+      * Set multi_column_group_id="group1" (or "group2", "group3" for multiple sections)
+      * Set column_number (1, 2, etc.) within that group
+    • Elements outside the group should NOT have multi_column_group_id
+  
+- CRITICAL: Ensure ALL pages have SAME column_count if they share the same layout style
+- Column detection must be CONSISTENT - don't flip between 2 and 3 columns on similar pages
 - For ALL text_blocks, tables, and images: set column_number (1, 2, 3, etc.)
 - Reading order MUST follow column flow (top-to-bottom within each column, left-to-right across columns for LTR)
 
