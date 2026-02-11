@@ -1,0 +1,31 @@
+# Fixed-Layout OCR Pipeline - Dependencies
+# =========================================
+
+# Core
+pydantic>=2.0
+
+# PDF handling & rasterisation
+PyMuPDF>=1.24.0        # fitz: PDF → page images
+
+# Azure Document Intelligence (primary OCR engine)
+azure-ai-documentintelligence>=1.0.0
+azure-core>=1.30.0
+
+# Image preprocessing
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# Optional: better binarisation
+scikit-image>=0.21.0
+
+# Optional: orientation detection via Tesseract
+# pytesseract>=0.3.10
+# (requires tesseract-ocr system package)
+
+# Optional: LLM enrichment
+# google-generativeai>=0.8.0   # Gemini
+# mistralai>=1.0.0             # Mistral
+
+# Optional: visual fidelity evaluation (SSIM)
+# scikit-image already listed above
