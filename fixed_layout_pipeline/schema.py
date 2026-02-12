@@ -126,6 +126,12 @@ class Token(BaseModel):
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     language: Optional[str] = None  # ISO 639-1: "ar", "en", "fr"
     direction: Optional[Direction] = None
+    # Style properties (from vision model)
+    font_weight: Optional[str] = None  # "normal", "bold", "bolder"
+    font_style: Optional[str] = None   # "normal", "italic"
+    text_decoration: Optional[str] = None  # "none", "underline", "line-through"
+    font_size_pt: Optional[float] = None
+    text_color: Optional[str] = None  # hex color e.g. "#000000"
 
 
 # ─── Line Level ──────────────────────────────────────────────────────────────
@@ -141,6 +147,11 @@ class Line(BaseModel):
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     language: Optional[str] = None
     direction: Optional[Direction] = None
+    # Style properties (aggregated from tokens or detected directly)
+    font_weight: Optional[str] = None
+    font_style: Optional[str] = None
+    text_decoration: Optional[str] = None
+    background_color: Optional[str] = None  # hex color for highlighted text
 
     def compute_text(self) -> str:
         """Reconstruct line text from tokens."""
