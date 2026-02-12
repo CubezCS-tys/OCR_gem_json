@@ -179,6 +179,7 @@ def main():
     p_process.add_argument("--pages", help="Page range, e.g. '0-5'")
     p_process.add_argument("--no-preprocess", action="store_true", help="Skip preprocessing")
     p_process.add_argument("--llm-enrich", action="store_true", help="Enable LLM reading order repair")
+
     p_process.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
     p_process.set_defaults(func=cmd_process)
 

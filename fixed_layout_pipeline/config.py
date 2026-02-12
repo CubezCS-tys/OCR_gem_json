@@ -96,7 +96,9 @@ class LLMEnrichmentConfig:
     gemini_api_key: str = field(
         default_factory=lambda: os.environ.get("GEMINI_API_KEY", "")
     )
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = field(
+        default_factory=lambda: os.environ.get("MODEL_NAME", "gemini-2.0-flash")
+    )
     mistral_api_key: str = field(
         default_factory=lambda: os.environ.get("MISTRAL_API_KEY", "")
     )
@@ -136,6 +138,8 @@ class PipelineConfig:
     output_dir: Path = Path("output")
     # Keep intermediate files (page images, raw Azure response)
     keep_intermediates: bool = True
+    # Extract figures as separate images
+    extract_figures: bool = True
     # Max concurrent pages to process
     max_workers: int = 4
     # Logging level

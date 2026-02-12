@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import PipelineConfig
+from .figure_extractor import extract_figures
 from .html_renderer import FixedLayoutRenderer
 from .ingest import extract_source_metadata, rasterise_pdf
 from .ocr_engine import analyze_pdf, analyze_page_image
@@ -166,8 +167,46 @@ class Pipeline:
 
         logger.info(f"  Blocks: {doc.total_blocks()}, Avg confidence: {doc.avg_confidence():.3f}")
 
-        # ─── Stage 5: Reading order resolution ───────────────────
-        logger.info("[5/6] Resolving reading order...")
+        # ─── Stage 5: Extract figures ────────────────────────────
+        if self.config.extract_figures:
+            logger.info("[5/7] Extracting figures from pages...")
+            figure_count = sum(1 for p in doc.pages for b in p.blocks if b.block_type.value == "figure")
+            if figure_count > 0:
+                # Load PIL images for figure extraction
+                from PIL import Image
+                import numpy as np
+                import cv2
+                
+                pil_images = []
+                for page_img in page_images:
+                    if page_img.uri.startswith("data:"):
+                        # Extract from data URI
+                        header, b64data = page_img.uri.split(",", 1)
+                        img_bytes = base64.b64decode(b64data)
+                    else:
+                        with open(page_img.uri, "rb") as f:
+                            img_bytes = f.read()
+                    
+                    # Convert to PIL Image
+                    arr = np.frombuffer(img_bytes, dtype=np.uint8)
+                    cv_img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                    if cv_img is not None:
+                        # Convert BGR to RGB
+                        rgb_img = cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB)
+                        pil_img = Image.fromarray(rgb_img)
+                        pil_images.append(pil_img)
+                    else:
+                        pil_images.append(None)
+                
+                doc = extract_figures(doc, output_dir / stem, pil_images)
+                logger.info(f"  Extracted {figure_count} figures")
+            else:
+                logger.info("  No figures detected")
+        else:
+            logger.info("[5/7] Figure extraction: disabled")
+
+        # ─── Stage 6: Reading order resolution ───────────────────
+        logger.info("[6/7] Resolving reading order...")
         for page in doc.pages:
             # Start with engine order, optionally refine
             reading_order = resolve_reading_order(page, method="heuristic")
@@ -181,7 +220,7 @@ class Pipeline:
 
         # ─── Optional: LLM enrichment ────────────────────────────
         if self.config.llm.enabled:
-            logger.info("[5b/6] LLM enrichment...")
+            logger.info("[6b/7] LLM enrichment...")
             try:
                 from .llm_enrichment import enrich_reading_order
                 for page in doc.pages:
@@ -191,8 +230,8 @@ class Pipeline:
             except Exception as e:
                 logger.warning(f"LLM enrichment failed: {e}")
 
-        # ─── Stage 6: Render HTML ────────────────────────────────
-        logger.info("[6/6] Rendering fixed-layout HTML...")
+        # ─── Stage 7: Render HTML ────────────────────────────────
+        logger.info("[7/7] Rendering fixed-layout HTML...")
         html_path = output_dir / stem / f"{stem}.html"
         self.renderer.render_to_file(doc, html_path)
 

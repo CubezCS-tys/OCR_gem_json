@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 # ─── Constants ───────────────────────────────────────────────────────────────
 
 ARABIC_FONT_STACK = (
-    "'Amiri', 'Noto Naskh Arabic', 'Traditional Arabic', "
+    "'faces_Regular', 'Amiri', 'Noto Naskh Arabic', 'Traditional Arabic', "
     "'Simplified Arabic', 'Tahoma', serif"
 )
 LATIN_FONT_STACK = (
@@ -93,6 +93,8 @@ class FidelityRenderer:
         tokens_html = self._render_tokens(page, s) if self.show_tokens else ""
         # Tables
         tables_html = self._render_tables(page, s)
+        # Figures
+        figures_html = self._render_figures(page, s)
 
         return f'''
     <div class="page" id="page-{page.page_index}"
@@ -111,6 +113,9 @@ class FidelityRenderer:
 
       <!-- Tables -->
 {tables_html}
+
+      <!-- Figures -->
+{figures_html}
 
       <div class="page-num">{page.page_index + 1}</div>
     </div>'''
@@ -144,14 +149,30 @@ class FidelityRenderer:
         # Block type → CSS class for semantic styling
         btype = block.block_type.value
 
+        # Apply detected styles from vision model
+        style_parts = [
+            f'left:{x:.1f}px; top:{y:.1f}px;',
+            f'width:{w:.1f}px; height:{h:.1f}px;',
+            f'font-size:{fs:.1f}px; line-height:{h:.1f}px;',
+            f'font-family:{font};'
+        ]
+        
+        if line.font_weight:
+            style_parts.append(f'font-weight:{line.font_weight};')
+        if line.font_style:
+            style_parts.append(f'font-style:{line.font_style};')
+        if line.text_decoration:
+            style_parts.append(f'text-decoration:{line.text_decoration};')
+        if line.background_color:
+            style_parts.append(f'background-color:{line.background_color};')
+        
+        style_str = ' '.join(style_parts)
+
         return (
             f'        <div class="line {btype}" dir="{dir_attr}" '
             f'data-line-id="{line.line_id}" '
             f'data-conf="{line.confidence:.2f}" '
-            f'style="left:{x:.1f}px; top:{y:.1f}px; '
-            f'width:{w:.1f}px; height:{h:.1f}px; '
-            f'font-size:{fs:.1f}px; line-height:{h:.1f}px; '
-            f'font-family:{font};">'
+            f'style="{style_str}">'
             f'{inner}</div>'
         )
 
@@ -167,8 +188,17 @@ class FidelityRenderer:
 
         parts = []
         for tok in line.tokens:
-            t = html_mod.escape(tok.text)
+            t = tok.text
             tok_dir = tok.direction or line_dir
+            
+            # Fix Arabic negative numbers: move minus from start to end
+            if tok_dir == Direction.RTL and t.startswith('-'):
+                t = t[1:] + '-'
+            elif tok_dir == Direction.RTL and t.startswith('−'):
+                t = t[1:] + '−'
+            
+            t = html_mod.escape(t)
+            
             if tok_dir != line_dir:
                 # Opposite direction → wrap
                 d = "ltr" if tok_dir == Direction.LTR else "rtl"
@@ -225,17 +255,32 @@ class FidelityRenderer:
     # ── Tables ───────────────────────────────────────────────────────────
 
     def _render_tables(self, page: Page, s: float) -> str:
+        # Tables are rendered as positioned text blocks
+        return ""
+
+    # ── Figures ──────────────────────────────────────────────────────────
+
+    def _render_figures(self, page: Page, s: float) -> str:
+        """Render figures at their exact bounding box positions."""
         parts = []
-        for table in page.tables:
-            bbox = table.bbox
+        for block in page.blocks:
+            if block.block_type != BlockType.FIGURE:
+                continue
+            if not block.figure_uri:
+                continue
+                
+            bbox = block.bbox
             x, y = bbox.x0 * s, bbox.y0 * s
             w, h = bbox.width * s, bbox.height * s
-            inner = table.to_html_table()
+            
+            caption = html_mod.escape(block.figure_caption or "")
+            
             parts.append(
-                f'      <div class="tbl-overlay" data-table="{table.table_id}" '
+                f'      <div class="fig-overlay" data-block="{block.block_id}" '
                 f'style="position:absolute; left:{x:.1f}px; top:{y:.1f}px; '
                 f'width:{w:.1f}px; height:{h:.1f}px; z-index:2;">\n'
-                f'        {inner}\n'
+                f'        <img src="{block.figure_uri}" alt="{caption}" '
+                f'style="width:100%; height:100%; object-fit:contain;" />\n'
                 f'      </div>'
             )
         return "\n".join(parts)
@@ -307,15 +352,33 @@ class FidelityRenderer:
     }}
 
     /* ─── Table overlay ──────────────────────────────────── */
+    .tbl-overlay {{
+      background: white;
+      overflow: auto;
+    }}
     .tbl-overlay table {{
-      width: 100%; height: 100%;
-      border-collapse: collapse; table-layout: fixed;
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: auto;
+      font-family: {ARABIC_FONT_STACK};
     }}
     .tbl-overlay td, .tbl-overlay th {{
-      border: 1px solid #999; padding: 2px 4px;
-      font-size: 14px; vertical-align: top;
+      border: 1px solid #666;
+      padding: 3px 5px;
+      font-size: 13px;
+      vertical-align: middle;
+      text-align: center;
+      direction: rtl;
+      line-height: 1.2;
     }}
-    .tbl-overlay th {{ font-weight: bold; background: #f0f0f0; }}
+    .tbl-overlay th {{
+      font-weight: bold;
+      background: #e8e8e8;
+      border: 1px solid #555;
+    }}
+    .tbl-overlay td {{
+      background: white;
+    }}
 
     /* ─── Page number badge ──────────────────────────────── */
     .page-num {{

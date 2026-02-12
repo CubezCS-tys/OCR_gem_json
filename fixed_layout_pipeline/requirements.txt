@@ -23,8 +23,8 @@ scikit-image>=0.21.0
 # pytesseract>=0.3.10
 # (requires tesseract-ocr system package)
 
-# Optional: LLM enrichment
-# google-generativeai>=0.8.0   # Gemini
+# Optional: LLM enrichment & style extraction
+google-generativeai>=0.8.0   # Gemini (for reading order + style detection)
 # mistralai>=1.0.0             # Mistral
 
 # Optional: visual fidelity evaluation (SSIM)

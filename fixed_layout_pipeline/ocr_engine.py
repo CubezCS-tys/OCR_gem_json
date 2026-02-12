@@ -480,6 +480,18 @@ def _convert_azure_page(
             )
             page.blocks.append(block)
 
+    # ─── Convert figures ─────────────────────────────────────────
+    if hasattr(result, 'figures') and result.figures:
+        for f_idx, azure_figure in enumerate(result.figures):
+            if not _figure_on_page(azure_figure, page_idx):
+                continue
+
+            block = _convert_azure_figure(
+                azure_figure, page_idx, f_idx,
+                page_width_inch, page_height_inch, img_w, img_h
+            )
+            page.blocks.append(block)
+
     return page
 
 
@@ -495,6 +507,13 @@ def _table_on_page(table, page_idx: int) -> bool:
     if not table.bounding_regions:
         return False
     return any(br.page_number == page_idx + 1 for br in table.bounding_regions)
+
+
+def _figure_on_page(figure, page_idx: int) -> bool:
+    """Check if a figure belongs to a specific page."""
+    if not figure.bounding_regions:
+        return False
+    return any(br.page_number == page_idx + 1 for br in figure.bounding_regions)
 
 
 def _convert_azure_table(
@@ -555,6 +574,48 @@ def _convert_azure_table(
         col_count=azure_table.column_count or 0,
         cells=cells,
         confidence=0.9,
+    )
+
+
+def _convert_azure_figure(
+    azure_figure,
+    page_idx: int,
+    figure_idx: int,
+    page_width_inch: float,
+    page_height_inch: float,
+    img_w: int,
+    img_h: int,
+) -> Block:
+    """Convert an Azure figure to our Block schema with FIGURE type."""
+    # Get figure bounding box
+    figure_bbox = BBox(x0=0, y0=0, x1=100, y1=100)
+    figure_poly = None
+
+    if azure_figure.bounding_regions:
+        for br in azure_figure.bounding_regions:
+            if br.page_number == page_idx + 1 and br.polygon:
+                figure_poly, figure_bbox = _azure_polygon_to_schema(
+                    br.polygon, page_width_inch, page_height_inch, img_w, img_h
+                )
+                break
+
+    # Extract caption if available
+    caption = None
+    if hasattr(azure_figure, 'caption') and azure_figure.caption:
+        caption = azure_figure.caption.content if hasattr(azure_figure.caption, 'content') else str(azure_figure.caption)
+    
+    # The figure_uri will be set later during image extraction
+    # For now, we just mark where the figure is located
+    figure_id = f"fig_p{page_idx}_f{figure_idx}"
+
+    return Block(
+        block_id=f"b_p{page_idx}_fig{figure_idx}",
+        block_type=BlockType.FIGURE,
+        bbox=figure_bbox,
+        polygon=figure_poly,
+        confidence=0.85,
+        figure_uri=None,  # Will be populated during image extraction
+        figure_caption=caption,
     )
 
 
