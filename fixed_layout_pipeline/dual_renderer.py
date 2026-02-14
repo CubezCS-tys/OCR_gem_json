@@ -57,11 +57,13 @@ class FidelityRenderer:
     Each line is absolutely positioned at its bounding box.
     English tokens inside RTL lines get <span dir="ltr"> wrappers.
     Optional token overlay for debugging.
+    Optional semantic layer for reading mode toggle.
     """
 
-    def __init__(self, scale: float = 1.0, show_tokens: bool = False):
+    def __init__(self, scale: float = 1.0, show_tokens: bool = False, include_semantic: bool = False):
         self.scale = scale
         self.show_tokens = show_tokens  # toggle token-level boxes
+        self.include_semantic = include_semantic  # embed semantic layer for reading mode
 
     def render(self, doc: CanonicalDocument) -> str:
         """Render full multi-page fidelity HTML."""
@@ -73,7 +75,12 @@ class FidelityRenderer:
         lang = doc.languages[0] if doc.languages else "ar"
         direction = "rtl" if doc.principal_direction == Direction.RTL else "ltr"
 
-        return self._wrap(title, lang, direction, "\n".join(pages), doc)
+        # Optionally generate semantic layer content
+        semantic_html = ""
+        if self.include_semantic:
+            semantic_html = self._generate_semantic_content(doc)
+
+        return self._wrap(title, lang, direction, "\n".join(pages), semantic_html, doc)
 
     # ── Per-page ──────────────────────────────────────────────────────────
 
@@ -285,11 +292,61 @@ class FidelityRenderer:
             )
         return "\n".join(parts)
 
+    # ── Semantic layer generation ────────────────────────────────────────
+
+    def _generate_semantic_content(self, doc: CanonicalDocument) -> str:
+        """Generate semantic/reading mode content from document blocks."""
+        # Use SemanticRenderer logic but return just the content, not full HTML
+        renderer = SemanticRenderer()
+        parts = []
+        
+        for page in doc.pages:
+            blocks = page.blocks_in_reading_order()
+            merged = renderer._merge_paragraphs(blocks)
+            
+            for block in merged:
+                rendered = renderer._render_block(block)
+                if rendered:
+                    parts.append(rendered)
+        
+        return "\n".join(parts)
+
     # ── Full document wrapper ────────────────────────────────────────────
 
     def _wrap(self, title: str, lang: str, direction: str,
-              pages_html: str, doc: CanonicalDocument) -> str:
+              pages_html: str, semantic_html: str, doc: CanonicalDocument) -> str:
         n_pages = doc.page_count()
+        
+        # Build toolbar buttons based on whether semantic layer is included
+        if semantic_html:
+            toolbar_buttons = f'''
+    <button onclick="toggleReading()" id="btn-reading">📖 Reading</button>
+    <span style="opacity:.4">|</span>
+    <button onclick="toggleTokens()" id="btn-tok">Tokens</button>
+    <button onclick="toggleDebug()" id="btn-dbg">Debug</button>
+    <button onclick="toggleConfidence()" id="btn-conf">Confidence</button>
+    <button onclick="fitAll()" id="btn-fit">Fit Text</button>'''
+        else:
+            toolbar_buttons = f'''
+    <button onclick="toggleTokens()" id="btn-tok">Tokens</button>
+    <button onclick="toggleDebug()" id="btn-dbg">Debug</button>
+    <button onclick="toggleConfidence()" id="btn-conf">Confidence</button>
+    <button onclick="fitAll()" id="btn-fit">Fit Text</button>'''
+        
+        # Build semantic layer section if included
+        if semantic_html:
+            semantic_section = f'''
+
+  <!-- Semantic/Reading layer -->
+  <div class="semantic-layer" id="reading-view">
+    <div class="content">
+      <h1>{title}</h1>
+{semantic_html}
+    </div>
+  </div>'''
+        else:
+            semantic_section = ""
+        
         return f'''<!DOCTYPE html>
 <html lang="{lang}" dir="{direction}">
 <head>
@@ -299,13 +356,22 @@ class FidelityRenderer:
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Noto+Naskh+Arabic&family=Noto+Serif&display=swap" rel="stylesheet">
   <style>
+    /* ─── CSS Variables ──────────────────────────────────── */
+    :root {{
+      --arabic-font: {ARABIC_FONT_STACK};
+      --text-color: #111;
+      --muted: #666;
+      --lowconf-bg: rgba(220, 80, 60, 0.20);
+      --lowconf-highlight: rgba(255, 200, 0, 0.25);
+    }}
+
     /* ─── Reset ──────────────────────────────────────────── */
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
       margin: 0; padding: 20px;
       background: #525659;
       display: flex; flex-direction: column; align-items: center;
-      font-family: {ARABIC_FONT_STACK};
+      font-family: var(--arabic-font);
     }}
 
     /* ─── Page canvas ────────────────────────────────────── */
@@ -326,6 +392,13 @@ class FidelityRenderer:
       white-space: pre;
       unicode-bidi: plaintext;
       cursor: text;
+      color: var(--text-color);
+      font-family: var(--arabic-font);
+      font-variant-ligatures: contextual;
+      text-rendering: geometricPrecision;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background 0.2s ease;
     }}
     .line-layer .line::selection {{
       background: rgba(0, 120, 215, 0.35);
@@ -334,10 +407,39 @@ class FidelityRenderer:
       background: rgba(0, 120, 215, 0.35);
     }}
 
-    /* Semantic hints from block type */
-    .line.header {{ font-weight: bold; }}
-    .line.footnote {{ font-style: italic; opacity: 0.8; }}
-    .line.page_number {{ font-size: 0.85em; opacity: 0.6; }}
+    /* Journal-grade semantic styling by block type */
+    .line.header {{
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }}
+    .line.footnote {{
+      color: var(--muted);
+      font-style: normal;
+      font-size: 0.92em;
+    }}
+    .line.page_number {{
+      color: #999;
+      font-size: 0.85em;
+    }}
+
+    /* Confidence-based highlighting (toggled via JS) */
+    .line[data-conf] {{
+      outline: 0 solid transparent;
+    }}
+    .confidence-mode .line[data-conf^="0.7"],
+    .confidence-mode .line[data-conf^="0.6"],
+    .confidence-mode .line[data-conf^="0.5"],
+    .confidence-mode .line[data-conf^="0.4"],
+    .confidence-mode .line[data-conf^="0.3"] {{
+      background: var(--lowconf-bg);
+      border-radius: 3px;
+      padding: 0 2px;
+    }}
+    .confidence-mode .line[data-conf^="0.5"],
+    .confidence-mode .line[data-conf^="0.4"],
+    .confidence-mode .line[data-conf^="0.3"] {{
+      background: var(--lowconf-highlight);
+    }}
 
     /* ─── Token overlay ──────────────────────────────────── */
     .token-layer {{
@@ -410,6 +512,100 @@ class FidelityRenderer:
       .page {{ box-shadow: none; margin: 0; page-break-after: always; }}
       .toolbar, .page-num {{ display: none; }}
     }}
+
+    /* ─── Semantic/Reading Layer ─────────────────────────── */
+    .semantic-layer {{
+      display: none;
+      max-width: 800px;
+      margin: 80px auto 40px auto;
+      padding: 0 2.5em;
+      background: white;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.15);
+      border-radius: 6px;
+    }}
+    .semantic-layer.active {{
+      display: block;
+    }}
+    .semantic-layer .content {{
+      padding: 3em 2em;
+      font-family: var(--arabic-font);
+      font-size: 19px;
+      line-height: 1.9;
+      color: #1a1a1a;
+      direction: {direction};
+      font-variant-ligatures: contextual;
+      text-rendering: optimizeLegibility;
+    }}
+    .semantic-layer h1 {{
+      font-size: 1.75em;
+      color: #222;
+      margin: 0 0 1em 0;
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 0.4em;
+    }}
+    .semantic-layer h2 {{
+      font-size: 1.4em;
+      color: #222;
+      font-weight: 700;
+      margin: 1.8em 0 0.6em 0;
+      letter-spacing: 0.3px;
+    }}
+    .semantic-layer h3 {{
+      font-size: 1.15em;
+      color: #444;
+      margin: 1.5em 0 0.5em 0;
+    }}
+    .semantic-layer p {{
+      margin: 0 0 1.2em 0;
+      text-align: justify;
+      text-justify: inter-word;
+      orphans: 3;
+      widows: 3;
+    }}
+    .semantic-layer aside {{
+      font-size: 0.92em;
+      color: #666;
+      background: #f8f8f8;
+      border-right: 3px solid #ddd;
+      padding: 0.8em 1.2em;
+      margin: 1.5em 0;
+    }}
+    .semantic-layer table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5em 0;
+      font-size: 0.95em;
+    }}
+    .semantic-layer th, .semantic-layer td {{
+      border: 1px solid #999;
+      padding: 8px 12px;
+      text-align: right;
+    }}
+    .semantic-layer th {{
+      background: #e8e8e8;
+      font-weight: 700;
+    }}
+    .semantic-layer figure {{
+      margin: 2em 0;
+      text-align: center;
+      background: #f8f8f8;
+      padding: 1em;
+      border-radius: 4px;
+    }}
+    .semantic-layer figcaption {{
+      font-size: 0.92em;
+      color: #666;
+      margin-top: 0.8em;
+      font-style: italic;
+    }}
+    .semantic-layer .page-break {{
+      border-top: 1px dashed #ccc;
+      margin: 3em 0 2em 0;
+      padding-top: 0.8em;
+      font-size: 0.8em;
+      color: #aaa;
+      text-align: center;
+    }}
   </style>
 </head>
 <body>
@@ -418,14 +614,38 @@ class FidelityRenderer:
     <span>{title}</span>
     <span style="opacity:.4">|</span>
     <span>{n_pages} pages</span>
-    <button onclick="toggleTokens()" id="btn-tok">Tokens</button>
-    <button onclick="toggleDebug()" id="btn-dbg">Debug</button>
-    <button onclick="fitAll()" id="btn-fit">Fit Text</button>
+{toolbar_buttons}
   </div>
 
+  <!-- Fidelity layer (pages) -->
+  <div class="pages-container" id="fidelity-view">
 {pages_html}
+  </div>
+{semantic_section}
 
   <script>
+    /* ── Toggle Reading mode (fidelity ↔ semantic) ─────── */
+    let readingMode = false;
+    function toggleReading() {{
+      readingMode = !readingMode;
+      const fidelityView = document.getElementById('fidelity-view');
+      const readingView = document.getElementById('reading-view');
+      const body = document.body;
+      
+      if (readingMode) {{
+        fidelityView.style.display = 'none';
+        readingView.classList.add('active');
+        body.style.background = 'white';
+      }} else {{
+        fidelityView.style.display = 'block';
+        readingView.classList.remove('active');
+        body.style.background = '#525659';
+      }}
+      
+      const btn = document.getElementById('btn-reading');
+      if (btn) btn.classList.toggle('active', readingMode);
+    }}
+
     /* ── Toggle token overlay ─────────────────────────── */
     let tokensOn = false;
     function toggleTokens() {{
@@ -445,6 +665,14 @@ class FidelityRenderer:
         el.style.background = debugOn ? 'rgba(255,255,200,0.15)' : 'none';
       }});
       document.getElementById('btn-dbg').classList.toggle('active', debugOn);
+    }}
+
+    /* ── Toggle confidence highlighting ───────────────── */
+    let confidenceOn = false;
+    function toggleConfidence() {{
+      confidenceOn = !confidenceOn;
+      document.body.classList.toggle('confidence-mode', confidenceOn);
+      document.getElementById('btn-conf').classList.toggle('active', confidenceOn);
     }}
 
     /* ── Fit text to bbox via scaleX ──────────────────── */
@@ -535,28 +763,156 @@ class SemanticRenderer:
   <title>{title} — Semantic</title>
   <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Noto+Naskh+Arabic&family=Noto+Serif&display=swap" rel="stylesheet">
   <style>
-    body {{
-      max-width: 800px; margin: 2em auto; padding: 0 1.5em;
-      font-family: {ARABIC_FONT_STACK};
-      font-size: 18px; line-height: 1.8;
-      color: #1a1a1a; background: #fdfdfd;
-      direction: {direction};
+    :root {{
+      --arabic-font: {ARABIC_FONT_STACK};
+      --text-color: #1a1a1a;
+      --heading-color: #222;
+      --muted-color: #666;
+      --border-color: #ddd;
+      --bg-subtle: #f8f8f8;
     }}
-    h1, h2, h3 {{ color: #333; margin-top: 1.5em; }}
-    h1 {{ font-size: 1.6em; border-bottom: 2px solid #ccc; padding-bottom: 0.3em; }}
-    h2 {{ font-size: 1.35em; }}
-    p {{ text-align: justify; margin: 0.8em 0; }}
-    aside {{ font-size: 0.9em; color: #555; border-right: 3px solid #ddd; padding-right: 1em; margin: 1em 0; }}
-    table {{ border-collapse: collapse; width: 100%; margin: 1em 0; }}
-    th, td {{ border: 1px solid #bbb; padding: 6px 10px; text-align: right; }}
-    th {{ background: #f0f0f0; font-weight: bold; }}
-    figure {{ margin: 1.5em 0; text-align: center; }}
-    figcaption {{ font-size: 0.9em; color: #666; margin-top: 0.5em; }}
-    .page-break {{ border-top: 1px dashed #ccc; margin: 2em 0; padding-top: 0.5em;
-                   font-size: 0.8em; color: #999; text-align: center; }}
-    footer {{ font-size: 0.85em; color: #777; margin-top: 1em; }}
+    
+    body {{
+      max-width: 800px; margin: 2em auto; padding: 0 2em;
+      font-family: var(--arabic-font);
+      font-size: 19px; 
+      line-height: 1.9;
+      color: var(--text-color); 
+      background: white;
+      direction: {direction};
+      font-variant-ligatures: contextual;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }}
+    
+    /* Typography hierarchy */
+    h1, h2, h3 {{ 
+      color: var(--heading-color); 
+      font-weight: 700;
+      line-height: 1.3;
+      margin-top: 1.8em; 
+      margin-bottom: 0.6em;
+    }}
+    h1 {{ 
+      font-size: 1.75em; 
+      border-bottom: 2px solid var(--border-color); 
+      padding-bottom: 0.4em;
+      margin-top: 0;
+    }}
+    h2 {{ 
+      font-size: 1.4em;
+      letter-spacing: 0.3px;
+    }}
+    h3 {{
+      font-size: 1.15em;
+      color: #444;
+    }}
+    
+    /* Paragraphs with journal-style typography */
+    p {{ 
+      text-align: justify; 
+      text-justify: inter-word;
+      margin: 0 0 1.2em 0;
+      orphans: 3;
+      widows: 3;
+    }}
+    p:first-of-type {{
+      margin-top: 0;
+    }}
+    
+    /* Lists */
+    ul, ol {{
+      margin: 1em 0;
+      padding-right: 2em;
+      padding-left: 0;
+    }}
+    li {{
+      margin: 0.4em 0;
+      text-align: justify;
+    }}
+    
+    /* Footnotes */
+    aside {{ 
+      font-size: 0.92em; 
+      color: var(--muted-color); 
+      border-right: 3px solid var(--border-color); 
+      padding-right: 1.2em; 
+      margin: 1.5em 0;
+      background: var(--bg-subtle);
+      padding-top: 0.5em;
+      padding-bottom: 0.5em;
+    }}
+    
+    /* Tables */
+    table {{ 
+      border-collapse: collapse; 
+      width: 100%; 
+      margin: 1.5em 0;
+      font-size: 0.95em;
+    }}
+    th, td {{ 
+      border: 1px solid #999; 
+      padding: 8px 12px; 
+      text-align: right;
+      vertical-align: top;
+    }}
+    th {{ 
+      background: #e8e8e8; 
+      font-weight: 700;
+    }}
+    
+    /* Figures */
+    figure {{ 
+      margin: 2em 0; 
+      text-align: center;
+      background: var(--bg-subtle);
+      padding: 1em;
+      border-radius: 4px;
+    }}
+    figcaption {{ 
+      font-size: 0.92em; 
+      color: var(--muted-color); 
+      margin-top: 0.8em;
+      font-style: italic;
+    }}
+    
+    /* Page breaks */
+    .page-break {{ 
+      border-top: 1px dashed #ccc; 
+      margin: 3em 0 2em 0; 
+      padding-top: 0.8em;
+      font-size: 0.8em; 
+      color: #aaa; 
+      text-align: center;
+      letter-spacing: 2px;
+    }}
+    
+    /* Footer metadata */
+    footer {{ 
+      font-size: 0.88em; 
+      color: #888; 
+      margin-top: 1.5em;
+      padding-top: 0.5em;
+      border-top: 1px solid #eee;
+    }}
+    
+    /* Blockquotes for citations */
+    blockquote {{
+      margin: 1.5em 2em;
+      padding: 0.5em 1.5em;
+      border-right: 4px solid var(--border-color);
+      background: var(--bg-subtle);
+      font-style: italic;
+    }}
+    
     @media print {{
+      body {{ max-width: 100%; margin: 0; padding: 1cm; }}
       .page-break {{ page-break-before: always; border: none; }}
+    }}
+    @media (max-width: 600px) {{
+      body {{ font-size: 17px; padding: 0 1em; }}
+      h1 {{ font-size: 1.5em; }}
+      h2 {{ font-size: 1.25em; }}
     }}
   </style>
 </head>
@@ -569,14 +925,85 @@ class SemanticRenderer:
     def _render_page(self, page: Page) -> str:
         parts = []
         if page.page_index > 0:
-            parts.append(f'  <div class="page-break">— {page.page_index + 1} —</div>')
+            parts.append(f'  <div class="page-break">— صفحة {page.page_index + 1} —</div>')
 
-        for block in page.blocks_in_reading_order():
+        blocks = page.blocks_in_reading_order()
+        merged = self._merge_paragraphs(blocks)
+        
+        for block in merged:
             rendered = self._render_block(block)
             if rendered:
                 parts.append(rendered)
 
         return "\n".join(parts)
+    
+    def _merge_paragraphs(self, blocks: list[Block]) -> list[Block]:
+        """
+        Merge consecutive TEXT blocks into single paragraphs.
+        Keeps headers, tables, figures separate.
+        """
+        if not blocks:
+            return blocks
+        
+        merged = []
+        current_para_lines = []
+        current_para_block = None
+        
+        for block in blocks:
+            # Don't merge special blocks
+            if block.block_type in (BlockType.HEADER, BlockType.TABLE, BlockType.FIGURE, 
+                                   BlockType.FOOTNOTE, BlockType.FOOTER, BlockType.EQUATION):
+                # Flush accumulated paragraph
+                if current_para_lines and current_para_block:
+                    para_block = Block(
+                        block_id=current_para_block.block_id,
+                        bbox=current_para_block.bbox,
+                        block_type=BlockType.TEXT,
+                        lines=current_para_lines,
+                        direction=current_para_block.direction,
+                        language=current_para_block.language,
+                    )
+                    merged.append(para_block)
+                    current_para_lines = []
+                    current_para_block = None
+                
+                merged.append(block)
+                continue
+            
+            # TEXT blocks - accumulate for merging
+            if block.block_type == BlockType.TEXT:
+                if not current_para_block:
+                    current_para_block = block
+                current_para_lines.extend(block.lines)
+            else:
+                # Other block types, flush and add separately
+                if current_para_lines and current_para_block:
+                    para_block = Block(
+                        block_id=current_para_block.block_id,
+                        bbox=current_para_block.bbox,
+                        block_type=BlockType.TEXT,
+                        lines=current_para_lines,
+                        direction=current_para_block.direction,
+                        language=current_para_block.language,
+                    )
+                    merged.append(para_block)
+                    current_para_lines = []
+                    current_para_block = None
+                merged.append(block)
+        
+        # Flush remaining
+        if current_para_lines and current_para_block:
+            para_block = Block(
+                block_id=current_para_block.block_id,
+                bbox=current_para_block.bbox,
+                block_type=BlockType.TEXT,
+                lines=current_para_lines,
+                direction=current_para_block.direction,
+                language=current_para_block.language,
+            )
+            merged.append(para_block)
+        
+        return merged
 
     def _render_block(self, block: Block) -> str:
         btype = block.block_type
@@ -613,9 +1040,14 @@ class SemanticRenderer:
         return f'  <{tag} dir="{direction}" lang="{lang}">{text}</{tag}>'
 
     def _block_text_with_bidi(self, block: Block) -> str:
-        """Join lines with <br>, wrapping opposite-direction tokens."""
+        """
+        Join lines intelligently with proper spacing and bidi wrapping.
+        For TEXT blocks, merge lines into flowing paragraphs.
+        For other blocks, preserve line breaks.
+        """
         line_parts = []
         block_dir = block.direction or Direction.RTL
+        
         for line in block.lines:
             if line.tokens:
                 toks = []
@@ -630,7 +1062,13 @@ class SemanticRenderer:
                 line_parts.append(" ".join(toks))
             else:
                 line_parts.append(html_mod.escape(line.text))
-        return "\n    ".join(line_parts)
+        
+        # For TEXT blocks, join with spaces (flowing paragraph)
+        # For others (headers, footnotes), keep line breaks
+        if block.block_type == BlockType.TEXT:
+            return " ".join(line_parts)
+        else:
+            return "<br>\n    ".join(line_parts)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

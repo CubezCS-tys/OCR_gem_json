@@ -123,6 +123,12 @@ def cmd_render(args):
         html = FidelityRenderer(scale=args.scale, show_tokens=args.tokens).render(doc)
         path.write_text(html, encoding="utf-8")
         print(f"  Fidelity → {path}")
+    
+    if "all" in which or "dual" in which or "combined" in which:
+        path = output_dir / f"{stem}_dual.html"
+        html = FidelityRenderer(scale=args.scale, show_tokens=args.tokens, include_semantic=True).render(doc)
+        path.write_text(html, encoding="utf-8")
+        print(f"  Dual (Fidelity + Reading) → {path}")
 
     if "all" in which or "semantic" in which:
         path = output_dir / f"{stem}_semantic.html"
@@ -195,7 +201,7 @@ def main():
     p_render.add_argument("json_file", help="Path to canonical JSON")
     p_render.add_argument("-o", "--output", help="Output directory (default: same as JSON)")
     p_render.add_argument("--which", default="all",
-                          help="Which outputs: all, fidelity, semantic, markdown (comma-separated)")
+                          help="Which outputs: all, fidelity, dual, semantic, markdown (comma-separated)")
     p_render.add_argument("--scale", type=float, default=1.0, help="Scale factor (default: 1.0)")
     p_render.add_argument("--tokens", action="store_true", help="Include token overlay in fidelity HTML")
     p_render.set_defaults(func=cmd_render)
