@@ -38,8 +38,7 @@ def resolve_reading_order(
 
     Args:
         page: Page with blocks that need ordering.
-        method: "engine" (keep Azure's order), "heuristic" (rule-based),
-                or "model" (LLM-assisted, see llm_enrichment.py).
+        method: "engine" (keep Azure's order) or "heuristic" (rule-based).
 
     Returns:
         Updated ReadingOrder.
