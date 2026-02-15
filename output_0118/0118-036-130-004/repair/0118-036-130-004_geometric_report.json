@@ -1,0 +1,1438 @@
+{
+  "document_id": "1d444592-d44b-49e6-9f9c-5d86599bcadd",
+  "filename": "0118-036-130-004.pdf",
+  "total_pages": 42,
+  "total_tokens": 63271,
+  "scores": {
+    "overall": 0.987,
+    "overlap": 1.0,
+    "baseline": 1.0,
+    "direction": 0.987,
+    "spacing": 1.0,
+    "confidence": 0.96
+  },
+  "issue_counts": {
+    "overlaps": 4,
+    "baselines": 0,
+    "direction": 11,
+    "spacing": 202,
+    "confidence_clusters": 8,
+    "broken_words": 177,
+    "line_density": 358,
+    "font_coverage": 13,
+    "total": 773,
+    "errors": 343,
+    "warnings": 430
+  },
+  "issues": {
+    "overlaps": [
+      {
+        "page": 8,
+        "token_a_id": "t_p0_w53",
+        "token_b_id": "t_p0_w53",
+        "text_a": "مميزات",
+        "text_b": "مميزات",
+        "iou": 1.0,
+        "severity": "error"
+      },
+      {
+        "page": 8,
+        "token_a_id": "t_p0_w54",
+        "token_b_id": "t_p0_w54",
+        "text_a": "استراتيجية",
+        "text_b": "استراتيجية",
+        "iou": 1.0,
+        "severity": "error"
+      },
+      {
+        "page": 8,
+        "token_a_id": "t_p0_w55",
+        "token_b_id": "t_p0_w55",
+        "text_a": "التعلم",
+        "text_b": "التعلم",
+        "iou": 1.0,
+        "severity": "error"
+      },
+      {
+        "page": 8,
+        "token_a_id": "t_p0_w56",
+        "token_b_id": "t_p0_w56",
+        "text_a": "بالتخيل",
+        "text_b": "بالتخيل",
+        "iou": 1.0,
+        "severity": "error"
+      }
+    ],
+    "baselines": [],
+    "direction": [
+      {
+        "page": 5,
+        "block_id": "b_p0_b4",
+        "token_id": null,
+        "text": "Imagination التخيل",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "block_id": "b_p0_b6",
+        "token_id": null,
+        "text": "Imaginary Learning Strategy بالتخيل التعلم استراتيجية",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "block_id": "b_p0_b8",
+        "token_id": null,
+        "text": "Listening الاستماع",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "block_id": "b_p0_b10",
+        "token_id": null,
+        "text": "Listening skills الاستماع مهارات",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 13,
+        "block_id": "b_p0_b11",
+        "token_id": null,
+        "text": ",Mohidat) (2019 دراسة",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 14,
+        "block_id": "b_p0_b3",
+        "token_id": null,
+        "text": ",Al-Mahasnah) (2022 دراسة",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 15,
+        "block_id": "b_p0_b4",
+        "token_id": null,
+        "text": ") Abucejo et al ,. (2025 دراسة",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 16,
+        "block_id": "b_p0_b5",
+        "token_id": null,
+        "text": ") Aydin & Tunagur (2021, دراسة",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 19,
+        "block_id": "b_p0_b1",
+        "token_id": null,
+        "text": ") Al-Shara'h & Al-Khawaldeh , (2025 دراسة",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 22,
+        "block_id": "b_p0_b18",
+        "token_id": null,
+        "text": ") Aydin & Tunagur (2021, دراسة -",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      },
+      {
+        "page": 41,
+        "block_id": "b_p0_b0",
+        "token_id": null,
+        "text": "برنامج تدريبي قائم علي استراتيجية التعلم بالتخيل لتنمية مهار",
+        "issue_type": "missing_rtl",
+        "severity": "error"
+      }
+    ],
+    "spacing": [
+      {
+        "page": 0,
+        "line_id": "l_p0_l25",
+        "line_text": "١ تم استلام البحث في ٢٠٢٥/٨/١٠ وتقرر صلاحيته للنشر في ٢٠٢٥/٩",
+        "metric": "word_spacing",
+        "value": 27.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "line_id": "l_p0_l28",
+        "line_text": "= (٢٠٢): المجلة المصرية للدراسات النفسية العدد ١٣٠ ج١ المجلد",
+        "metric": "word_spacing",
+        "value": 50.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l9",
+        "line_text": "١. هل يوجد فرق ذو دلالة إحصائية بين متوسطى درجات تلاميذ المج",
+        "metric": "word_spacing",
+        "value": 55.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l11",
+        "line_text": "٢. هل يوجد فرق ذو دلالة إحصائية بين متوسطى درجات تلاميذ المج",
+        "metric": "word_spacing",
+        "value": 54.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l15",
+        "line_text": "١. التعرف على فاعلية برنامج تدريبي قائم على استراتيجية التعل",
+        "metric": "word_spacing",
+        "value": 39.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l17",
+        "line_text": "٢. التعرف على الفروق الموجودة بين متوسطى درجات تلاميذ المجمو",
+        "metric": "word_spacing",
+        "value": 41.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l19",
+        "line_text": "٣. التعرف على الفروق الموجودة بين متوسطى درجات تلاميذ المجمو",
+        "metric": "word_spacing",
+        "value": 40.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l25",
+        "line_text": ": (٢٠٤): المجلة المصرية للدراسات النفسية العدد ١٣٠ ج١ المجلد",
+        "metric": "word_spacing",
+        "value": 49.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "line_id": "l_p0_l2",
+        "line_text": "- إثراء الأدب التربوي حول مهارات الاستماع في المرحلة الابتدا",
+        "metric": "word_spacing",
+        "value": 51.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "line_id": "l_p0_l6",
+        "line_text": "- تسلّط الضوء على فعالية استراتيجيات التدريس النشط، وخصوصًا ",
+        "metric": "word_spacing",
+        "value": 46.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "line_id": "l_p0_l9",
+        "line_text": "- تأصيل دور الخيال في العملية التعليمية؛ حيث تسلط الدراسة ال",
+        "metric": "word_spacing",
+        "value": 46.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "line_id": "l_p0_l13",
+        "line_text": "- تعد الدراسة الحالية بمثابة نواة بحثية لإجراء دراسات تتعلق ",
+        "metric": "word_spacing",
+        "value": 47.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "line_id": "l_p0_l15",
+        "line_text": "- تسهم الدراسة الحالية في توفير أدوات سيكومترية مناسبة للبيئ",
+        "metric": "word_spacing",
+        "value": 47.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "line_id": "l_p0_l19",
+        "line_text": "- مساعدة صنّاع القرار التربوي والمطورين المناهجيين في اعتماد",
+        "metric": "word_spacing",
+        "value": 46.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "line_id": "l_p0_l22",
+        "line_text": "- تقديم مجموعة من التوصيات التي تأمل الدراسة الحالية أن تفيد",
+        "metric": "word_spacing",
+        "value": 47.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "line_id": "l_p0_l25",
+        "line_text": "- تسهم الدراسة الحالية في تقديم عدد من الدراسات والبحوث المق",
+        "metric": "word_spacing",
+        "value": 46.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "line_id": "l_p0_l26",
+        "line_text": "= (٢٠٦): المجلة المصرية للدراسات النفسية العدد ١٣٠ ج١ المجلد",
+        "metric": "word_spacing",
+        "value": 50.0,
+        "page_median": 15.0,
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "line_id": "l_p0_l9",
+        "line_text": "١. قائمة مهارة الاستماع لطلبة الصف السادس الابتدائي (إعداد ا",
+        "metric": "word_spacing",
+        "value": 36.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "line_id": "l_p0_l10",
+        "line_text": "٢. اختبار مهارة الاستماع لطلبة الصف السادس الابتدائي (إعداد ",
+        "metric": "word_spacing",
+        "value": 41.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "line_id": "l_p0_l11",
+        "line_text": "٣. البرنامج التدريبي القائم على استراتيجية التعلم بالتخيل لت",
+        "metric": "word_spacing",
+        "value": 42.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "line_id": "l_p0_l15",
+        "line_text": "١- اختبار \"ت \" لعينتين مستقلتين T-Test Samels Independent لل",
+        "metric": "word_spacing",
+        "value": 36.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "line_id": "l_p0_l17",
+        "line_text": "٢- اختبار \"ت \" لعينتين مرتبطتين T-Test Samels Paird للمقارنة",
+        "metric": "word_spacing",
+        "value": 33.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "line_id": "l_p0_l19",
+        "line_text": "٣- حجم التأثير n٢ لدراسة حجم تأثير المتغير المستقل فى المتغي",
+        "metric": "word_spacing",
+        "value": 32.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 7,
+        "line_id": "l_p0_l27",
+        "line_text": "(٢٠٨): المجلة المصرية للدراسات النفسية العدد ١٣٠ ج١ المجلد (",
+        "metric": "word_spacing",
+        "value": 50.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l1",
+        "line_text": "٣. النظر إلى المتعلم كإنسان يتكون من عقل وروح، وله إرادة وسل",
+        "metric": "word_spacing",
+        "value": 32.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l3",
+        "line_text": "الشعور بالقلق والابتعاد عن عدم الاهتمام واللامبالاة، وتوجيهه",
+        "metric": "word_spacing",
+        "value": 26.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l3",
+        "line_text": "الشعور بالقلق والابتعاد عن عدم الاهتمام واللامبالاة، وتوجيهه",
+        "metric": "word_spacing",
+        "value": 26.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l3",
+        "line_text": "الشعور بالقلق والابتعاد عن عدم الاهتمام واللامبالاة، وتوجيهه",
+        "metric": "word_spacing",
+        "value": 27.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l3",
+        "line_text": "الشعور بالقلق والابتعاد عن عدم الاهتمام واللامبالاة، وتوجيهه",
+        "metric": "word_spacing",
+        "value": 27.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l3",
+        "line_text": "الشعور بالقلق والابتعاد عن عدم الاهتمام واللامبالاة، وتوجيهه",
+        "metric": "word_spacing",
+        "value": 27.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l9",
+        "line_text": "● مساعدة الفريق: مساعدة الطلاب على التعرف على بعضهم البعض بش",
+        "metric": "word_spacing",
+        "value": 38.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l11",
+        "line_text": "• دعم عملية التعلم بشكل مباشر لإثارة الاهتمام الأولي بالدرس.",
+        "metric": "word_spacing",
+        "value": 38.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l13",
+        "line_text": "• عملية تعلم صفية كاملة: تدريس بقيادة المعلم يحفز جميع الطلا",
+        "metric": "word_spacing",
+        "value": 39.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l14",
+        "line_text": "• نقاش صفي: حوار ومناظرة حول القضايا الرئيسية.",
+        "metric": "word_spacing",
+        "value": 37.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l16",
+        "line_text": "• القدرة على تحسين وتلخيص ما تم تعلمه، وتقييم التغييرات في ا",
+        "metric": "word_spacing",
+        "value": 42.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l17",
+        "line_text": "• تحديد كيفية مواصلة الطلاب لتعلمهم بعد آخر حصة دراسية.",
+        "metric": "word_spacing",
+        "value": 38.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l18",
+        "line_text": "• القدرة على نقل الأفكار والمشاعر والمشكلات التي يواجهها الط",
+        "metric": "word_spacing",
+        "value": 39.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "line_id": "l_p0_l27",
+        "line_text": "المجلة المصرية للدراسات النفسية العدد ١٣٠ج١ المجلد (٣٦) - ين",
+        "metric": "word_spacing",
+        "value": 26.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "line_id": "l_p0_l21",
+        "line_text": "مسبقا. يسعى المتعلم إلى استخلاص المعرفة الأساسية وتطبيقها بط",
+        "metric": "word_spacing",
+        "value": 34.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "line_id": "l_p0_l22",
+        "line_text": "٣. الاستماع التفاعلي listening Interactive ؛ التركيز على كون",
+        "metric": "word_spacing",
+        "value": 29.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "line_id": "l_p0_l27",
+        "line_text": ": (٢١٠): المجلة المصرية للدراسات النفسية العدد ١٣٠ ج١ المجلد",
+        "metric": "word_spacing",
+        "value": 49.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "line_id": "l_p0_l14",
+        "line_text": "١. التنبؤ: يمكن للطلاب التنبؤ بما سيحدث بعد ذلك في القصة. وي",
+        "metric": "word_spacing",
+        "value": 41.0,
+        "page_median": 15.0,
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "line_id": "l_p0_l18",
+        "line_text": "٣. الارتباط بالتجارب الشخصية: يقيم الطلاب روابط شخصية بين ال",
+        "metric": "word_spacing",
+        "value": 41.0,
+        "page_median": 15.0,
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "line_id": "l_p0_l20",
+        "line_text": "٤. الربط بالأدب: يربط الطلاب بين القصة التي يستمعون إليها وق",
+        "metric": "word_spacing",
+        "value": 40.0,
+        "page_median": 15.0,
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "line_id": "l_p0_l22",
+        "line_text": "٥. ملاحظة قوة اللغة وجمالها: يجب أن يكون الطلاب حساسين لاختي",
+        "metric": "word_spacing",
+        "value": 38.0,
+        "page_median": 15.0,
+        "severity": "warning"
+      },
+      {
+        "page": 11,
+        "line_id": "l_p0_l1",
+        "line_text": "٦. تطبيق معرفتهم ببنية القصة: أثناء استماعهم للقصص المقروءة ",
+        "metric": "word_spacing",
+        "value": 37.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 11,
+        "line_id": "l_p0_l7",
+        "line_text": "١. تصنيف المعلومات: يُصنّف الطلاب المعلومات أو يُنظّمونها في",
+        "metric": "word_spacing",
+        "value": 36.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 11,
+        "line_id": "l_p0_l10",
+        "line_text": "٢. المراقبة: يُراقب الطلاب استماعهم للتأكد من فهمهم. يُمكنهم",
+        "metric": "word_spacing",
+        "value": 42.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 11,
+        "line_id": "l_p0_l14",
+        "line_text": "٤. اكتشاف الخطة: يمكن للطلاب الانتباه إلى كلمات الإشارة لتحد",
+        "metric": "word_spacing",
+        "value": 42.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      },
+      {
+        "page": 11,
+        "line_id": "l_p0_l16",
+        "line_text": "٥. تدوين الملاحظات: يُساعد تدوين الملاحظات الطلاب على أن يصب",
+        "metric": "word_spacing",
+        "value": 38.0,
+        "page_median": 14.0,
+        "severity": "warning"
+      }
+    ],
+    "confidence_clusters": [
+      {
+        "page": 6,
+        "block_id": "b_p0_b9",
+        "token_ids": [
+          "t_p0_w122",
+          "t_p0_w124"
+        ],
+        "texts": [
+          "(18.",
+          "(V"
+        ],
+        "avg_confidence": 0.663,
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "block_id": "b_p0_b5",
+        "token_ids": [
+          "t_p0_w239",
+          "t_p0_w240"
+        ],
+        "texts": [
+          "اهتمامًا",
+          "بالغًا"
+        ],
+        "avg_confidence": 0.436,
+        "severity": "error"
+      },
+      {
+        "page": 9,
+        "block_id": "b_p0_b8",
+        "token_ids": [
+          "t_p0_w307",
+          "t_p0_w308"
+        ],
+        "texts": [
+          "مقتطفات",
+          "مُطوّلة"
+        ],
+        "avg_confidence": 0.303,
+        "severity": "error"
+      },
+      {
+        "page": 17,
+        "block_id": "b_p0_b1",
+        "token_ids": [
+          "t_p0_w106",
+          "t_p0_w111"
+        ],
+        "texts": [
+          ",",
+          "@zbay"
+        ],
+        "avg_confidence": 0.555,
+        "severity": "warning"
+      },
+      {
+        "page": 24,
+        "block_id": "b_p0_b19",
+        "token_ids": [
+          "t_p0_w148",
+          "t_p0_w149"
+        ],
+        "texts": [
+          "٥٦٦,",
+          ".**"
+        ],
+        "avg_confidence": 0.599,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "block_id": "b_p0_b66",
+        "token_ids": [
+          "t_p0_w152",
+          "t_p0_w153"
+        ],
+        "texts": [
+          "2",
+          "ax)"
+        ],
+        "avg_confidence": 0.473,
+        "severity": "error"
+      },
+      {
+        "page": 32,
+        "block_id": "b_p0_b22",
+        "token_ids": [
+          "t_p0_w89",
+          "t_p0_w90"
+        ],
+        "texts": [
+          "التطبيقين",
+          "القبلى"
+        ],
+        "avg_confidence": 0.617,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "block_id": "b_p0_b66",
+        "token_ids": [
+          "t_p0_w147",
+          "t_p0_w148"
+        ],
+        "texts": [
+          ">",
+          "x)"
+        ],
+        "avg_confidence": 0.638,
+        "severity": "warning"
+      }
+    ],
+    "broken_words": [
+      {
+        "page": 0,
+        "token_id": "t_p0_w14",
+        "text": "د/",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 0,
+        "token_id": "t_p0_w19",
+        "text": "٢",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 0,
+        "token_id": "t_p0_w188",
+        "text": "٦",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 0,
+        "token_id": "t_p0_w265",
+        "text": "١",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 0,
+        "token_id": "t_p0_w276",
+        "text": "ت:",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 2,
+        "token_id": "t_p0_w0",
+        "text": "د/",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 2,
+        "token_id": "t_p0_w15",
+        "text": ")،",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 2,
+        "token_id": "t_p0_w293",
+        "text": "١",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w95",
+        "text": "١.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w115",
+        "text": "؟",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w116",
+        "text": "٢.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w136",
+        "text": "؟",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w145",
+        "text": "١.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w164",
+        "text": "٢.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w182",
+        "text": "٣.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "token_id": "t_p0_w0",
+        "text": "د/",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "token_id": "t_p0_w6",
+        "text": "أ-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "token_id": "t_p0_w129",
+        "text": "ب-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w0",
+        "text": "د/",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w76",
+        "text": "١.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w86",
+        "text": "٢.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w96",
+        "text": "٣.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w132",
+        "text": "١-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w134",
+        "text": "\"ت",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w149",
+        "text": "٢-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w151",
+        "text": "\"ت",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w169",
+        "text": "٣-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "token_id": "t_p0_w172",
+        "text": "n٢",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 7,
+        "token_id": "t_p0_w203",
+        "text": "١.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 7,
+        "token_id": "t_p0_w262",
+        "text": "٢.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "token_id": "t_p0_w0",
+        "text": "د/",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "token_id": "t_p0_w6",
+        "text": "٣.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "token_id": "t_p0_w70",
+        "text": "١.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "token_id": "t_p0_w105",
+        "text": "٢.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "token_id": "t_p0_w135",
+        "text": "٣.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "token_id": "t_p0_w225",
+        "text": "١.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "token_id": "t_p0_w230",
+        "text": "؛",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "token_id": "t_p0_w243",
+        "text": "٢.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "token_id": "t_p0_w248",
+        "text": "؛",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "token_id": "t_p0_w265",
+        "text": "٣.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "token_id": "t_p0_w270",
+        "text": "؛",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "token_id": "t_p0_w287",
+        "text": "٤.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "token_id": "t_p0_w292",
+        "text": "؛",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "token_id": "t_p0_w0",
+        "text": "د/",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "token_id": "t_p0_w6",
+        "text": "٥.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "token_id": "t_p0_w11",
+        "text": "،",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "token_id": "t_p0_w29",
+        "text": "٦.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "token_id": "t_p0_w34",
+        "text": "؛",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "token_id": "t_p0_w155",
+        "text": "١.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "token_id": "t_p0_w174",
+        "text": "٢.",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      }
+    ],
+    "line_density": [
+      {
+        "page": 0,
+        "region": "between lines 24 and 25",
+        "line_gap_px": 130.0,
+        "expected_gap_px": 16.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 0,
+        "region": "between lines 26 and 27",
+        "line_gap_px": -49.0,
+        "expected_gap_px": 16.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 1,
+        "region": "between lines 15 and 16",
+        "line_gap_px": 2.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 2,
+        "region": "between lines 25 and 26",
+        "line_gap_px": 177.0,
+        "expected_gap_px": 16.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "region": "between lines 24 and 25",
+        "line_gap_px": 179.0,
+        "expected_gap_px": 19.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "region": "between lines 26 and 27",
+        "line_gap_px": 176.0,
+        "expected_gap_px": 16.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 6,
+        "region": "between lines 23 and 24",
+        "line_gap_px": 3.0,
+        "expected_gap_px": 22.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 8,
+        "region": "between lines 5 and 6",
+        "line_gap_px": -54.0,
+        "expected_gap_px": 18.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 9,
+        "region": "between lines 18 and 19",
+        "line_gap_px": 0.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "region": "between lines 24 and 25",
+        "line_gap_px": 0.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "region": "between lines 25 and 26",
+        "line_gap_px": 0.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "region": "between lines 1 and 2",
+        "line_gap_px": -4.0,
+        "expected_gap_px": 15.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 10,
+        "region": "between lines 20 and 21",
+        "line_gap_px": 1.0,
+        "expected_gap_px": 15.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "region": "between lines 23 and 24",
+        "line_gap_px": 252.0,
+        "expected_gap_px": 15.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 12,
+        "region": "between lines 25 and 26",
+        "line_gap_px": 2.0,
+        "expected_gap_px": 13.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "region": "between lines 22 and 23",
+        "line_gap_px": 0.0,
+        "expected_gap_px": 13.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "region": "between lines 24 and 25",
+        "line_gap_px": 231.0,
+        "expected_gap_px": 13.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 15,
+        "region": "between lines 25 and 26",
+        "line_gap_px": 131.0,
+        "expected_gap_px": 15.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 17,
+        "region": "between lines 13 and 14",
+        "line_gap_px": 3.0,
+        "expected_gap_px": 13.0,
+        "issue_type": "too_tight",
+        "severity": "warning"
+      },
+      {
+        "page": 18,
+        "region": "between lines 25 and 26",
+        "line_gap_px": 206.0,
+        "expected_gap_px": 15.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 21,
+        "region": "between lines 9 and 10",
+        "line_gap_px": 141.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 21,
+        "region": "between lines 10 and 11",
+        "line_gap_px": -57.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 21,
+        "region": "between lines 11 and 12",
+        "line_gap_px": -48.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 21,
+        "region": "between lines 13 and 14",
+        "line_gap_px": -37.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 21,
+        "region": "between lines 14 and 15",
+        "line_gap_px": -29.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 21,
+        "region": "between lines 15 and 16",
+        "line_gap_px": -18.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 21,
+        "region": "between lines 16 and 17",
+        "line_gap_px": -29.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 21,
+        "region": "between lines 17 and 18",
+        "line_gap_px": -48.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 21,
+        "region": "between lines 18 and 19",
+        "line_gap_px": -31.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 21,
+        "region": "between lines 19 and 20",
+        "line_gap_px": -2.0,
+        "expected_gap_px": 12.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      }
+    ],
+    "font_coverage": [
+      {
+        "page": 8,
+        "token_id": "t_p0_w78",
+        "text": "●",
+        "problematic_chars": [
+          "●"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 28,
+        "token_id": "t_p0_w38",
+        "text": "●",
+        "problematic_chars": [
+          "●"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 28,
+        "token_id": "t_p0_w115",
+        "text": "●",
+        "problematic_chars": [
+          "●"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 28,
+        "token_id": "t_p0_w196",
+        "text": "●",
+        "problematic_chars": [
+          "●"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "token_id": "t_p0_w62",
+        "text": "●",
+        "problematic_chars": [
+          "●"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "token_id": "t_p0_w65",
+        "text": "΄",
+        "problematic_chars": [
+          "΄"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "token_id": "t_p0_w64",
+        "text": "η",
+        "problematic_chars": [
+          "η"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "token_id": "t_p0_w249",
+        "text": "■",
+        "problematic_chars": [
+          "■"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 32,
+        "token_id": "t_p0_w29",
+        "text": "■",
+        "problematic_chars": [
+          "■"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 32,
+        "token_id": "t_p0_w31",
+        "text": "■",
+        "problematic_chars": [
+          "■"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "token_id": "t_p0_w60",
+        "text": "η΄",
+        "problematic_chars": [
+          "η",
+          "΄"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 34,
+        "token_id": "t_p0_w30",
+        "text": "■",
+        "problematic_chars": [
+          "■"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 34,
+        "token_id": "t_p0_w32",
+        "text": "■",
+        "problematic_chars": [
+          "■"
+        ],
+        "severity": "warning"
+      }
+    ]
+  }
+}

@@ -43,6 +43,17 @@ ARABIC_FONT_STACK = (
 LATIN_FONT_STACK = (
     "'Noto Serif', 'Times New Roman', 'Georgia', serif"
 )
+# Combined stacks ensure per-glyph font selection works for mixed-script lines
+FONT_STACK_RTL = (
+    "'faces_Regular', 'Amiri', 'Noto Naskh Arabic', 'Traditional Arabic', "
+    "'Simplified Arabic', 'Noto Serif', 'Times New Roman', 'Georgia', "
+    "'Tahoma', serif"
+)
+FONT_STACK_LTR = (
+    "'Noto Serif', 'Times New Roman', 'Georgia', "
+    "'faces_Regular', 'Amiri', 'Noto Naskh Arabic', 'Traditional Arabic', "
+    "'Simplified Arabic', 'Tahoma', serif"
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -147,8 +158,9 @@ class FidelityRenderer:
         line_dir = line.direction or block.direction or Direction.RTL
         dir_attr = "rtl" if line_dir == Direction.RTL else "ltr"
 
-        # Pick font
-        font = ARABIC_FONT_STACK if line_dir == Direction.RTL else LATIN_FONT_STACK
+        # Pick font — combined stack so Arabic glyphs always use Arabic fonts
+        # even in LTR-detected lines, and vice versa
+        font = FONT_STACK_RTL if line_dir == Direction.RTL else FONT_STACK_LTR
 
         # Build inner HTML with BiDi handling
         inner = self._bidi_line_html(line, block)
@@ -234,7 +246,7 @@ class FidelityRenderer:
         fs = max(8, h * 0.82)
         direction = tok.direction or block.direction or Direction.RTL
         dir_attr = "rtl" if direction == Direction.RTL else "ltr"
-        font = ARABIC_FONT_STACK if direction == Direction.RTL else LATIN_FONT_STACK
+        font = FONT_STACK_RTL if direction == Direction.RTL else FONT_STACK_LTR
         t = html_mod.escape(tok.text)
 
         # Color-coded confidence border
@@ -389,7 +401,7 @@ class FidelityRenderer:
     }}
     .line-layer .line {{
       position: absolute;
-      white-space: pre;
+      white-space: nowrap;
       unicode-bidi: plaintext;
       cursor: text;
       color: var(--text-color);
@@ -399,6 +411,13 @@ class FidelityRenderer:
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       transition: background 0.2s ease;
+      overflow: hidden;
+    }}
+    .line-layer .line[dir="rtl"] {{
+      text-align: right;
+    }}
+    .line-layer .line[dir="ltr"] {{
+      text-align: left;
     }}
     .line-layer .line::selection {{
       background: rgba(0, 120, 215, 0.35);
@@ -675,27 +694,56 @@ class FidelityRenderer:
       document.getElementById('btn-conf').classList.toggle('active', confidenceOn);
     }}
 
-    /* ── Fit text to bbox via scaleX ──────────────────── */
+    /* ── Fit text to bbox via font-size (proportional) ── */
     function fitAll() {{
       const m = document.createElement('span');
       m.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:-9999px;top:-9999px;';
       document.body.appendChild(m);
       document.querySelectorAll('.line-layer .line').forEach(el => {{
         const boxW = parseFloat(el.style.width);
+        const boxH = parseFloat(el.style.height);
         if (!boxW || boxW <= 0) return;
+        // Reset any previous fit adjustments
+        el.style.transform = '';
+        const origFs = parseFloat(el.dataset.origFs || el.style.fontSize);
+        if (!el.dataset.origFs) el.dataset.origFs = origFs;
+        // Measure natural width at original font-size
         m.style.fontFamily = el.style.fontFamily;
-        m.style.fontSize = el.style.fontSize;
+        m.style.fontSize = origFs + 'px';
         m.style.fontWeight = getComputedStyle(el).fontWeight;
         m.style.lineHeight = el.style.lineHeight;
-        m.textContent = el.textContent;
+        m.setAttribute('dir', el.getAttribute('dir') || 'rtl');
+        m.innerHTML = el.innerHTML;
         const natW = m.offsetWidth;
-        if (natW > 0 && Math.abs(natW - boxW) > 2) {{
-          const s = boxW / natW;
-          const dir = el.getAttribute('dir');
-          el.style.transformOrigin = (dir === 'rtl') ? 'right center' : 'left center';
-          el.style.transform = 'scaleX(' + s.toFixed(4) + ')';
-        }} else {{
-          el.style.transform = '';
+        if (natW <= 0) return;
+        let newFs = origFs;
+        if (natW > boxW * 1.02) {{
+          // Text overflows — shrink font-size proportionally
+          newFs = origFs * (boxW / natW);
+        }}
+        // Clamp: don't go below 6px, don't exceed box height
+        newFs = Math.max(6, Math.min(newFs, boxH * 0.95));
+        el.style.fontSize = newFs.toFixed(1) + 'px';
+        el.style.lineHeight = boxH + 'px';
+
+        // Justify: distribute remaining space as word-spacing
+        el.style.wordSpacing = 'normal';
+        m.style.fontSize = newFs + 'px';
+        m.innerHTML = el.innerHTML;
+        const fittedW = m.offsetWidth;
+        const textContent = el.textContent || '';
+        const words = textContent.trim().split(/ +/);
+        const nGaps = words.length - 1;
+        // Only justify if line fills >60% of box and has multiple words
+        if (nGaps > 0 && fittedW > boxW * 0.6) {{
+          const extraSpace = boxW - fittedW;
+          if (extraSpace > 0) {{
+            const ws = extraSpace / nGaps;
+            // Cap word-spacing to avoid absurd gaps (max 2em)
+            if (ws < newFs * 2) {{
+              el.style.wordSpacing = ws.toFixed(1) + 'px';
+            }}
+          }}
         }}
       }});
       document.body.removeChild(m);

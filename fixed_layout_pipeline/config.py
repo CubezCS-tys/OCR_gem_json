@@ -56,11 +56,11 @@ class RasterConfig:
 @dataclass
 class PreprocessConfig:
     """Preprocessing pipeline toggles."""
-    deskew: bool = True
+    deskew: bool = False   # Disabled: Azure DI handles skew internally
     denoise: bool = True
     binarise: bool = False  # Only for very degraded scans
     dewarp: bool = False    # Enable for book scans with curved baselines
-    auto_orient: bool = True  # Detect and fix 0/90/180/270 rotation
+    auto_orient: bool = False  # Disabled: Azure DI handles orientation internally
 
 
 @dataclass
@@ -88,51 +88,12 @@ class RendererConfig:
 
 
 @dataclass
-class LLMEnrichmentConfig:
-    """Optional LLM-based enrichment settings."""
-    enabled: bool = False
-    # Provider: "gemini" or "mistral"
-    provider: str = "gemini"
-    gemini_api_key: str = field(
-        default_factory=lambda: os.environ.get("GEMINI_API_KEY", "")
-    )
-    gemini_model: str = field(
-        default_factory=lambda: os.environ.get("MODEL_NAME", "gemini-2.0-flash")
-    )
-    mistral_api_key: str = field(
-        default_factory=lambda: os.environ.get("MISTRAL_API_KEY", "")
-    )
-    mistral_model: str = "mistral-large-latest"
-    # What the LLM should help with
-    repair_reading_order: bool = True
-    enrich_table_structure: bool = False
-    semantic_classification: bool = False
-
-
-@dataclass
-class QAConfig:
-    """Quality assurance and evaluation settings."""
-    # Compute CER/WER when ground truth is available
-    compute_text_metrics: bool = True
-    # Compute SSIM visual fidelity (render HTML → image → compare)
-    compute_visual_fidelity: bool = False
-    # Reading order evaluation via Kendall Tau
-    compute_reading_order_metrics: bool = True
-    # Table structure evaluation via TEDS
-    compute_table_metrics: bool = True
-    # Confidence threshold below which to flag for review
-    confidence_threshold: float = 0.80
-
-
-@dataclass
 class PipelineConfig:
     """Top-level pipeline configuration."""
     azure: AzureConfig = field(default_factory=AzureConfig)
     raster: RasterConfig = field(default_factory=RasterConfig)
     preprocess: PreprocessConfig = field(default_factory=PreprocessConfig)
     renderer: RendererConfig = field(default_factory=RendererConfig)
-    llm: LLMEnrichmentConfig = field(default_factory=LLMEnrichmentConfig)
-    qa: QAConfig = field(default_factory=QAConfig)
 
     # I/O paths
     output_dir: Path = Path("output")
@@ -155,8 +116,5 @@ class PipelineConfig:
             ),
             renderer=RendererConfig(
                 debug_boxes=os.environ.get("OCR_DEBUG", "").lower() == "true",
-            ),
-            llm=LLMEnrichmentConfig(
-                enabled=os.environ.get("LLM_ENRICH", "").lower() == "true",
             ),
         )

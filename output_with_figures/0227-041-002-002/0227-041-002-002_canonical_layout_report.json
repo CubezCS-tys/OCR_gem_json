@@ -1,0 +1,1472 @@
+{
+  "document_id": "7b7f4771-8f57-4b9b-ba2d-a792152fa835",
+  "filename": "0227-041-002-002.pdf",
+  "total_pages": 39,
+  "total_tokens": 31656,
+  "scores": {
+    "overall": 0.98,
+    "overlap": 1.0,
+    "baseline": 0.986,
+    "direction": 1.0,
+    "spacing": 1.0,
+    "confidence": 0.926
+  },
+  "issue_counts": {
+    "overlaps": 0,
+    "baselines": 87,
+    "direction": 1,
+    "spacing": 41,
+    "confidence_clusters": 5,
+    "broken_words": 101,
+    "line_density": 1722,
+    "font_coverage": 3,
+    "total": 1960,
+    "errors": 1692,
+    "warnings": 268
+  },
+  "issues": {
+    "overlaps": [],
+    "baselines": [
+      {
+        "page": 9,
+        "line_id": "l_p0_l2",
+        "line_text": "تحليل العجلة لذبابة السلاح خلال المحاولات الأربع داخل ظروف ا",
+        "max_y_deviation": 26.0,
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "line_id": "l_p0_l73",
+        "line_text": "تحليل العجلة لذبابة السلاح خلال المحاولات الأربع خارج ظروف ا",
+        "max_y_deviation": 30.0,
+        "severity": "warning"
+      },
+      {
+        "page": 9,
+        "line_id": "l_p0_l143",
+        "line_text": "مجلة أسيوط لعلوم وفنون التربية الرياضية",
+        "max_y_deviation": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 11,
+        "line_id": "l_p0_l2",
+        "line_text": "تحليل العجلة لمركز ثقل السلاح خلال المحاولات الأربع داخل ظرو",
+        "max_y_deviation": 27.0,
+        "severity": "warning"
+      },
+      {
+        "page": 11,
+        "line_id": "l_p0_l73",
+        "line_text": "تحليل العجلة لمركز ثقل السلاح خلال المحاولات الأربع خارج ظرو",
+        "max_y_deviation": 29.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l5",
+        "line_text": "متوسط التحليل الزمني لمراحل أداء الهجمة القاطعة داخل وخارج ظ",
+        "max_y_deviation": 31.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l41",
+        "line_text": "الكينماتيكية محل الدراسة الذبابة السلاح ومركز ثقل السلاح ومف",
+        "max_y_deviation": 37.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l47",
+        "line_text": "النسب المئوية لمراحل لأداء الهجمة القاطعة داخل ظروف المباراة",
+        "max_y_deviation": 33.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l48",
+        "line_text": "مجلة أسيوط لعلوم وفنون التربية الرياضية",
+        "max_y_deviation": 18.0,
+        "severity": "warning"
+      },
+      {
+        "page": 15,
+        "line_id": "l_p0_l2",
+        "line_text": "متوسطات المتغيرات الكينماتيكية لمفصل الرسغ داخل ظروف المبارا",
+        "max_y_deviation": 24.0,
+        "severity": "warning"
+      },
+      {
+        "page": 15,
+        "line_id": "l_p0_l61",
+        "line_text": "مجلة أسيوط لعلوم وفنون التربية الرياضية",
+        "max_y_deviation": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 17,
+        "line_id": "l_p0_l26",
+        "line_text": "المنحنيات الكينماتيكية لمتغير السرعة الذبابة السلاح",
+        "max_y_deviation": 23.0,
+        "severity": "warning"
+      },
+      {
+        "page": 17,
+        "line_id": "l_p0_l50",
+        "line_text": "مجلة أسيوط لعلوم وفنون التربية الرياضية",
+        "max_y_deviation": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l2",
+        "line_text": "اختبار ويلككسون Willcokson لدلالة الفروق بين الأداء داخل وخا",
+        "max_y_deviation": 33.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l3",
+        "line_text": "ظروف المباراة فى المتغيرات الكينماتيكية لرسغ اليد (المرحلة ا",
+        "max_y_deviation": 29.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l38",
+        "line_text": "يتضح من جدول (٢٧) وجود فروق ذات دلالة إحصائية بين",
+        "max_y_deviation": 26.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l39",
+        "line_text": "القياسين داخل وخارج ظروف المباراة لرسغ اليد (المرحلة الأولى)",
+        "max_y_deviation": 40.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l43",
+        "line_text": "ويظهر من جداول (١٥)، (١٦)، (١٧)، (١٨) المتوسطات",
+        "max_y_deviation": 28.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l44",
+        "line_text": "للمتغيرات الكينماتيكية للأعضاء والمفاصل قيد الدراسة داخل ظرو",
+        "max_y_deviation": 35.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l45",
+        "line_text": "المباراة، وبهذا يتحقق الإجابة عن التساؤل الأول للدراسة وهو \"",
+        "max_y_deviation": 40.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l46",
+        "line_text": "الخصائص الكينماتيكية لأداء الهجمة القاطعة داخل ظروف المباراة",
+        "max_y_deviation": 29.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l49",
+        "line_text": "للمتغيرات الكينماتيكية للأعضاء والمفاصل قيد الدراسة خارج ظرو",
+        "max_y_deviation": 39.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l50",
+        "line_text": "المباراة، وبهذا يتحقق الإجابة عن التساؤل الثاني للدراسة وهو ",
+        "max_y_deviation": 42.0,
+        "severity": "error"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l51",
+        "line_text": "الخصائص الكينماتيكية لأداء الهجمة القاطعة خارج ظروف المباراة",
+        "max_y_deviation": 32.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l53",
+        "line_text": "يتضح مما سبق أن الأداء داخل ظروف المباراة يستغرق زمناً كلياً",
+        "max_y_deviation": 27.0,
+        "severity": "warning"
+      },
+      {
+        "page": 29,
+        "line_id": "l_p0_l54",
+        "line_text": "أقل منه خارج ظروف المباراة، ويعزو الباحث هذا الاختلاف إلى أن",
+        "max_y_deviation": 40.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l1",
+        "line_text": "التذبذب في معدل تغير سرعة الأداء. وبالتالي المساهمة في تسهيل",
+        "max_y_deviation": 28.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l3",
+        "line_text": "كما يتبين من جدول رقم (١٩)، (٢٠)، (٢١)، (٢٢)، (٢٣)، (٢٤)",
+        "max_y_deviation": 31.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l4",
+        "line_text": "وجود فروق دالة إحصائياً بين القياسين داخل ظروف المباراة وخار",
+        "max_y_deviation": 32.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l5",
+        "line_text": "كل أجزاء ذبابة السلاح ومركز ثقل السلاح وهذا يتفق مع دراسات ك",
+        "max_y_deviation": 35.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l6",
+        "line_text": "هالة مصطفى جمعة (٢٠٠٣م)، ودراسة كل من تادي F Taddei- ، بونام",
+        "max_y_deviation": 34.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l7",
+        "line_text": "(٢٠٠٠م)، Cei- A كاي ، Manili- U مانيللي ، Buonamano- R",
+        "max_y_deviation": 38.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l8",
+        "line_text": "ودراسة كل من يوي-دو Do & Yiou (٢٠٠٠م)، ودراسة كل من",
+        "max_y_deviation": 32.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l9",
+        "line_text": "كرونين.ج Cronin,J، وناير ب.ج J Mc,Nair-P ، ومارشال ر. ن",
+        "max_y_deviation": 27.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l10",
+        "line_text": "N Marshall,R (٢٠٠٣م)، ويعزو الباحث ذلك إلى عدة أسباب وهي :",
+        "max_y_deviation": 38.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l11",
+        "line_text": "- أسباب تتعلق بالعوامل النفسية وظروف المباراة :",
+        "max_y_deviation": 23.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l19",
+        "line_text": "• الاقتصاد في الجهد. حيث يسعى اللاعب للاقتصاد في الجهد أثناء",
+        "max_y_deviation": 32.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l20",
+        "line_text": "مهاراته عامة ومهارة الهجمة القاطعة بوجه خاص وذلك بهدف تحقيق",
+        "max_y_deviation": 31.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l21",
+        "line_text": "الهدف وهو إحراز اللمسة بأقل مجهود للاحتفاظ بقوته للقدرة على",
+        "max_y_deviation": 34.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l22",
+        "line_text": "مواصلة البطولة بالمستوى الجيد وتأخير ظهور التعب. مما يتفق مع",
+        "max_y_deviation": 40.0,
+        "severity": "error"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l23",
+        "line_text": "عادل عبد البصير (٢٠٠٢م) في أن من أهم مبادئ الميكانيكا الحيوي",
+        "max_y_deviation": 32.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l25",
+        "line_text": "مجلة أسيوط لعلوم وفنون التربية الرياضية",
+        "max_y_deviation": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "line_id": "l_p0_l1",
+        "line_text": "الفعل وغيرها من المتغيرات التي تؤثر على تكنيكية أداء المهارة",
+        "max_y_deviation": 28.0,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "line_id": "l_p0_l2",
+        "line_text": "ما لا يظهر خارج ظروف المباراة بالشكل المؤثر كما يظهر داخلها.",
+        "max_y_deviation": 27.0,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "line_id": "l_p0_l5",
+        "line_text": "الأدرينالين والمظاهر البدنية التابعة لظهور هذا الهرمون في دم",
+        "max_y_deviation": 33.0,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "line_id": "l_p0_l8",
+        "line_text": "إحصائياً بين القياسين للأداء داخل ظروف المباراة والأداء خارج",
+        "max_y_deviation": 29.0,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "line_id": "l_p0_l9",
+        "line_text": "المباراة في كل من مفصل الرسغ في كل من المتغيرات الكينماتيكية",
+        "max_y_deviation": 25.0,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "line_id": "l_p0_l10",
+        "line_text": "الدراسة، ويعزو الباحث ذلك إلى أن المدى الحركي أثناء أداء اله",
+        "max_y_deviation": 25.0,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "line_id": "l_p0_l11",
+        "line_text": "للمفاصل الخاصة بالذراع المسلحة يكون مدى صغير تقل معه نسبة وج",
+        "max_y_deviation": 30.0,
+        "severity": "warning"
+      },
+      {
+        "page": 33,
+        "line_id": "l_p0_l12",
+        "line_text": "اختلافات بين القياسين داخل وخارج ظروف المنافسة. كما يعزو الب",
+        "max_y_deviation": 33.0,
+        "severity": "warning"
+      }
+    ],
+    "direction": [
+      {
+        "page": 31,
+        "block_id": "b_p0_b2",
+        "token_id": "t_p0_w84",
+        "text": "Cronin,J،",
+        "issue_type": "missing_rtl",
+        "severity": "warning"
+      }
+    ],
+    "spacing": [
+      {
+        "page": 1,
+        "line_id": "l_p0_l7",
+        "line_text": "ويشير جاري كامين Gary.kamen ود جوردن ي روبرتسون",
+        "metric": "word_spacing",
+        "value": 62.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "line_id": "l_p0_l8",
+        "line_text": "Graham كالدويل ي وجراهام D,Gordon E,Rbertson",
+        "metric": "word_spacing",
+        "value": 150.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "line_id": "l_p0_l8",
+        "line_text": "Graham كالدويل ي وجراهام D,Gordon E,Rbertson",
+        "metric": "word_spacing",
+        "value": 50.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "line_id": "l_p0_l8",
+        "line_text": "Graham كالدويل ي وجراهام D,Gordon E,Rbertson",
+        "metric": "word_spacing",
+        "value": 53.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "line_id": "l_p0_l8",
+        "line_text": "Graham كالدويل ي وجراهام D,Gordon E,Rbertson",
+        "metric": "word_spacing",
+        "value": 46.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "line_id": "l_p0_l8",
+        "line_text": "Graham كالدويل ي وجراهام D,Gordon E,Rbertson",
+        "metric": "word_spacing",
+        "value": 50.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l6",
+        "line_text": "اتجه الباحث نحو إجراء الدراسة القائمة للتعرف على الخصائص الك",
+        "metric": "word_spacing",
+        "value": 42.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l12",
+        "line_text": "١/٣ الخصائص الكينماتيكية لأداء الهجمة القاطعة داخل ظروف المب",
+        "metric": "word_spacing",
+        "value": 38.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l13",
+        "line_text": "٢/٣ الخصائص الكينماتيكية لأداء الهجمة القاطعة خارج ظروف المب",
+        "metric": "word_spacing",
+        "value": 42.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "line_id": "l_p0_l17",
+        "line_text": "١/٤ ما هي الخصائص الكينماتيكية لأداء الهجمة القاطعة داخل ظرو",
+        "metric": "word_spacing",
+        "value": 37.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l40",
+        "line_text": "وتوضح جدول (١٦)، (١٧)، (١٨) متوسطات المتغيرات",
+        "metric": "word_spacing",
+        "value": 53.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l40",
+        "line_text": "وتوضح جدول (١٦)، (١٧)، (١٨) متوسطات المتغيرات",
+        "metric": "word_spacing",
+        "value": 48.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l40",
+        "line_text": "وتوضح جدول (١٦)، (١٧)، (١٨) متوسطات المتغيرات",
+        "metric": "word_spacing",
+        "value": 55.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l40",
+        "line_text": "وتوضح جدول (١٦)، (١٧)، (١٨) متوسطات المتغيرات",
+        "metric": "word_spacing",
+        "value": 56.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l40",
+        "line_text": "وتوضح جدول (١٦)، (١٧)، (١٨) متوسطات المتغيرات",
+        "metric": "word_spacing",
+        "value": 55.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "line_id": "l_p0_l40",
+        "line_text": "وتوضح جدول (١٦)، (١٧)، (١٨) متوسطات المتغيرات",
+        "metric": "word_spacing",
+        "value": 46.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 16,
+        "line_id": "l_p0_l39",
+        "line_text": "0 -10",
+        "metric": "word_spacing",
+        "value": 27.0,
+        "page_median": 13.0,
+        "severity": "warning"
+      },
+      {
+        "page": 26,
+        "line_id": "l_p0_l5",
+        "line_text": "اختبار ويلككسون Willcokson لدلالة الفروق بين الأداء داخل وخا",
+        "metric": "word_spacing",
+        "value": 34.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 26,
+        "line_id": "l_p0_l87",
+        "line_text": "اختبار ويلككسون Willcokson لدلالة الفروق بين الأداء داخل وخا",
+        "metric": "word_spacing",
+        "value": 34.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 27,
+        "line_id": "l_p0_l2",
+        "line_text": "اختبار ويلككسون Willcokson لدلالة الفروق بين الأداء داخل وخا",
+        "metric": "word_spacing",
+        "value": 34.0,
+        "page_median": 16.0,
+        "severity": "warning"
+      },
+      {
+        "page": 27,
+        "line_id": "l_p0_l49",
+        "line_text": "اختبار ويلككسون Willcokson لدلالة الفروق بين الأداء داخل وخا",
+        "metric": "word_spacing",
+        "value": 34.0,
+        "page_median": 16.0,
+        "severity": "warning"
+      },
+      {
+        "page": 28,
+        "line_id": "l_p0_l5",
+        "line_text": "اختبار ويلككسون Willcokson لدلالة الفروق بين الأداء داخل وخا",
+        "metric": "word_spacing",
+        "value": 36.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 28,
+        "line_id": "l_p0_l45",
+        "line_text": "اختبار ويلككسون Willcokson لدلالة الفروق بين الأداء داخل وخا",
+        "metric": "word_spacing",
+        "value": 37.0,
+        "page_median": 17.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l11",
+        "line_text": "- أسباب تتعلق بالعوامل النفسية وظروف المباراة :",
+        "metric": "word_spacing",
+        "value": 62.0,
+        "page_median": 20.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l13",
+        "line_text": "• عنصر التحدي.",
+        "metric": "word_spacing",
+        "value": 149.0,
+        "page_median": 20.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l14",
+        "line_text": "• عامل الجمهور.",
+        "metric": "word_spacing",
+        "value": 151.0,
+        "page_median": 20.0,
+        "severity": "warning"
+      },
+      {
+        "page": 31,
+        "line_id": "l_p0_l19",
+        "line_text": "• الاقتصاد في الجهد. حيث يسعى اللاعب للاقتصاد في الجهد أثناء",
+        "metric": "word_spacing",
+        "value": 68.0,
+        "page_median": 20.0,
+        "severity": "warning"
+      },
+      {
+        "page": 32,
+        "line_id": "l_p0_l1",
+        "line_text": "• التوفير في الوقت. وكان ذلك بمثابة دافع لأداء المهارات بالس",
+        "metric": "word_spacing",
+        "value": 70.0,
+        "page_median": 22.0,
+        "severity": "warning"
+      },
+      {
+        "page": 32,
+        "line_id": "l_p0_l7",
+        "line_text": "• تداخل المهارات واختزال مراحل الأداء. إن مهارة الهجمة القاط",
+        "metric": "word_spacing",
+        "value": 67.0,
+        "page_median": 22.0,
+        "severity": "warning"
+      },
+      {
+        "page": 32,
+        "line_id": "l_p0_l18",
+        "line_text": "• المدى الحركي للذبابة ومركز ثقل السلاح. حيث أن المدى الحركي",
+        "metric": "word_spacing",
+        "value": 70.0,
+        "page_median": 22.0,
+        "severity": "warning"
+      },
+      {
+        "page": 32,
+        "line_id": "l_p0_l23",
+        "line_text": "- أسباب تتعلق بالعوامل الفسيولوجية والبدنية :",
+        "metric": "word_spacing",
+        "value": 63.0,
+        "page_median": 22.0,
+        "severity": "warning"
+      },
+      {
+        "page": 32,
+        "line_id": "l_p0_l24",
+        "line_text": "• هرمون الأدرينالين. وهو من أهم العوامل التي تتأثر بالظروف ا",
+        "metric": "word_spacing",
+        "value": 70.0,
+        "page_median": 22.0,
+        "severity": "warning"
+      },
+      {
+        "page": 34,
+        "line_id": "l_p0_l18",
+        "line_text": "٤- لا توجد فروق ذات دلالة إحصائية في الخصائص الكينماتيكية بي",
+        "metric": "word_spacing",
+        "value": 43.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 35,
+        "line_id": "l_p0_l16",
+        "line_text": "٢- أسامة سيد عبد الظاهر ٢٠٠٤م: ضغوط المنافسة والثقة بالنفس",
+        "metric": "word_spacing",
+        "value": 58.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 35,
+        "line_id": "l_p0_l16",
+        "line_text": "٢- أسامة سيد عبد الظاهر ٢٠٠٤م: ضغوط المنافسة والثقة بالنفس",
+        "metric": "word_spacing",
+        "value": 56.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 35,
+        "line_id": "l_p0_l16",
+        "line_text": "٢- أسامة سيد عبد الظاهر ٢٠٠٤م: ضغوط المنافسة والثقة بالنفس",
+        "metric": "word_spacing",
+        "value": 60.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 35,
+        "line_id": "l_p0_l16",
+        "line_text": "٢- أسامة سيد عبد الظاهر ٢٠٠٤م: ضغوط المنافسة والثقة بالنفس",
+        "metric": "word_spacing",
+        "value": 52.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 35,
+        "line_id": "l_p0_l21",
+        "line_text": "الرياضي، الجمعية المصرية لعلم النفس الرياضي،",
+        "metric": "word_spacing",
+        "value": 48.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 35,
+        "line_id": "l_p0_l21",
+        "line_text": "الرياضي، الجمعية المصرية لعلم النفس الرياضي،",
+        "metric": "word_spacing",
+        "value": 47.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 35,
+        "line_id": "l_p0_l21",
+        "line_text": "الرياضي، الجمعية المصرية لعلم النفس الرياضي،",
+        "metric": "word_spacing",
+        "value": 45.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      },
+      {
+        "page": 35,
+        "line_id": "l_p0_l21",
+        "line_text": "الرياضي، الجمعية المصرية لعلم النفس الرياضي،",
+        "metric": "word_spacing",
+        "value": 50.0,
+        "page_median": 19.0,
+        "severity": "warning"
+      }
+    ],
+    "confidence_clusters": [
+      {
+        "page": 2,
+        "block_id": "b_p0_b2",
+        "token_ids": [
+          "t_p0_w75",
+          "t_p0_w76",
+          "t_p0_w77",
+          "t_p0_w78",
+          "t_p0_w79",
+          "t_p0_w80",
+          "t_p0_w81",
+          "t_p0_w82"
+        ],
+        "texts": [
+          "باقي",
+          "الحجاب",
+          "#",
+          "الهجمة",
+          "المغيرة",
+          "■",
+          "الحجمهالقاطعة",
+          "■"
+        ],
+        "avg_confidence": 0.378,
+        "severity": "error"
+      },
+      {
+        "page": 6,
+        "block_id": "b_p0_b3",
+        "token_ids": [
+          "t_p0_w46",
+          "t_p0_w47",
+          "t_p0_w48"
+        ],
+        "texts": [
+          "pronestr",
+          "The",
+          "wagene"
+        ],
+        "avg_confidence": 0.391,
+        "severity": "error"
+      },
+      {
+        "page": 6,
+        "block_id": "b_p0_b3",
+        "token_ids": [
+          "t_p0_w50",
+          "t_p0_w51"
+        ],
+        "texts": [
+          "the",
+          "parte"
+        ],
+        "avg_confidence": 0.294,
+        "severity": "error"
+      },
+      {
+        "page": 6,
+        "block_id": "b_p0_b3",
+        "token_ids": [
+          "t_p0_w53",
+          "t_p0_w54"
+        ],
+        "texts": [
+          "to",
+          "ics"
+        ],
+        "avg_confidence": 0.356,
+        "severity": "error"
+      },
+      {
+        "page": 32,
+        "block_id": "b_p0_b6",
+        "token_ids": [
+          "t_p0_w253",
+          "t_p0_w254"
+        ],
+        "texts": [
+          "تعلوم",
+          "وفنون"
+        ],
+        "avg_confidence": 0.549,
+        "severity": "warning"
+      }
+    ],
+    "broken_words": [
+      {
+        "page": 0,
+        "token_id": "t_p0_w17",
+        "text": "د/",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "token_id": "t_p0_w69",
+        "text": "ي",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "token_id": "t_p0_w73",
+        "text": "ي",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 1,
+        "token_id": "t_p0_w83",
+        "text": "ن",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w112",
+        "text": "٣",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w113",
+        "text": "/٣",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w137",
+        "text": "؟",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w149",
+        "text": "؟",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "token_id": "t_p0_w167",
+        "text": "؟",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w9",
+        "text": "م",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w17",
+        "text": "١",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w18",
+        "text": "١",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w21",
+        "text": "٢",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w22",
+        "text": "٢",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w24",
+        "text": "م",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w26",
+        "text": "٣",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w27",
+        "text": "٣",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w30",
+        "text": "م",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w31",
+        "text": "٤",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w32",
+        "text": "٤",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w35",
+        "text": "٥",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w36",
+        "text": "٥",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w77",
+        "text": "،x",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w76",
+        "text": "،y",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w111",
+        "text": "في",
+        "reason": "orphaned_connector",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w128",
+        "text": "في",
+        "reason": "orphaned_connector",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w155",
+        "text": "٨",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w156",
+        "text": "٨",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w157",
+        "text": "٨",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w159",
+        "text": "٨",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "token_id": "t_p0_w161",
+        "text": "٨",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 7,
+        "token_id": "t_p0_w4",
+        "text": "١-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 7,
+        "token_id": "t_p0_w118",
+        "text": "٢-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 10,
+        "token_id": "t_p0_w1",
+        "text": "٣-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 12,
+        "token_id": "t_p0_w1",
+        "text": "٤-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "token_id": "t_p0_w1",
+        "text": "٥-",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "token_id": "t_p0_w33",
+        "text": "م",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "token_id": "t_p0_w43",
+        "text": "(ث)",
+        "reason": "orphaned_connector",
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "token_id": "t_p0_w45",
+        "text": "٪",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "token_id": "t_p0_w47",
+        "text": "٪",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "token_id": "t_p0_w49",
+        "text": "٪",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "token_id": "t_p0_w70",
+        "text": "١",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 13,
+        "token_id": "t_p0_w71",
+        "text": "٢",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "token_id": "t_p0_w39",
+        "text": "١",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "token_id": "t_p0_w50",
+        "text": "٢",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "token_id": "t_p0_w61",
+        "text": "٣",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "token_id": "t_p0_w72",
+        "text": "٤",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "token_id": "t_p0_w84",
+        "text": "٥",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "token_id": "t_p0_w97",
+        "text": "٦",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      },
+      {
+        "page": 14,
+        "token_id": "t_p0_w119",
+        "text": "م",
+        "reason": "single_char_arabic",
+        "severity": "warning"
+      }
+    ],
+    "line_density": [
+      {
+        "page": 0,
+        "region": "between lines 11 and 12",
+        "line_gap_px": -5.0,
+        "expected_gap_px": 11.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 2,
+        "region": "between lines 7 and 8",
+        "line_gap_px": 415.0,
+        "expected_gap_px": 8.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 3,
+        "region": "between lines 22 and 23",
+        "line_gap_px": 202.0,
+        "expected_gap_px": 17.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 4,
+        "region": "between lines 21 and 22",
+        "line_gap_px": 294.0,
+        "expected_gap_px": 14.0,
+        "issue_type": "too_spread",
+        "severity": "warning"
+      },
+      {
+        "page": 5,
+        "region": "between lines 1 and 2",
+        "line_gap_px": -5.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 3 and 4",
+        "line_gap_px": -54.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 4 and 5",
+        "line_gap_px": -58.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 5 and 6",
+        "line_gap_px": -41.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 7 and 8",
+        "line_gap_px": -50.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 8 and 9",
+        "line_gap_px": -51.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 9 and 10",
+        "line_gap_px": -34.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 11 and 12",
+        "line_gap_px": -35.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 12 and 13",
+        "line_gap_px": -38.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 13 and 14",
+        "line_gap_px": -50.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 15 and 16",
+        "line_gap_px": -36.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 16 and 17",
+        "line_gap_px": -36.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 17 and 18",
+        "line_gap_px": -48.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 19 and 20",
+        "line_gap_px": -49.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 20 and 21",
+        "line_gap_px": -38.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 21 and 22",
+        "line_gap_px": -50.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 23 and 24",
+        "line_gap_px": -50.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 24 and 25",
+        "line_gap_px": -45.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 25 and 26",
+        "line_gap_px": -26.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 34 and 35",
+        "line_gap_px": -37.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 35 and 36",
+        "line_gap_px": -35.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 37 and 38",
+        "line_gap_px": -36.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 38 and 39",
+        "line_gap_px": -36.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 39 and 40",
+        "line_gap_px": -32.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 40 and 41",
+        "line_gap_px": -37.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      },
+      {
+        "page": 5,
+        "region": "between lines 41 and 42",
+        "line_gap_px": -36.0,
+        "expected_gap_px": -31.0,
+        "issue_type": "too_tight",
+        "severity": "error"
+      }
+    ],
+    "font_coverage": [
+      {
+        "page": 2,
+        "token_id": "t_p0_w80",
+        "text": "■",
+        "problematic_chars": [
+          "■"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 2,
+        "token_id": "t_p0_w82",
+        "text": "■",
+        "problematic_chars": [
+          "■"
+        ],
+        "severity": "warning"
+      },
+      {
+        "page": 20,
+        "token_id": "t_p0_w25",
+        "text": "៛",
+        "problematic_chars": [
+          "៛"
+        ],
+        "severity": "warning"
+      }
+    ]
+  }
+}

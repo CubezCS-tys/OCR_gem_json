@@ -133,11 +133,37 @@ class Pipeline:
 
                 if img is not None:
                     result = preprocess_page(img, self.config.preprocess)
-                    # Encode back to image bytes
-                    _, enc = cv2.imencode(".png", result.image)
+                    # Encode as JPEG to stay under Azure's 4MB limit
+                    _, enc = cv2.imencode(".jpg", result.image, [cv2.IMWRITE_JPEG_QUALITY, 90])
                     preprocessed_images.append(enc.tobytes())
                     if i == 0:
                         preprocessing_steps = result.steps_applied
+
+                    # If preprocessing changed the image (rotation, deskew),
+                    # update the page image so the HTML background matches
+                    # the OCR coordinates.
+                    pp_h, pp_w = result.image.shape[:2]
+                    if pp_w != page_img.width_px or pp_h != page_img.height_px:
+                        logger.info(
+                            f"  Page {i}: dimensions changed "
+                            f"{page_img.width_px}x{page_img.height_px} → {pp_w}x{pp_h}"
+                        )
+                    # Re-encode as WebP for the HTML background image
+                    from PIL import Image as PILImage
+                    pil_pp = PILImage.fromarray(
+                        cv2.cvtColor(result.image, cv2.COLOR_BGR2RGB)
+                    )
+                    buf = io.BytesIO()
+                    pil_pp.save(buf, format="WebP", quality=self.config.raster.image_quality)
+                    pp_bytes = buf.getvalue()
+                    pp_b64 = base64.b64encode(pp_bytes).decode("ascii")
+                    page_images[i] = PageImage(
+                        uri=f"data:image/webp;base64,{pp_b64}",
+                        width_px=pp_w,
+                        height_px=pp_h,
+                        dpi=page_img.dpi,
+                        format="webp",
+                    )
                 else:
                     preprocessed_images.append(img_bytes)
 
@@ -217,18 +243,6 @@ class Pipeline:
                     f"  Page {page.page_index}: reading order updated "
                     f"({reading_order.method.value}, conf={reading_order.confidence:.2f})"
                 )
-
-        # ─── Optional: LLM enrichment ────────────────────────────
-        if self.config.llm.enabled:
-            logger.info("[6b/7] LLM enrichment...")
-            try:
-                from .llm_enrichment import enrich_reading_order
-                for page in doc.pages:
-                    enriched = enrich_reading_order(page, self.config.llm)
-                    if enriched:
-                        page.reading_order = enriched
-            except Exception as e:
-                logger.warning(f"LLM enrichment failed: {e}")
 
         # ─── Stage 7: Render HTML ────────────────────────────────
         logger.info("[7/7] Rendering fixed-layout HTML...")

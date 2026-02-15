@@ -77,7 +77,7 @@ def detect_orientation(image: np.ndarray) -> int:
         logger.info(
             f"OSD detected rotation={rotation}° (confidence={confidence})"
         )
-        if confidence > 1.0:  # Tesseract OSD confidence threshold
+        if confidence > 10.0:  # High threshold — OSD is unreliable on Arabic docs
             return rotation
     except Exception as e:
         logger.debug(f"Tesseract OSD not available: {e}")

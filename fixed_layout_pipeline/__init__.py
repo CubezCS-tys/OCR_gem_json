@@ -14,8 +14,6 @@ Usage:
     config = PipelineConfig.from_env()
     pipeline = Pipeline(config)
     doc, html_path = pipeline.process("document.pdf")
-
-    # QA loop: edit JSON, regenerate HTML
     pipeline.regenerate_html("output/doc_canonical.json")
 """
 
