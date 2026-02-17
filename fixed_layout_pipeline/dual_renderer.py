@@ -18,6 +18,7 @@ from __future__ import annotations
 import html as html_mod
 import logging
 import re
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -54,6 +55,11 @@ FONT_STACK_LTR = (
     "'faces_Regular', 'Amiri', 'Noto Naskh Arabic', 'Traditional Arabic', "
     "'Simplified Arabic', 'Tahoma', serif"
 )
+
+# Unicode BiDi types that count as "strong" directional characters.
+# Arabic-Indic digits (AN), punctuation (CS/ON), and whitespace (WS) do NOT
+# qualify and cannot anchor dir="auto".
+_STRONG_BIDI = frozenset({'L', 'R', 'AL'})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -149,6 +155,14 @@ class FidelityRenderer:
                 parts.append(self._line_span(line, block, s))
         return "\n".join(parts)
 
+    @staticmethod
+    def _has_strong_dir_char(text: str) -> bool:
+        """Return True if *text* contains at least one Unicode strong
+        directional character (L, R, or AL).  Arabic-Indic digits (AN),
+        punctuation (CS/ON), and whitespace (WS) are *not* strong and
+        cannot anchor ``dir="auto"``."""
+        return any(unicodedata.bidirectional(ch) in _STRONG_BIDI for ch in text)
+
     def _line_span(self, line: Line, block: Block, s: float) -> str:
         bbox = line.bbox
         x, y = bbox.x0 * s, bbox.y0 * s
@@ -156,7 +170,16 @@ class FidelityRenderer:
         fs = max(8, h * 0.82)
 
         line_dir = line.direction or block.direction or Direction.RTL
-        dir_attr = "rtl" if line_dir == Direction.RTL else "ltr"
+        # Use dir="auto" when the text has strong directional characters
+        # (L / R / AL) so the browser can infer direction from content.
+        # Fall back to the block/line direction when text contains only
+        # numbers, punctuation, or other weak/neutral chars — dir="auto"
+        # cannot determine the correct direction for those and defaults
+        # to LTR, which breaks RTL table cells with numeric content.
+        if self._has_strong_dir_char(line.text):
+            dir_attr = "auto"
+        else:
+            dir_attr = "rtl" if line_dir == Direction.RTL else "ltr"
 
         # Pick font — combined stack so Arabic glyphs always use Arabic fonts
         # even in LTR-detected lines, and vice versa
@@ -402,7 +425,6 @@ class FidelityRenderer:
     .line-layer .line {{
       position: absolute;
       white-space: nowrap;
-      unicode-bidi: plaintext;
       cursor: text;
       color: var(--text-color);
       font-family: var(--arabic-font);
@@ -413,11 +435,29 @@ class FidelityRenderer:
       transition: background 0.2s ease;
       overflow: hidden;
     }}
+    .line-layer .line[dir="rtl"],
+    .line-layer .line[dir="ltr"] {{
+      /* When direction is explicitly set (e.g. number-only cells
+         that lack strong BiDi characters), use 'isolate' so the
+         dir attribute is honoured by the BiDi algorithm.
+         'plaintext' would ignore dir and fall back to heuristic
+         first-strong-char detection, defaulting to LTR for
+         number-only content. */
+      unicode-bidi: isolate;
+    }}
     .line-layer .line[dir="rtl"] {{
       text-align: right;
     }}
     .line-layer .line[dir="ltr"] {{
       text-align: left;
+    }}
+    .line-layer .line[dir="auto"] {{
+      /* For lines with strong directional characters, let the
+         browser determine direction from the text content.
+         'plaintext' inspects actual characters rather than
+         inheriting from the parent element. */
+      unicode-bidi: plaintext;
+      text-align: start;
     }}
     .line-layer .line::selection {{
       background: rgba(0, 120, 215, 0.35);
@@ -1184,9 +1224,17 @@ class MarkdownRenderer:
         for cell in table.cells:
             grid[(cell.row, cell.col)] = cell.text.replace("|", "\\|").strip()
 
+        # Detect table direction from cell bounding boxes.
+        # For RTL tables, reverse column order so the visual layout
+        # matches the original document when rendered in markdown.
+        table_dir = table._detect_table_direction()
+        col_order = list(range(max_col))
+        if table_dir == "rtl":
+            col_order = list(reversed(col_order))
+
         lines = []
         for r in range(max_row):
-            cols = [grid.get((r, c), "") for c in range(max_col)]
+            cols = [grid.get((r, c), "") for c in col_order]
             lines.append("| " + " | ".join(cols) + " |")
             if r == 0:
                 lines.append("| " + " | ".join(["---"] * max_col) + " |")

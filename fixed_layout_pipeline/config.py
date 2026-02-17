@@ -28,6 +28,9 @@ class AzureConfig:
     # prebuilt-layout: best for structure + geometry + reading order
     # prebuilt-read: best for high-res OCR + optional searchable PDF
     model_id: str = "prebuilt-layout"
+    # Enable Azure FORMULAS add-on (off by default — harmful for
+    # Arabic-primary docs where Azure misclassifies text as formulas)
+    enable_formulas: bool = False
 
     def validate(self) -> None:
         if not self.endpoint:
@@ -101,6 +104,8 @@ class PipelineConfig:
     keep_intermediates: bool = True
     # Extract figures as separate images
     extract_figures: bool = True
+    # Generate searchable PDF via Azure DI prebuilt-read
+    generate_searchable_pdf: bool = False
     # Max concurrent pages to process
     max_workers: int = 4
     # Logging level

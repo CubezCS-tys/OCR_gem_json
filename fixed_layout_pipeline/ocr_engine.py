@@ -15,9 +15,11 @@ preserving ALL geometric data.
 
 from __future__ import annotations
 
-import io
+import bisect
 import logging
+import re
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Optional
 
@@ -166,13 +168,23 @@ def analyze_pdf(
         pdf_bytes = f.read()
 
     # Analyze with layout model
-    # Features: enable all relevant add-ons
+    # Features: enable relevant add-ons.
+    # NOTE: FORMULAS is OFF by default — it causes Azure to eat Arabic
+    # paragraph text and replace it with formula objects, losing content.
+    features = [
+        DocumentAnalysisFeature.OCR_HIGH_RESOLUTION,
+        DocumentAnalysisFeature.STYLE_FONT,
+        DocumentAnalysisFeature.LANGUAGES,
+    ]
+    # Check PipelineConfig if available (passed through config attribute)
+    if config.enable_formulas:
+        features.append(DocumentAnalysisFeature.FORMULAS)
+        logger.info("FORMULAS add-on enabled")
+
     poller = client.begin_analyze_document(
         model_id=config.model_id,
         body=AnalyzeDocumentRequest(bytes_source=pdf_bytes),
-        features=[
-            DocumentAnalysisFeature.OCR_HIGH_RESOLUTION,
-        ],
+        features=features,
         output_content_format="text",
     )
 
@@ -218,19 +230,29 @@ def analyze_page_image(
         credential=AzureKeyCredential(config.api_key),
     )
 
+    features = [
+        DocumentAnalysisFeature.OCR_HIGH_RESOLUTION,
+        DocumentAnalysisFeature.STYLE_FONT,
+        DocumentAnalysisFeature.LANGUAGES,
+    ]
+    if config.enable_formulas:
+        features.append(DocumentAnalysisFeature.FORMULAS)
+
     poller = client.begin_analyze_document(
         model_id=config.model_id,
         body=AnalyzeDocumentRequest(bytes_source=image_bytes),
-        features=[
-            DocumentAnalysisFeature.OCR_HIGH_RESOLUTION,
-        ],
+        features=features,
         output_content_format="text",
     )
 
     result = poller.result()
 
     if result.pages:
-        return _convert_azure_page(result, 0, page_image)
+        page = _convert_azure_page(result, 0, page_image)
+        # Apply font styles and language detection to this page
+        _apply_font_styles(result, [page])
+        _apply_language_detection(result, [page])
+        return page
 
     return Page()
 
@@ -266,6 +288,20 @@ def _convert_azure_result(
         page_image = page_images[page_idx] if page_images and page_idx < len(page_images) else None
         page = _convert_azure_page(result, page_idx, page_image)
         doc.pages.append(page)
+
+    # Apply font styles from Azure's styles collection
+    _apply_font_styles(result, doc.pages)
+
+    # Apply language detection from Azure's languages collection
+    _apply_language_detection(result, doc.pages)
+
+    # Extract formulas and add as EQUATION blocks (only if FORMULAS was enabled)
+    if config.enable_formulas:
+        _apply_formula_extraction(result, doc.pages, page_images)
+
+    # Clean :formula: markers from line text (Azure injects these even
+    # without the FORMULAS add-on in some cases)
+    _clean_formula_markers(doc.pages)
 
     # Extract reading order from Azure's content + paragraphs
     _apply_azure_reading_order(result, doc)
@@ -617,6 +653,324 @@ def _convert_azure_figure(
         figure_uri=None,  # Will be populated during image extraction
         figure_caption=caption,
     )
+
+
+# ─── Font Style Extraction ───────────────────────────────────────────────────
+
+def _apply_font_styles(result, pages: list[Page]) -> None:
+    """
+    Apply font property data from Azure's styles collection to tokens.
+
+    Azure returns styles as spans referencing character offsets in the
+    top-level 'content' string.  We build an offset map for every token
+    and use range-overlap to decide which tokens receive each style.
+
+    Style properties: similarFontFamily, fontStyle (italic/normal),
+    fontWeight (bold/normal), color, backgroundColor.
+    """
+    if not hasattr(result, 'styles') or not result.styles:
+        logger.debug("No font style data in Azure response")
+        return
+
+    content = result.content or ""
+    if not content:
+        return
+
+    # ── Build token offset map ───────────────────────────────────
+    # Walk content sequentially, mapping each line's text to its
+    # absolute offset. Then map each token within the line.
+    token_ranges: list[tuple[int, int, Token]] = []   # (start, end, Token)
+    search_from = 0
+
+    for page in pages:
+        for block in page.blocks:
+            for line in block.lines:
+                if not line.text:
+                    continue
+                line_offset = content.find(line.text, search_from)
+                if line_offset < 0:
+                    # Fuzzy: try first 30 chars
+                    snippet = line.text[:30]
+                    line_offset = content.find(snippet, search_from)
+                if line_offset < 0:
+                    continue
+                search_from = line_offset + len(line.text)
+
+                if line.tokens:
+                    # Map individual tokens within the line text
+                    tok_search = line_offset
+                    for tok in line.tokens:
+                        if not tok.text:
+                            continue
+                        tok_pos = content.find(tok.text, tok_search)
+                        if tok_pos < 0 or tok_pos > line_offset + len(line.text) + 10:
+                            # Fallback: skip this token
+                            continue
+                        tok_end = tok_pos + len(tok.text)
+                        token_ranges.append((tok_pos, tok_end, tok))
+                        tok_search = tok_end
+                else:
+                    # No tokens — map the whole line as a pseudo-token
+                    pass
+
+    if not token_ranges:
+        return
+
+    # Sort by start offset for binary-search later
+    token_ranges.sort(key=lambda x: x[0])
+
+    # ── Apply styles via offset overlap ──────────────────────────
+    styles_applied = 0
+    for style in result.styles:
+        # Extract style properties
+        font_weight = getattr(style, 'font_weight', None)
+        font_style = getattr(style, 'font_style', None)
+        color = getattr(style, 'color', None)
+        bg_color = getattr(style, 'background_color', None)
+
+        # Normalise
+        if font_weight == "normal":
+            font_weight = None
+        if font_style == "normal":
+            font_style = None
+        if color:
+            color = f"#{color}" if not color.startswith('#') else color
+        if bg_color:
+            bg_color = f"#{bg_color}" if not bg_color.startswith('#') else bg_color
+
+        if not any([font_weight, font_style, color, bg_color]):
+            continue
+
+        if not hasattr(style, 'spans') or not style.spans:
+            continue
+
+        for span in style.spans:
+            sp_start = span.offset
+            sp_end = sp_start + span.length
+
+            # Find overlapping tokens (binary-search start)
+            lo = bisect.bisect_right(
+                [r[0] for r in token_ranges], sp_start
+            ) - 1
+            lo = max(lo - 1, 0)
+
+            for idx in range(lo, len(token_ranges)):
+                tok_start, tok_end, token = token_ranges[idx]
+                if tok_start >= sp_end:
+                    break  # past the span
+                if tok_end <= sp_start:
+                    continue  # before the span
+
+                # Overlap — apply style
+                if font_weight:
+                    token.font_weight = font_weight
+                if font_style:
+                    token.font_style = font_style
+                if color:
+                    token.text_color = color
+                styles_applied += 1
+
+    # ── Propagate dominant style from tokens to lines ────────────
+    for page in pages:
+        for block in page.blocks:
+            for line in block.lines:
+                if not line.tokens:
+                    continue
+                bold_count = sum(1 for t in line.tokens if t.font_weight == "bold")
+                italic_count = sum(1 for t in line.tokens if t.font_style == "italic")
+                if bold_count > len(line.tokens) // 2:
+                    line.font_weight = "bold"
+                if italic_count > len(line.tokens) // 2:
+                    line.font_style = "italic"
+
+    logger.info(f"Applied font styles to {styles_applied} token-style pairs")
+
+
+# ─── Language Detection ──────────────────────────────────────────────────────
+
+def _apply_language_detection(result, pages: list[Page]) -> None:
+    """
+    Apply Azure's per-line language detection to lines and tokens.
+
+    Azure returns languages as spans referencing character offsets in
+    the top-level 'content' string, with an ISO language code and
+    confidence score.
+
+    This replaces the naive Unicode-range-based heuristic with
+    Azure's actual language detection.
+    """
+    if not hasattr(result, 'languages') or not result.languages:
+        logger.debug("No language detection data in Azure response")
+        return
+
+    content = result.content or ""
+    if not content:
+        return
+
+    # Build a map of character offset → language
+    # Each language entry covers a span of the content string
+    offset_lang_map: list[tuple[int, int, str, float]] = []  # (offset, length, locale, confidence)
+    for lang_entry in result.languages:
+        locale = lang_entry.locale or "und"
+        confidence = lang_entry.confidence or 0.0
+        if hasattr(lang_entry, 'spans') and lang_entry.spans:
+            for span in lang_entry.spans:
+                offset_lang_map.append((
+                    span.offset, span.length, locale, confidence
+                ))
+
+    if not offset_lang_map:
+        return
+
+    # Sort by offset for efficient lookup
+    offset_lang_map.sort(key=lambda x: x[0])
+
+    def _find_language_at_offset(offset: int) -> tuple[str, float]:
+        """Find the language for a given content offset."""
+        for sp_offset, sp_length, locale, conf in offset_lang_map:
+            if sp_offset <= offset < sp_offset + sp_length:
+                # Normalize locale to ISO 639-1 (e.g. "ar-SA" → "ar")
+                lang_code = locale.split("-")[0] if "-" in locale else locale
+                return lang_code, conf
+        return "und", 0.0
+
+    # Map lines to their content offsets and apply language
+    languages_applied = 0
+    for page in pages:
+        page_text = page.content_text or ""
+        for block in page.blocks:
+            for line in block.lines:
+                if not line.text:
+                    continue
+                # Find this line's text in the global content
+                line_offset = content.find(line.text)
+                if line_offset >= 0:
+                    lang_code, conf = _find_language_at_offset(line_offset)
+                    if lang_code != "und":
+                        line.language = lang_code
+                        languages_applied += 1
+                        # Apply to tokens in this line too
+                        for token in line.tokens:
+                            token.language = lang_code
+
+            # Update block language from dominant child language
+            line_langs = [l.language for l in block.lines if l.language and l.language != "und"]
+            if line_langs:
+                # Most common language in the block
+                lang_counts = Counter(line_langs)
+                block.language = lang_counts.most_common(1)[0][0]
+
+    logger.info(f"Applied Azure language detection to {languages_applied} lines")
+
+
+# ─── Formula marker cleanup ─────────────────────────────────────────────────
+
+def _clean_formula_markers(pages: list[Page]) -> None:
+    """
+    Remove ':formula:' markers that Azure injects into line text.
+
+    When the FORMULAS add-on is enabled (or sometimes even without it),
+    Azure inserts ':formula:' tokens into regular text where it detects
+    mathematical content. This corrupts the actual paragraph text.
+
+    We strip these markers and update the line's stored text +
+    remove any tokens whose text is exactly ':formula:'.
+    """
+    cleaned = 0
+    for page in pages:
+        for block in page.blocks:
+            for line in block.lines:
+                if ':formula:' in (line.text or ''):
+                    line.text = re.sub(r'\s*:formula:\s*', ' ', line.text).strip()
+                    cleaned += 1
+                # Remove :formula: tokens
+                if line.tokens:
+                    line.tokens = [
+                        t for t in line.tokens
+                        if t.text != ':formula:'
+                    ]
+    if cleaned:
+        logger.info(f"Cleaned :formula: markers from {cleaned} lines")
+
+
+# ─── Formula Extraction ─────────────────────────────────────────────────────
+
+def _apply_formula_extraction(
+    result,
+    pages: list[Page],
+    page_images: Optional[list[PageImage]],
+) -> None:
+    """
+    Extract formulas from Azure's response and add them as EQUATION blocks.
+
+    Azure returns formulas in result.pages[].formulas with:
+    - kind: "inline" or "display"
+    - value: LaTeX representation
+    - polygon: bounding polygon
+    - confidence: detection confidence
+
+    Each formula becomes a Block with block_type=EQUATION and
+    equation_latex populated.
+    """
+    total_formulas = 0
+
+    for page_idx, azure_page in enumerate(result.pages):
+        if not hasattr(azure_page, 'formulas') or not azure_page.formulas:
+            continue
+
+        if page_idx >= len(pages):
+            break
+
+        page = pages[page_idx]
+
+        # Resolve page dimensions for coordinate conversion
+        page_width_inch = azure_page.width or 8.5
+        page_height_inch = azure_page.height or 11.0
+
+        if page_images and page_idx < len(page_images):
+            img_w = page_images[page_idx].width_px
+            img_h = page_images[page_idx].height_px
+        elif page.image:
+            img_w = page.image.width_px
+            img_h = page.image.height_px
+        else:
+            img_w = int(page_width_inch * 300)
+            img_h = int(page_height_inch * 300)
+
+        formula_idx = 0
+        for formula in azure_page.formulas:
+            kind = getattr(formula, 'kind', 'display')  # "inline" or "display"
+            latex_value = getattr(formula, 'value', '') or ''
+            confidence = getattr(formula, 'confidence', 0.0) or 0.0
+            polygon = getattr(formula, 'polygon', None)
+
+            if not latex_value:
+                continue
+
+            # Convert polygon to our schema
+            formula_bbox = BBox(x0=0, y0=0, x1=100, y1=30)
+            formula_poly = None
+            if polygon and len(polygon) >= 4:
+                formula_poly, formula_bbox = _azure_polygon_to_schema(
+                    polygon, page_width_inch, page_height_inch, img_w, img_h
+                )
+
+            block = Block(
+                block_id=f"b_p{page_idx}_eq{formula_idx}",
+                block_type=BlockType.EQUATION,
+                bbox=formula_bbox,
+                polygon=formula_poly,
+                confidence=confidence,
+                equation_latex=latex_value,
+                direction=Direction.LTR,  # Math is inherently LTR
+                language="math",
+            )
+            page.blocks.append(block)
+            formula_idx += 1
+            total_formulas += 1
+
+    if total_formulas > 0:
+        logger.info(f"Extracted {total_formulas} formulas as EQUATION blocks")
 
 
 def _apply_azure_reading_order(result, doc: CanonicalDocument) -> None:

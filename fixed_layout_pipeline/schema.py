@@ -187,8 +187,43 @@ class Table(BaseModel):
     caption: Optional[str] = None
     confidence: float = Field(0.0, ge=0.0, le=1.0)
 
+    def _detect_table_direction(self) -> str:
+        """Detect whether this table is RTL or LTR from cell bounding boxes.
+
+        Azure DI assigns col=0 to the first column in reading order:
+          - RTL tables: col=0 is the rightmost visual column (highest x)
+          - LTR tables: col=0 is the leftmost visual column (lowest x)
+
+        We compare the x-position of col=0 vs the last column to decide.
+        Returns 'rtl' or 'ltr'.
+        """
+        if not self.cells:
+            return "ltr"
+
+        max_col = max(c.col for c in self.cells)
+        if max_col == 0:
+            return "ltr"
+
+        # Collect x0 positions for col=0 and the last col
+        col0_xs = [c.bbox.x0 for c in self.cells if c.col == 0 and c.bbox]
+        last_xs = [c.bbox.x0 for c in self.cells if c.col == max_col and c.bbox]
+
+        if not col0_xs or not last_xs:
+            return "ltr"
+
+        avg_col0_x = sum(col0_xs) / len(col0_xs)
+        avg_last_x = sum(last_xs) / len(last_xs)
+
+        # If col 0 is to the RIGHT of the last column => RTL
+        return "rtl" if avg_col0_x > avg_last_x else "ltr"
+
     def to_html_table(self) -> str:
-        """Render table as semantic HTML <table>."""
+        """Render table as semantic HTML <table>.
+
+        Detects table direction (RTL/LTR) from cell bounding box positions
+        and sets the dir attribute on <table> so the browser renders
+        columns in the correct visual order for any language.
+        """
         if not self.cells:
             return ""
 
@@ -199,7 +234,8 @@ class Table(BaseModel):
         max_row = max(c.row + c.row_span for c in self.cells) if self.cells else 0
         max_col = max(c.col + c.col_span for c in self.cells) if self.cells else 0
 
-        html = '<table border="1" cellpadding="4" cellspacing="0">\n'
+        table_dir = self._detect_table_direction()
+        html = f'<table border="1" cellpadding="4" cellspacing="0" dir="{table_dir}">\n'
 
         # Track which cells are spanned over
         occupied: set[tuple[int, int]] = set()
@@ -225,7 +261,8 @@ class Table(BaseModel):
                     attrs += f' rowspan="{cell.row_span}"'
                 if cell.col_span > 1:
                     attrs += f' colspan="{cell.col_span}"'
-                html += f"    <{tag}{attrs}>{cell.text}</{tag}>\n"
+                # Use dir=auto on each cell so BiDi is determined by content
+                html += f'    <{tag}{attrs} dir="auto">{cell.text}</{tag}>\n'
             html += "  </tr>\n"
 
         html += "</table>"
