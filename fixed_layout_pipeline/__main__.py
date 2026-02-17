@@ -197,6 +197,107 @@ def cmd_dual(args):
     print(f"Pages: {len(doc.pages)}, Blocks: {doc.total_blocks()}")
 
 
+def cmd_batch(args):
+    """Batch process scanned PDFs → searchable PDFs + OCR JSON."""
+    import asyncio as _asyncio
+    import os
+    import logging as _logging
+    _logging.basicConfig(
+        level=_logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    from .batch_searchable import process_all_pdfs, print_summary
+    import time as _time
+
+    input_dir = Path(args.input)
+    if not input_dir.exists():
+        sys.exit(f"Input directory not found: {input_dir}")
+
+    endpoint = os.environ.get("AZURE_DI_ENDPOINT", "")
+    api_key = os.environ.get("AZURE_DI_API_KEY", "")
+    if not endpoint or not api_key:
+        sys.exit("Set AZURE_DI_ENDPOINT and AZURE_DI_API_KEY in .env")
+
+    pdf_files = sorted(input_dir.glob("*.pdf"))
+    if args.dry_run:
+        print(f"\n[DRY RUN] {len(pdf_files)} PDFs → {args.output}/")
+        for p in pdf_files:
+            print(f"  {p.name}")
+        return
+
+    t0 = _time.time()
+    results = _asyncio.run(
+        process_all_pdfs(input_dir, Path(args.output), endpoint, api_key, args.workers)
+    )
+    print_summary(results)
+    print(f"Wall time: {_time.time() - t0:.1f}s")
+
+
+def cmd_validate(args):
+    """Validate searchable PDFs for corruption."""
+    import logging as _logging
+    _logging.basicConfig(
+        level=_logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    from .validate_pdfs import validate_directory, print_summary
+
+    input_dir = Path(args.input)
+    if not input_dir.exists():
+        sys.exit(f"Directory not found: {input_dir}")
+
+    valid, corrupted, empty = validate_directory(input_dir, fix=args.fix)
+    print_summary(valid, corrupted, empty)
+    if corrupted or empty:
+        sys.exit(1)
+
+
+def cmd_gemini_html(args):
+    """Generate fidelity HTML via Gemini classification."""
+    import logging as _logging
+    _logging.basicConfig(
+        level=_logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    from .gemini_html import render
+    import os
+
+    pdf_path = Path(args.pdf)
+    json_path = Path(args.json)
+    if not pdf_path.exists():
+        sys.exit(f"PDF not found: {pdf_path}")
+    if not json_path.exists():
+        sys.exit(f"JSON not found: {json_path}")
+
+    output = Path(args.output) if args.output else (
+        pdf_path.parent / f"{pdf_path.stem.replace('_searchable', '')}_gemini.html"
+    )
+    model = args.model or os.environ.get("MODEL_NAME", "gemini-2.0-flash")
+    render(pdf_path, json_path, output, model=model, page_num=args.page,
+           use_gemini=not args.no_gemini)
+
+
+def cmd_render_read(args):
+    """Render word-level fidelity HTML from prebuilt-read OCR JSON."""
+    import logging as _logging
+    _logging.basicConfig(
+        level=_logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    from .read_html_renderer import render_directory
+
+    input_dir = Path(args.input)
+    if not input_dir.exists():
+        sys.exit(f"Directory not found: {input_dir}")
+
+    count = render_directory(input_dir, dpi=args.dpi, scale=args.scale)
+    print(f"Rendered {count} document(s)")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Fixed-Layout OCR Pipeline: scanned PDFs → pixel-accurate HTML",
@@ -260,6 +361,47 @@ def main():
     p_dual.add_argument("--dpi", type=int, default=300, help="Target DPI (default: 300)")
     p_dual.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
     p_dual.set_defaults(func=cmd_dual)
+
+    # ─── batch ───────────────────────────────────────────
+    p_batch = subparsers.add_parser(
+        "batch",
+        help="Batch convert scanned PDFs → searchable PDFs + OCR JSON",
+    )
+    p_batch.add_argument("-i", "--input", type=str, default="pdfs/2026/2026/scanned")
+    p_batch.add_argument("-o", "--output", type=str, default="output_searchable")
+    p_batch.add_argument("-w", "--workers", type=int, default=4)
+    p_batch.add_argument("--dry-run", action="store_true")
+    p_batch.set_defaults(func=cmd_batch)
+
+    # ─── validate ────────────────────────────────────────────
+    p_val = subparsers.add_parser("validate", help="Validate PDFs for corruption")
+    p_val.add_argument("-i", "--input", type=str, default="output_searchable")
+    p_val.add_argument("--fix", action="store_true", help="Attempt repair")
+    p_val.set_defaults(func=cmd_validate)
+
+    # ─── gemini-html ─────────────────────────────────────────
+    p_gem = subparsers.add_parser(
+        "gemini-html",
+        help="Fidelity HTML with Gemini semantic classification",
+    )
+    p_gem.add_argument("--pdf", required=True, help="Searchable PDF")
+    p_gem.add_argument("--json", required=True, help="OCR JSON")
+    p_gem.add_argument("-o", "--output", help="Output HTML path")
+    p_gem.add_argument("--model", help="Gemini model name")
+    p_gem.add_argument("--page", type=int, help="Render single page")
+    p_gem.add_argument("--no-gemini", action="store_true",
+                       help="Skip Gemini — auto-classify only")
+    p_gem.set_defaults(func=cmd_gemini_html)
+
+    # ─── render-read ─────────────────────────────────────────
+    p_rr = subparsers.add_parser(
+        "render-read",
+        help="Word-level fidelity HTML from prebuilt-read OCR JSON",
+    )
+    p_rr.add_argument("-i", "--input", type=str, default="output_read_test")
+    p_rr.add_argument("--dpi", type=float, default=150)
+    p_rr.add_argument("--scale", type=float, default=1.0)
+    p_rr.set_defaults(func=cmd_render_read)
 
     args = parser.parse_args()
     if not args.command:
