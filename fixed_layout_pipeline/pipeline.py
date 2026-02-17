@@ -254,6 +254,24 @@ class Pipeline:
         doc.save(json_path)
         logger.info(f"  Canonical JSON: {json_path}")
 
+        # ─── Stage 8 (optional): Searchable PDF ─────────────────
+        if self.config.generate_searchable_pdf:
+            from .searchable_pdf import generate_searchable_pdf
+
+            spdf_path = output_dir / stem / f"{stem}_searchable.pdf"
+            logger.info("[8] Generating searchable PDF via Azure DI prebuilt-read...")
+            try:
+                generate_searchable_pdf(
+                    pdf_path=pdf_path,
+                    output_path=spdf_path,
+                    config=self.config.azure,
+                )
+                logger.info(f"  Searchable PDF: {spdf_path}")
+            except Exception as exc:
+                logger.warning(f"  Searchable PDF generation failed: {exc}")
+        else:
+            logger.info("[8] Searchable PDF: disabled (set generate_searchable_pdf=True to enable)")
+
         elapsed = time.time() - start_time
         doc.processing.processing_time_seconds = elapsed
 
