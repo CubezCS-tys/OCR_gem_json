@@ -1,0 +1,750 @@
+"""
+Image-Overlay HTML Renderer — pixel-perfect fidelity with selectable text.
+
+Architecture
+────────────
+  ┌──────────────────────────────┐
+  │  <div class="page">         │
+  │    <img … base64 page/>     │  ← visual fidelity (rasterised page)
+  │    <div class="text-layer"> │
+  │      <div dir="rtl">…</div> │  ← invisible, selectable text
+  │    </div>                   │
+  │  </div>                     │
+  └──────────────────────────────┘
+
+The scanned page image provides 100% visual fidelity.
+The invisible text overlay (color:transparent) enables:
+  • text selection / highlighting
+  • Ctrl-F search
+  • copy-paste
+  • screen-reader accessibility
+
+Input:  PDF file  +  Azure prebuilt-read OCR JSON
+Output: single self-contained HTML (images base64-embedded)
+
+Cost:  prebuilt-read = $1.50 / 1K pages (cheapest Azure DI tier)
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import html as html_mod
+import json
+import logging
+import sys
+import unicodedata
+from io import BytesIO
+from pathlib import Path
+
+import fitz  # PyMuPDF
+
+logger = logging.getLogger(__name__)
+
+# ── Defaults ──────────────────────────────────────────────────────────────────
+
+DEFAULT_DPI = 200          # good quality / file-size balance
+DEFAULT_IMAGE_FORMAT = "webp"
+DEFAULT_IMAGE_QUALITY = 85
+
+# ── BiDi helpers ──────────────────────────────────────────────────────────────
+
+_STRONG_BIDI = frozenset({"L", "R", "AL"})
+_RTL_BIDI    = frozenset({"R", "AL"})
+
+
+def _first_strong_dir(text: str) -> str:
+    """Return 'rtl' or 'ltr' based on the first strong BiDi character."""
+    for ch in text:
+        cat = unicodedata.bidirectional(ch)
+        if cat in _RTL_BIDI:
+            return "rtl"
+        if cat == "L":
+            return "ltr"
+    return "rtl"  # default for Arabic docs
+
+
+def _has_strong_char(text: str) -> bool:
+    return any(unicodedata.bidirectional(ch) in _STRONG_BIDI for ch in text)
+
+
+# ── Page rasterisation ────────────────────────────────────────────────────────
+
+def rasterise_pdf(
+    pdf_path: str | Path,
+    dpi: int = DEFAULT_DPI,
+    image_format: str = DEFAULT_IMAGE_FORMAT,
+    image_quality: int = DEFAULT_IMAGE_QUALITY,
+) -> list[str]:
+    """
+    Rasterise every page of *pdf_path* and return a list of
+    base64-encoded data URIs (one per page).
+    """
+    doc = fitz.open(str(pdf_path))
+    zoom = dpi / 72.0
+    mat = fitz.Matrix(zoom, zoom)
+    data_uris: list[str] = []
+
+    for page in doc:
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+
+        buf = BytesIO()
+        if image_format == "webp":
+            # PyMuPDF doesn't support webp natively; fall back to PNG or use Pillow
+            try:
+                from PIL import Image as PILImage
+                img = PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
+                img.save(buf, format="WEBP", quality=image_quality)
+                mime = "image/webp"
+            except ImportError:
+                buf.write(pix.tobytes("png"))
+                mime = "image/png"
+        elif image_format == "jpeg":
+            buf.write(pix.tobytes("jpeg"))
+            mime = "image/jpeg"
+        else:
+            buf.write(pix.tobytes("png"))
+            mime = "image/png"
+
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        data_uris.append(f"data:{mime};base64,{b64}")
+
+    doc.close()
+    return data_uris
+
+
+# ── OCR JSON parsing ─────────────────────────────────────────────────────────
+
+def parse_ocr_json(ocr_path: str | Path) -> dict:
+    """Load and return the Azure prebuilt-read OCR JSON."""
+    with open(ocr_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _polygon_to_rect(polygon: list[float]) -> tuple[float, float, float, float]:
+    """
+    Convert Azure's 8-point polygon (x0,y0,x1,y1,x2,y2,x3,y3) in inches
+    to (left, top, width, height) in inches.
+    Takes the bounding rectangle of the 4 corners.
+    """
+    xs = [polygon[i] for i in range(0, 8, 2)]
+    ys = [polygon[i] for i in range(1, 8, 2)]
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    return x_min, y_min, x_max - x_min, y_max - y_min
+
+
+# ── Text replacement helpers ──────────────────────────────────────────────────
+
+def _sample_bg_color(
+    img,  # PIL Image
+    left: int, top: int, width: int, height: int,
+    margin: int = 4,
+) -> tuple[int, int, int]:
+    """
+    Sample background colour from a thin margin strip *around* a text bbox.
+    Filters out dark (text) pixels and returns the median light colour.
+    """
+    iw, ih = img.size
+    x0 = max(0, left - margin)
+    x1 = min(iw, left + width + margin)
+
+    strips = []
+    # Top strip
+    ty0, ty1 = max(0, top - margin), max(0, top)
+    if ty1 > ty0 and x1 > x0:
+        strips.append(img.crop((x0, ty0, x1, ty1)))
+    # Bottom strip
+    by0, by1 = min(ih, top + height), min(ih, top + height + margin)
+    if by1 > by0 and x1 > x0:
+        strips.append(img.crop((x0, by0, x1, by1)))
+    # Left strip
+    lx0, lx1 = max(0, left - margin), max(0, left)
+    if lx1 > lx0:
+        strips.append(img.crop((lx0, top, lx1, min(ih, top + height))))
+    # Right strip
+    rx0, rx1 = min(iw, left + width), min(iw, left + width + margin)
+    if rx1 > rx0:
+        strips.append(img.crop((rx0, top, rx1, min(ih, top + height))))
+
+    if not strips:
+        return (255, 255, 255)
+
+    all_pixels: list[tuple] = []
+    for strip in strips:
+        all_pixels.extend(list(strip.get_flattened_data()))
+
+    if not all_pixels:
+        return (255, 255, 255)
+
+    # Keep only light pixels (avg channel > 150) to avoid sampling text
+    light = [p for p in all_pixels if (p[0] + p[1] + p[2]) > 450]
+    if not light:
+        light = all_pixels  # fallback
+
+    light.sort(key=lambda p: p[0] + p[1] + p[2])
+    m = light[len(light) // 2]
+    return (m[0], m[1], m[2])
+
+
+def _erase_text_regions(img, lines: list[dict], dpi: int, padding: int = 2):
+    """Paint over OCR text bboxes with sampled background colour."""
+    from PIL import ImageDraw as _ImageDraw
+
+    draw = _ImageDraw.Draw(img)
+    erased = 0
+
+    for line in lines:
+        polygon = line.get("polygon", [])
+        if len(polygon) < 8:
+            continue
+        text = line.get("content", "").strip()
+        if not text:
+            continue
+
+        lx, ly, lw, lh = _polygon_to_rect(polygon)
+        left  = int(lx * dpi)
+        top   = int(ly * dpi)
+        width = int(lw * dpi)
+        height = int(lh * dpi)
+        if width < 1 or height < 1:
+            continue
+
+        bg = _sample_bg_color(img, left, top, width, height)
+        draw.rectangle(
+            [left - padding, top - padding,
+             left + width + padding, top + height + padding],
+            fill=bg,
+        )
+        erased += 1
+
+    return erased
+
+
+def _rasterise_and_erase(
+    pdf_path: str | Path,
+    ocr_pages: list[dict],
+    dpi: int = DEFAULT_DPI,
+    image_format: str = DEFAULT_IMAGE_FORMAT,
+    image_quality: int = DEFAULT_IMAGE_QUALITY,
+) -> list[str]:
+    """
+    Rasterise each page, erase OCR text regions with background colour,
+    and return base64 data URIs.
+    """
+    from PIL import Image as _PILImage
+
+    doc = fitz.open(str(pdf_path))
+    zoom = dpi / 72.0
+    mat  = fitz.Matrix(zoom, zoom)
+    data_uris: list[str] = []
+
+    for page_idx, page in enumerate(doc):
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        img = _PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
+
+        # Erase text from the raster
+        if page_idx < len(ocr_pages):
+            lines = ocr_pages[page_idx].get("lines", [])
+            n = _erase_text_regions(img, lines, dpi)
+            logger.debug("Page %d: erased %d text regions", page_idx + 1, n)
+
+        # Encode to data URI
+        buf = BytesIO()
+        if image_format == "webp":
+            img.save(buf, format="WEBP", quality=image_quality)
+            mime = "image/webp"
+        elif image_format == "jpeg":
+            img.save(buf, format="JPEG", quality=image_quality)
+            mime = "image/jpeg"
+        else:
+            img.save(buf, format="PNG")
+            mime = "image/png"
+
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        data_uris.append(f"data:{mime};base64,{b64}")
+
+    doc.close()
+    return data_uris
+
+
+# ── HTML builder ──────────────────────────────────────────────────────────────
+
+def render_page_overlay(
+    page_data: dict,
+    page_image_uri: str | None,
+    dpi: int,
+    page_index: int,
+    text_only: bool = False,
+) -> str:
+    """Render one page: background image + positioned invisible text lines."""
+
+    page_w_in = page_data["width"]     # inches
+    page_h_in = page_data["height"]    # inches
+    pw = page_w_in * dpi               # pixels
+    ph = page_h_in * dpi
+
+    lines_html = []
+
+    for line in page_data.get("lines", []):
+        polygon = line.get("polygon", [])
+        if len(polygon) < 8:
+            continue
+
+        text = line.get("content", "").strip()
+        if not text:
+            continue
+
+        lx, ly, lw, lh = _polygon_to_rect(polygon)
+        # Convert inches → pixels
+        left_px  = lx * dpi
+        top_px   = ly * dpi
+        width_px = lw * dpi
+        height_px = lh * dpi
+
+        if width_px < 1 or height_px < 1:
+            continue
+
+        # Direction
+        line_dir = _first_strong_dir(text)
+
+        # Font size: match the line height
+        font_size = max(0, height_px * 0.75)
+
+        escaped = html_mod.escape(text)
+
+        lines_html.append(
+            f'        <div class="tw" dir="{line_dir}" '
+            f'style="left:{left_px:.1f}px; top:{top_px:.1f}px; '
+            f'width:{width_px:.1f}px; height:{height_px:.1f}px; '
+            f'font-size:{font_size:.1f}px; line-height:{height_px:.1f}px;">'
+            f'{escaped}</div>'
+        )
+
+    page_dir = _first_strong_dir(
+        " ".join(l.get("content", "") for l in page_data.get("lines", []))
+    )
+
+    img_tag = (
+        ''
+        if text_only
+        else f'      <img class="page-img" src="{page_image_uri}"\n'
+             f'           alt="Page {page_index + 1}" loading="lazy" />\n'
+    )
+
+    return f'''
+    <div class="page" id="page-{page_index}" dir="{page_dir}"
+         style="width:{pw:.0f}px; height:{ph:.0f}px;">
+{img_tag}      <div class="text-layer">
+{chr(10).join(lines_html)}
+      </div>
+      <div class="page-num">{page_index + 1}</div>
+    </div>'''
+
+
+def _build_line_inner(line: dict, line_dir: str) -> str:
+    """
+    Build the inner HTML for one line.
+    If words are available, wrap opposite-direction words in <span dir="...">.
+    Otherwise just use the line text.
+    """
+    # Get words that belong to this line (by span overlap)
+    text = line.get("content", "")
+    escaped = html_mod.escape(text)
+
+    # We don't have word-to-line mapping in prebuilt-read JSON directly,
+    # so we use the line text. The browser's BiDi algorithm handles
+    # mixed-direction text within the line correctly when dir is set.
+    return escaped
+
+
+# ── Full document ─────────────────────────────────────────────────────────────
+
+def render_document(
+    pdf_path: str | Path,
+    ocr_json_path: str | Path,
+    dpi: int = DEFAULT_DPI,
+    image_format: str = DEFAULT_IMAGE_FORMAT,
+    image_quality: int = DEFAULT_IMAGE_QUALITY,
+    text_only: bool = False,
+    replace_text: bool = False,
+) -> str:
+    """
+    Render a complete PDF + OCR JSON to a self-contained HTML file.
+
+    Parameters
+    ----------
+    pdf_path : path to the searchable (or original) PDF
+    ocr_json_path : path to the Azure prebuilt-read OCR JSON
+    dpi : rasterisation resolution
+    image_format : webp, png, or jpeg
+    image_quality : quality for lossy formats
+    text_only : if True, skip image rasterisation and show visible text
+    replace_text : if True, erase text from scan image and overlay visible text
+    """
+    pdf_path = Path(pdf_path)
+    ocr_json_path = Path(ocr_json_path)
+
+    # Parse OCR first (needed before rasterisation in replace-text mode)
+    logger.info("Parsing OCR JSON %s …", ocr_json_path.name)
+    ocr_data = parse_ocr_json(ocr_json_path)
+    pages = ocr_data.get("pages", [])
+
+    if text_only:
+        logger.info("Text-only mode — skipping image rasterisation")
+        page_images = None
+    elif replace_text:
+        logger.info(
+            "Replace-text mode — rasterising %s at %d DPI + erasing text …",
+            pdf_path.name, dpi,
+        )
+        page_images = _rasterise_and_erase(
+            pdf_path, pages, dpi, image_format, image_quality,
+        )
+    else:
+        logger.info("Rasterising %s at %d DPI …", pdf_path.name, dpi)
+        page_images = rasterise_pdf(pdf_path, dpi, image_format, image_quality)
+
+    if page_images is not None and len(pages) != len(page_images):
+        logger.warning(
+            "Page count mismatch: OCR has %d pages, PDF has %d pages",
+            len(pages), len(page_images),
+        )
+
+    # In replace-text mode, keep image but show visible text
+    show_text_only = text_only  # don't strip image in replace-text mode
+    pages_html = []
+    for i, page_data in enumerate(pages):
+        img_uri = page_images[i] if page_images else None
+        pages_html.append(render_page_overlay(page_data, img_uri, dpi, i, show_text_only))
+
+    title = html_mod.escape(pdf_path.stem)
+    doc_dir = _first_strong_dir(ocr_data.get("content", ""))
+
+    total_lines = sum(len(p.get("lines", [])) for p in pages)
+    total_words = sum(len(p.get("words", [])) for p in pages)
+    logger.info(
+        "Rendered %d pages, %d lines, %d words", len(pages), total_lines, total_words
+    )
+
+    return _wrap_html(
+        title, doc_dir, "\n".join(pages_html), len(pages),
+        text_only=text_only, replace_text=replace_text,
+    )
+
+
+def _wrap_html(
+    title: str, direction: str, body: str, page_count: int,
+    text_only: bool = False, replace_text: bool = False,
+) -> str:
+    return f'''<!DOCTYPE html>
+<html lang="ar" dir="{direction}">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>{title}</title>
+<style>
+/* ── Reset ────────────────────────────────────────────────────────── */
+*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+body {{
+  background: #525659;
+  font-family: 'Traditional Arabic', 'Noto Naskh Arabic', 'Amiri',
+               'Noto Serif', 'Times New Roman', serif;
+  padding: 20px 0;
+  direction: ltr;  /* page-level layout is always LTR (left-to-right stacking) */
+}}
+
+/* ── Toolbar ──────────────────────────────────────────────────────── */
+.toolbar {{
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  background: #1e1e1e; color: #ccc;
+  padding: 6px 16px; display: flex; gap: 12px; align-items: center;
+  font-family: system-ui, sans-serif; font-size: 13px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}}
+.toolbar button {{
+  background: #3c3c3c; color: #ccc; border: 1px solid #555;
+  padding: 4px 12px; border-radius: 4px; cursor: pointer;
+  font-size: 12px;
+}}
+.toolbar button:hover {{ background: #505050; }}
+.toolbar button.active {{ background: #0078d4; color: #fff; border-color: #0078d4; }}
+.toolbar .spacer {{ flex: 1; }}
+.toolbar .info {{ font-size: 11px; color: #888; }}
+
+/* ── Page ─────────────────────────────────────────────────────────── */
+.page {{
+  position: relative;
+  margin: 40px auto 20px auto;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  overflow: hidden;
+}}
+
+.page-img {{
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}}
+
+/* ── Text layer ───────────────────────────────────────────────────── */
+.text-layer {{
+  position: absolute; inset: 0;
+  z-index: 1;
+  /* Allow text selection on the transparent layer */
+}}
+
+.tw {{
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  overflow: visible;
+}}
+
+/* Text-only / replace-text mode: visible black text */
+body.text-only .tw,
+body.replace-text .tw {{
+  color: #000 !important;
+}}
+body.text-only .tw::selection,
+body.text-only .tw *::selection,
+body.replace-text .tw::selection,
+body.replace-text .tw *::selection {{
+  background: rgba(0, 120, 215, 0.35);
+  color: #000;
+}}
+
+/* Selection highlight — visible feedback when selecting invisible text */
+.tw::selection,
+.tw *::selection {{
+  background: rgba(0, 120, 215, 0.35);
+  color: transparent;
+}}
+
+/* ── Page number ──────────────────────────────────────────────────── */
+.page-num {{
+  position: absolute; bottom: -24px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px; color: #999;
+  font-family: system-ui, sans-serif;
+}}
+
+/* ── Debug mode ───────────────────────────────────────────────────── */
+body.debug-text .tw {{
+  color: rgba(220, 40, 40, 0.7) !important;
+  outline: 1px solid rgba(220, 40, 40, 0.15);
+}}
+
+body.debug-boxes .tw {{
+  outline: 1px solid rgba(0, 120, 215, 0.4);
+  background: rgba(0, 120, 215, 0.05);
+}}
+
+body.hide-image .page-img {{
+  opacity: 0.08;
+}}
+
+/* ── Fit mode ─────────────────────────────────────────────────────── */
+body.fit-width .page {{
+  width: calc(100vw - 40px) !important;
+  height: auto !important;
+  aspect-ratio: attr(data-ar);
+}}
+</style>
+</head>
+<body{' class="text-only"' if text_only else (' class="replace-text"' if replace_text else '')}>
+
+<div class="toolbar">
+  <strong style="color:#fff;">OCR Overlay Viewer</strong>
+  <div class="spacer"></div>
+  <button id="btn-debug" onclick="toggleDebug()" title="Show text overlay in red">Debug Text</button>
+  <button id="btn-boxes" onclick="toggleBoxes()" title="Show line bounding boxes">Boxes</button>
+  <button id="btn-image" onclick="toggleImage()" title="Fade out page image">Hide Image</button>
+  <div class="info">{page_count} page{"s" if page_count != 1 else ""}</div>
+</div>
+
+<!-- Pages -->
+{body}
+
+<script>
+function toggleDebug() {{
+  document.body.classList.toggle("debug-text");
+  document.getElementById("btn-debug").classList.toggle("active");
+}}
+function toggleBoxes() {{
+  document.body.classList.toggle("debug-boxes");
+  document.getElementById("btn-boxes").classList.toggle("active");
+}}
+function toggleImage() {{
+  document.body.classList.toggle("hide-image");
+  document.getElementById("btn-image").classList.toggle("active");
+}}
+
+// ── Text fitting ──────────────────────────────────────────────────
+// For each text-layer div, measure the natural (un-scaled) text width,
+// then apply scaleX so it fills the bbox width exactly.
+// This avoids font-size guessing and clipping issues.
+document.addEventListener("DOMContentLoaded", function() {{
+  fitAllWords();
+}});
+
+function fitAllWords() {{
+  const words = document.querySelectorAll(".tw");
+  words.forEach(el => {{
+    const targetW = parseFloat(el.style.width);
+    el.style.width = "auto";
+
+    const natural = el.scrollWidth;
+
+    if (natural > 0 && targetW > 0) {{
+      const ratio = targetW / natural;
+      el.style.transform = "scaleX(" + ratio.toFixed(6) + ")";
+      el.style.transformOrigin = "left top";
+    }}
+  }});
+}}
+</script>
+
+</body>
+</html>'''
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+def process_single(
+    pdf_path: Path,
+    json_path: Path,
+    output_path: Path | None = None,
+    dpi: int = DEFAULT_DPI,
+    image_format: str = DEFAULT_IMAGE_FORMAT,
+    image_quality: int = DEFAULT_IMAGE_QUALITY,
+    text_only: bool = False,
+    replace_text: bool = False,
+) -> Path:
+    """Process a single PDF+JSON pair and write HTML."""
+    if output_path is None:
+        if text_only:
+            suffix = "_text_only.html"
+        elif replace_text:
+            suffix = "_replaced.html"
+        else:
+            suffix = "_overlay.html"
+        output_path = pdf_path.with_name(pdf_path.stem.replace("_searchable", "") + suffix)
+
+    html_str = render_document(
+        pdf_path, json_path, dpi, image_format, image_quality,
+        text_only=text_only, replace_text=replace_text,
+    )
+    output_path.write_text(html_str, encoding="utf-8")
+    logger.info("Written %s (%.1f KB)", output_path.name, output_path.stat().st_size / 1024)
+    return output_path
+
+
+def process_directory(
+    input_dir: Path,
+    dpi: int = DEFAULT_DPI,
+    image_format: str = DEFAULT_IMAGE_FORMAT,
+    image_quality: int = DEFAULT_IMAGE_QUALITY,
+    text_only: bool = False,
+    replace_text: bool = False,
+) -> list[Path]:
+    """
+    Process all PDF+JSON pairs found in subdirectories of input_dir.
+    Expects structure: input_dir/<doc_id>/<doc_id>_searchable.pdf + <doc_id>_ocr.json
+    """
+    results = []
+    for subdir in sorted(input_dir.iterdir()):
+        if not subdir.is_dir():
+            continue
+
+        # Find PDF and JSON
+        pdfs = list(subdir.glob("*_searchable.pdf")) + list(subdir.glob("*.pdf"))
+        jsons = list(subdir.glob("*_ocr.json"))
+
+        if not pdfs or not jsons:
+            logger.warning("Skipping %s — missing PDF or JSON", subdir.name)
+            continue
+
+        pdf = pdfs[0]
+        json_f = jsons[0]
+        if text_only:
+            suffix = "_text_only.html"
+        elif replace_text:
+            suffix = "_replaced.html"
+        else:
+            suffix = "_overlay.html"
+        out = subdir / (subdir.name + suffix)
+
+        try:
+            result = process_single(
+                pdf, json_f, out, dpi, image_format, image_quality,
+                text_only=text_only, replace_text=replace_text,
+            )
+            results.append(result)
+        except Exception as e:
+            logger.error("Failed %s: %s", subdir.name, e)
+
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Render PDF + OCR JSON as image-overlay HTML",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Single file:
+  python -m fixed_layout_pipeline.overlay_renderer \\
+    --pdf output/doc/doc_searchable.pdf \\
+    --json output/doc/doc_ocr.json
+
+  # All subdirectories:
+  python -m fixed_layout_pipeline.overlay_renderer \\
+    --input-dir output_read_test/
+        """,
+    )
+    parser.add_argument("--pdf", type=Path, help="Single PDF file")
+    parser.add_argument("--json", type=Path, help="Single OCR JSON file")
+    parser.add_argument("--input-dir", "-i", type=Path, help="Directory of doc subdirectories")
+    parser.add_argument("--output", "-o", type=Path, help="Output HTML path (single mode)")
+    parser.add_argument("--dpi", type=int, default=DEFAULT_DPI, help=f"Rasterisation DPI (default: {DEFAULT_DPI})")
+    parser.add_argument("--format", choices=["webp", "png", "jpeg"], default=DEFAULT_IMAGE_FORMAT)
+    parser.add_argument("--quality", type=int, default=DEFAULT_IMAGE_QUALITY)
+    parser.add_argument("--text-only", action="store_true",
+                        help="Skip images; render visible text on white background")
+    parser.add_argument("--replace-text", action="store_true",
+                        help="Erase scanned text from image, overlay clean rendered text")
+
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    if args.input_dir:
+        results = process_directory(
+            args.input_dir, args.dpi, args.format, args.quality,
+            text_only=args.text_only, replace_text=args.replace_text,
+        )
+        print(f"\nProcessed {len(results)} documents")
+        for r in results:
+            print(f"  {r}")
+    elif args.pdf and args.json:
+        result = process_single(
+            args.pdf, args.json, args.output, args.dpi, args.format, args.quality,
+            text_only=args.text_only, replace_text=args.replace_text,
+        )
+        print(f"Output: {result}")
+    else:
+        parser.print_help()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

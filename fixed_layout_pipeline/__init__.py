@@ -22,11 +22,16 @@ from .pipeline import Pipeline, process_pdf
 from .schema import CanonicalDocument
 from .html_renderer import FixedLayoutRenderer
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __all__ = [
     "Pipeline",
     "PipelineConfig",
     "CanonicalDocument",
     "FixedLayoutRenderer",
     "process_pdf",
+    # New modules (v1.1)
+    "batch_searchable",
+    "validate_pdfs",
+    "gemini_html",
+    "read_html_renderer",
 ]
