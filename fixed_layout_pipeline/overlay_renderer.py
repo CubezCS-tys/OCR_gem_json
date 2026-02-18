@@ -585,24 +585,56 @@ function toggleImage() {{
 }}
 
 // ── Text fitting ──────────────────────────────────────────────────
-// For each text-layer div, measure the natural (un-scaled) text width,
-// then apply scaleX so it fills the bbox width exactly.
-// This avoids font-size guessing and clipping issues.
+// Two-pass fitting: 
+//   1. Adjust font-size so text naturally fills ~target width
+//   2. Apply a small scaleX correction for the remainder
+// This keeps scaleX close to 1.0 for all lines, avoiding the
+// "some lines look skinny, others look fat" problem.
 document.addEventListener("DOMContentLoaded", function() {{
   fitAllWords();
 }});
 
 function fitAllWords() {{
-  const words = document.querySelectorAll(".tw");
-  words.forEach(el => {{
+  const els = document.querySelectorAll(".tw");
+  els.forEach(el => {{
     const targetW = parseFloat(el.style.width);
-    el.style.width = "auto";
+    const targetH = parseFloat(el.style.height);
+    if (targetW <= 0 || targetH <= 0) return;
 
-    const natural = el.scrollWidth;
+    // Reset any previous transform
+    el.style.transform = "none";
 
-    if (natural > 0 && targetW > 0) {{
+    // Pass 1: Adjust font-size to approximate target width
+    // Start from the CSS font-size, then scale proportionally
+    let fontSize = parseFloat(el.style.fontSize) || (targetH * 0.75);
+    const maxIter = 8;  // more iterations for tighter convergence
+
+    for (let i = 0; i < maxIter; i++) {{
+      el.style.fontSize = fontSize.toFixed(2) + "px";
+      el.style.lineHeight = targetH.toFixed(1) + "px";
+      el.style.width = "auto";
+      const natural = el.scrollWidth;
+      if (natural <= 0) break;
+      
       const ratio = targetW / natural;
-      el.style.transform = "scaleX(" + ratio.toFixed(6) + ")";
+      // If within 1% of target, scaleX handles the rest
+      if (ratio > 0.99 && ratio < 1.01) break;
+      
+      // Scale font-size proportionally
+      fontSize = fontSize * ratio;
+      // Clamp to reasonable bounds (don't go bigger than bbox height)
+      fontSize = Math.max(4, Math.min(fontSize, targetH * 1.1));
+    }}
+
+    // Pass 2: final scaleX correction (should be close to 1.0 now)
+    el.style.fontSize = fontSize.toFixed(2) + "px";
+    el.style.lineHeight = targetH.toFixed(1) + "px";
+    el.style.width = "auto";
+    const finalNatural = el.scrollWidth;
+
+    if (finalNatural > 0 && targetW > 0) {{
+      const scaleX = targetW / finalNatural;
+      el.style.transform = "scaleX(" + scaleX.toFixed(6) + ")";
       el.style.transformOrigin = "left top";
     }}
   }});
