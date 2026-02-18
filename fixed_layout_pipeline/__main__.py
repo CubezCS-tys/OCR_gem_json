@@ -234,6 +234,50 @@ def cmd_batch(args):
     print(f"Wall time: {_time.time() - t0:.1f}s")
 
 
+def cmd_pipeline(args):
+    """Full pipeline: scanned PDFs → searchable PDF + OCR JSON + HTML in one shot."""
+    import asyncio as _asyncio
+    import os
+    import logging as _logging
+    _logging.basicConfig(
+        level=_logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    from .batch_pipeline import run_pipeline, print_summary
+    import time as _time
+
+    input_dir = Path(args.input)
+    if not input_dir.exists():
+        sys.exit(f"Input directory not found: {input_dir}")
+
+    endpoint = os.environ.get("AZURE_DI_ENDPOINT", "")
+    api_key = os.environ.get("AZURE_DI_API_KEY", "")
+    if not endpoint or not api_key:
+        sys.exit("Set AZURE_DI_ENDPOINT and AZURE_DI_API_KEY in .env")
+
+    pdf_files = sorted(input_dir.glob("*.pdf"))
+    if args.dry_run:
+        print(f"\n[DRY RUN] {len(pdf_files)} PDFs → {args.output}/")
+        print(f"  Mode: {args.mode} | DPI: {args.dpi} | Workers: {args.workers}")
+        for p in pdf_files:
+            print(f"  {p.name}")
+        return
+
+    t0 = _time.time()
+    results = _asyncio.run(
+        run_pipeline(
+            input_dir, Path(args.output), endpoint, api_key,
+            max_workers=args.workers, dpi=args.dpi, render_mode=args.mode,
+        )
+    )
+    print_summary(results)
+    print(f"Wall time: {_time.time() - t0:.1f}s")
+
+
 def cmd_validate(args):
     """Validate searchable PDFs for corruption."""
     import logging as _logging
@@ -372,6 +416,20 @@ def main():
     p_batch.add_argument("-w", "--workers", type=int, default=4)
     p_batch.add_argument("--dry-run", action="store_true")
     p_batch.set_defaults(func=cmd_batch)
+
+    # ─── pipeline (unified) ──────────────────────────────────
+    p_pipe = subparsers.add_parser(
+        "pipeline",
+        help="Full pipeline: scanned PDFs → searchable PDF + OCR JSON + HTML",
+    )
+    p_pipe.add_argument("-i", "--input", type=str, default="pdfs/2026/2026/scanned")
+    p_pipe.add_argument("-o", "--output", type=str, default="output_final")
+    p_pipe.add_argument("-w", "--workers", type=int, default=4)
+    p_pipe.add_argument("--dpi", type=int, default=200, help="Rasterisation DPI (default: 200)")
+    p_pipe.add_argument("--mode", choices=["replace-text", "overlay", "text-only"],
+                        default="replace-text", help="HTML render mode (default: replace-text)")
+    p_pipe.add_argument("--dry-run", action="store_true")
+    p_pipe.set_defaults(func=cmd_pipeline)
 
     # ─── validate ────────────────────────────────────────────
     p_val = subparsers.add_parser("validate", help="Validate PDFs for corruption")
