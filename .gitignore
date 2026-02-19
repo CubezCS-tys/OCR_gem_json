@@ -61,3 +61,7 @@ Thumbs.db
 *.tmp
 temp/
 output_searchable/
+
+# Local agent workspaces (keep out of repo history)
+.codex/
+.claude/
