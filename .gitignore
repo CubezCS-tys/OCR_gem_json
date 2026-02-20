@@ -73,6 +73,7 @@ ocr-viewer/.next/
 webapp/uploads/
 webapp/*.db
 webapp/__pycache__/
+!webapp/static/*.html
 output_searchable/
 output_final/
 
