@@ -75,3 +75,19 @@ webapp/*.db
 webapp/__pycache__/
 output_searchable/
 output_final/
+
+# === Large OCR artefacts / datasets ===
+pdfs/
+new_pipeline/
+output_with_figures/
+output_final.zip
+
+# Large generated JSONs
+*_canonical.json
+*_ocr.json
+
+# Archives
+*.zip
+*.7z
+*.tar
+*.tar.gz
