@@ -74,3 +74,4 @@ webapp/uploads/
 webapp/*.db
 webapp/__pycache__/
 output_searchable/
+output_final/
