@@ -1,0 +1,21 @@
+[Unit]
+Description=ScanToText Next.js Frontend
+After=network.target scantotext.service
+
+[Service]
+Type=simple
+User=appuser
+WorkingDirectory=/home/appuser/OCR_gem_json/frontend
+ExecStart=/home/appuser/.nvm/versions/node/v20.19.6/bin/node /home/appuser/OCR_gem_json/frontend/node_modules/.bin/next start -p 3070
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scantotext-frontend
+
+Environment=NODE_ENV=production
+Environment=BACKEND_URL=http://localhost:8000
+Environment=PATH=/home/appuser/.nvm/versions/node/v20.19.6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target

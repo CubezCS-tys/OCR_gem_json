@@ -77,6 +77,16 @@ webapp/__pycache__/
 output_searchable/
 output_final/
 
+# frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+*.pid
+
 # === Large OCR artefacts / datasets ===
 pdfs/
 new_pipeline/

@@ -91,6 +91,25 @@ def require_active_user(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def get_optional_user(
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """
+    FastAPI dependency: returns the User if a valid Bearer JWT is present,
+    or None if no token provided / token is invalid.
+    Never raises — safe to use on endpoints that work for both authed and anon users.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.split(" ", 1)[1]
+    try:
+        email = decode_access_token(token)
+    except HTTPException:
+        return None
+    return db.query(User).filter(User.email == email).first()
+
+
 # ── Google OAuth ──────────────────────────────────────────────────────────────
 
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID", "")

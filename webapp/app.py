@@ -29,11 +29,9 @@ load_dotenv(Path(__file__).parent / ".env", override=True)
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 # ── Internal modules ──────────────────────────────────────────────────────────
@@ -45,8 +43,9 @@ from db import (
     delete_job,
     get_db,
     get_job,
-    get_jobs_older_than,
+    get_jobs_expired,
     get_or_create_user,
+    get_user_jobs,
     init_db,
     update_job,
 )
@@ -55,6 +54,7 @@ from auth import (
     create_access_token,
     exchange_google_code,
     get_current_user,
+    get_optional_user,
     require_active_user,
 )
 from ocr_service import (
@@ -92,12 +92,25 @@ MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
 MAX_FILE_SIZE    = MAX_FILE_SIZE_MB * 1024 * 1024
 # How old (seconds) a job directory must be before the cleanup task removes it.
 UPLOAD_MAX_AGE_SECS = int(os.getenv("UPLOAD_MAX_AGE_HOURS", "24")) * 3600
+# Max pages allowed for a single free (guest) conversion
+FREE_MAX_PAGES = int(os.getenv("FREE_MAX_PAGES", "5"))
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+def _real_ip(request: Request) -> str:
+    """Read the real client IP from nginx-forwarded headers.
+    Falls back to request.client.host when not behind a proxy.
+    """
+    return (
+        request.headers.get("X-Real-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+
+_REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+limiter = Limiter(key_func=_real_ip, default_limits=[], storage_uri=_REDIS_URL, key_style="endpoint")
 
 app = FastAPI(title="ScanToText", version="3.0.0")
 app.state.limiter = limiter
@@ -111,10 +124,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-static_dir = Path(__file__).parent / "static"
-static_dir.mkdir(exist_ok=True)
-app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # ── DB init on startup ────────────────────────────────────────────────────────
 @app.on_event("startup")
@@ -142,6 +151,22 @@ def on_startup():
     else:
         logger.info("PostgreSQL DB ready (DATABASE_URL)")
 
+    # Pre-warm the OCR pipeline imports so the first user request is fast.
+    # Each gunicorn worker pays this cost once at boot instead of on first click.
+    try:
+        import sys as _sys
+        _root = str(Path(__file__).resolve().parent.parent)
+        if _root not in _sys.path:
+            _sys.path.insert(0, _root)
+        from fixed_layout_pipeline.config import AzureConfig  # noqa: F401
+        from fixed_layout_pipeline.searchable_pdf import (  # noqa: F401
+            generate_searchable_pdf,
+            generate_searchable_pdf_from_bytes,
+        )
+        logger.info("OCR pipeline modules pre-loaded (worker warm-up OK)")
+    except Exception as _e:
+        logger.warning("OCR pipeline warm-up failed (will import on first request): %s", _e)
+
     # Start the background upload-cleanup task
     asyncio.get_event_loop().create_task(_cleanup_uploads_loop())
 
@@ -154,30 +179,41 @@ async def _cleanup_uploads_loop() -> None:
 
 
 def _run_upload_cleanup() -> None:
-    cutoff  = time.time() - UPLOAD_MAX_AGE_SECS
-    removed = 0
-    # Remove old filesystem directories
-    for job_dir in UPLOAD_DIR.iterdir():
-        if not job_dir.is_dir():
-            continue
-        try:
-            if job_dir.stat().st_mtime < cutoff:
-                shutil.rmtree(job_dir)
-                removed += 1
-        except Exception as exc:
-            logger.warning("Cleanup error for %s: %s", job_dir, exc)
-    if removed:
-        logger.info("Upload cleanup: removed %d old job director%s", removed, "y" if removed == 1 else "ies")
-    # Remove stale job records from DB
+    """Delete job dirs and DB records whose per-job retention window has expired.
+
+    Free / anonymous jobs: 1 day (retention_days=1).
+    Pro subscriber jobs:   30 days (set by process_pro).
+    """
     db = _db.SessionLocal()
+    removed = 0
     try:
-        old_jobs = get_jobs_older_than(db, cutoff)
-        for job in old_jobs:
+        expired_jobs = get_jobs_expired(db)
+        for job in expired_jobs:
+            # Remove the filesystem work directory
+            work_dir = Path(job.work_dir)
+            if work_dir.exists():
+                try:
+                    shutil.rmtree(work_dir)
+                    removed += 1
+                except Exception as exc:
+                    logger.warning("Cleanup error for %s: %s", work_dir, exc)
+            # Remove result file if it lives outside the work dir
+            if job.result_path:
+                result = Path(job.result_path)
+                if result.exists() and not str(result).startswith(str(work_dir)):
+                    try:
+                        result.unlink()
+                    except Exception:
+                        pass
+            # Delete the DB record
             db.delete(job)
-        if old_jobs:
+        if expired_jobs:
             db.commit()
-            logger.info("Upload cleanup: purged %d stale job record%s from DB",
-                        len(old_jobs), "" if len(old_jobs) == 1 else "s")
+            logger.info(
+                "Upload cleanup: removed %d expired job%s (%d dir%s deleted)",
+                len(expired_jobs), "" if len(expired_jobs) == 1 else "s",
+                removed, "" if removed == 1 else "s",
+            )
     except Exception as exc:
         logger.warning("DB job cleanup error: %s", exc)
     finally:
@@ -186,36 +222,13 @@ def _run_upload_cleanup() -> None:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    index_path = static_dir / "index.html"
-    if index_path.exists():
-        return HTMLResponse(index_path.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>ScanToText</h1>")
-
-
-@app.get("/privacy", response_class=HTMLResponse)
-async def privacy_policy():
-    path = static_dir / "privacy.html"
-    if path.exists():
-        return HTMLResponse(path.read_text(encoding="utf-8"))
-    raise HTTPException(404, "Privacy policy page not found")
-
-
-@app.get("/terms", response_class=HTMLResponse)
-async def terms_of_service():
-    path = static_dir / "terms.html"
-    if path.exists():
-        return HTMLResponse(path.read_text(encoding="utf-8"))
-    raise HTTPException(404, "Terms of service page not found")
-
-
 @app.get("/api/config")
 async def get_config():
     return {
         "stripe_publishable_key": STRIPE_PUBLISHABLE_KEY,
         "plan_price": PLAN_PRICE_DISPLAY,
         "monthly_page_limit": MONTHLY_PAGE_LIMIT,
+        "free_max_pages": FREE_MAX_PAGES,
         "max_file_size_mb": MAX_FILE_SIZE_MB,
         "supported_formats": sorted(SUPPORTED_IMAGE_EXTS | SUPPORTED_PDF_EXTS),
         "demo_mode": DEMO_MODE,
@@ -329,12 +342,79 @@ async def get_account(current_user: User = Depends(get_current_user)):
     }
 
 
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/dashboard")
+async def get_dashboard(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the authenticated user's job history (newest first, up to 100)."""
+    import json as _json
+
+    jobs = get_user_jobs(db, current_user.id, limit=100)
+
+    job_list = []
+    for job in jobs:
+        expires_at  = job.created_at + (job.retention_days or 1) * 86400
+        is_expired  = time.time() > expires_at
+        file_exists = bool(job.result_path and Path(job.result_path).exists())
+
+        download_url = None
+        if job.status == "done" and file_exists and not is_expired:
+            download_url = f"/api/download/{job.job_id}"
+
+        formats_produced = []
+        if job.results:
+            try:
+                formats_produced = [k for k, v in _json.loads(job.results).items() if v]
+            except Exception:
+                pass
+
+        job_list.append({
+            "job_id":           job.job_id,
+            "filename":         job.filename,
+            "page_count":       job.page_count,
+            "file_size":        job.file_size,
+            "status":           job.status,
+            "type":             job.type,
+            "formats_produced": formats_produced,
+            "created_at":       job.created_at,
+            "expires_at":       expires_at,
+            "is_expired":       is_expired,
+            "download_url":     download_url,
+        })
+
+    trial_days_left = None
+    if current_user.is_trial and current_user.trial_expires:
+        trial_days_left = max(0, int((current_user.trial_expires - time.time()) / 86_400))
+
+    return {
+        "email":           current_user.email,
+        "is_subscribed":   current_user.is_subscribed,
+        "is_active":       current_user.is_active,
+        "is_trial":        current_user.is_trial,
+        "trial_days_left": trial_days_left,
+        "pages_used":      current_user.pages_used,
+        "page_limit":      current_user.page_limit,
+        "pages_remaining": current_user.pages_remaining,
+        "jobs":            job_list,
+    }
+
+
 # ── Upload ────────────────────────────────────────────────────────────────────
 
 @app.post("/api/upload")
 @limiter.limit("30/minute")
-async def upload_file(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
-    """Upload accepts any user — free tier needs no auth."""
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+):
+    """Upload accepts any user — free tier needs no auth.
+    If a valid JWT is provided the job is linked to that user's account.
+    """
     if not file.filename:
         raise HTTPException(400, "No filename provided")
 
@@ -355,10 +435,22 @@ async def upload_file(request: Request, file: UploadFile = File(...), db: Sessio
     work_dir.mkdir(parents=True, exist_ok=True)
     (work_dir / file.filename).write_bytes(contents)
 
-    create_job(db, job_id=job_id, filename=file.filename, file_size=len(contents),
-               page_count=page_count, work_dir=str(work_dir))
+    user_id = current_user.id if current_user else None
+    create_job(
+        db,
+        job_id=job_id,
+        filename=file.filename,
+        file_size=len(contents),
+        page_count=page_count,
+        work_dir=str(work_dir),
+        user_id=user_id,
+    )
 
-    logger.info("Uploaded %s (%d KB, %d pages) → %s", file.filename, len(contents) // 1024, page_count, job_id)
+    logger.info(
+        "Uploaded %s (%d KB, %d pages) → %s [user=%s]",
+        file.filename, len(contents) // 1024, page_count, job_id,
+        current_user.email if current_user else "anon",
+    )
 
     return {"job_id": job_id, "filename": file.filename, "file_size": len(contents), "page_count": page_count}
 
@@ -366,12 +458,19 @@ async def upload_file(request: Request, file: UploadFile = File(...), db: Sessio
 # ── Free Tier ─────────────────────────────────────────────────────────────────
 
 @app.post("/api/process/free/{job_id}")
-async def process_free(job_id: str, db: Session = Depends(get_db)):
+@limiter.limit("5/hour")
+async def process_free(request: Request, job_id: str, db: Session = Depends(get_db)):
     job = get_job(db, job_id)
     if not job:
         raise HTTPException(404, "Job not found")
     if job.status != "uploaded":
         raise HTTPException(400, f"Job already in state: {job.status}")
+    if job.page_count > FREE_MAX_PAGES:
+        raise HTTPException(
+            400,
+            f"Free conversions are limited to {FREE_MAX_PAGES} pages. "
+            f"This document has {job.page_count} pages — sign in for Pro access."
+        )
 
     update_job(db, job_id, status="processing", type="free")
 
@@ -439,8 +538,15 @@ async def process_pro(
         zip_path = await asyncio.to_thread(package_results, results, stem, work_dir)
 
         results_dict = {k: str(v) if v else None for k, v in results.items()}
-        update_job(db, job_id, status="done", result_path=str(zip_path),
-                   results=_json.dumps(results_dict))
+        # Pro users get 30-day result retention; link job to their account
+        update_job(
+            db, job_id,
+            status="done",
+            result_path=str(zip_path),
+            results=_json.dumps(results_dict),
+            retention_days=30,
+            user_id=current_user.id,
+        )
 
         # Atomically persist page consumption
         consume_pages(db, current_user, page_count)

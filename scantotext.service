@@ -1,0 +1,22 @@
+[Unit]
+Description=ScanToText OCR Web App
+After=network.target
+
+[Service]
+Type=simple
+User=appuser
+WorkingDirectory=/home/appuser/OCR_gem_json/webapp
+ExecStart=/home/appuser/OCR_gem_json/venv/bin/gunicorn app:app --worker-class uvicorn.workers.UvicornWorker --workers 4 --bind 0.0.0.0:8000 --timeout 120 --keep-alive 5 --access-logfile - --error-logfile - --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scantotext
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/appuser/OCR_gem_json
+Environment=DEMO_MODE=false
+
+[Install]
+WantedBy=multi-user.target

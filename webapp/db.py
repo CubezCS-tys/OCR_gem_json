@@ -23,6 +23,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     Float,
+    ForeignKey,
     Integer,
     String,
     create_engine,
@@ -119,17 +120,21 @@ class Job(Base):
     deployments share state via the DB instead of process memory."""
     __tablename__ = "jobs"
 
-    job_id      = Column(String, primary_key=True, index=True)
-    filename    = Column(String, nullable=False)
-    file_size   = Column(Integer, default=0)
-    page_count  = Column(Integer, default=0)
-    work_dir    = Column(String, nullable=False)    # stored as string path
-    status      = Column(String, default="uploaded") # uploaded|processing|done|error
-    type        = Column(String, default=None)       # free|pro
-    result_path = Column(String, default=None)       # string path, nullable
-    results     = Column(String, default="{}")       # JSON-encoded dict
-    error_msg   = Column(String, default=None)
-    created_at  = Column(Float, default=time.time)
+    job_id         = Column(String, primary_key=True, index=True)
+    filename       = Column(String, nullable=False)
+    file_size      = Column(Integer, default=0)
+    page_count     = Column(Integer, default=0)
+    work_dir       = Column(String, nullable=False)    # stored as string path
+    status         = Column(String, default="uploaded") # uploaded|processing|done|error
+    type           = Column(String, default=None)       # free|pro
+    result_path    = Column(String, default=None)       # string path, nullable
+    results        = Column(String, default="{}")       # JSON-encoded dict
+    error_msg      = Column(String, default=None)
+    created_at     = Column(Float, default=time.time)
+    # User linkage — nullable so anonymous free jobs work without an account
+    user_id        = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    # How long to keep result files: 1 day for free/anon, 30 days for pro subscribers
+    retention_days = Column(Integer, default=1)
 
 
 # ── Init ─────────────────────────────────────────────────────────────────────
@@ -190,6 +195,8 @@ def create_job(
     file_size: int,
     page_count: int,
     work_dir: str,
+    user_id: int | None = None,
+    retention_days: int = 1,
 ) -> Job:
     job = Job(
         job_id=job_id,
@@ -198,6 +205,8 @@ def create_job(
         page_count=page_count,
         work_dir=work_dir,
         created_at=time.time(),
+        user_id=user_id,
+        retention_days=retention_days,
     )
     db.add(job)
     db.commit()
@@ -230,6 +239,24 @@ def delete_job(db: Session, job_id: str) -> Job | None:
 
 def get_jobs_older_than(db: Session, cutoff: float) -> list[Job]:
     return db.query(Job).filter(Job.created_at < cutoff).all()
+
+
+def get_jobs_expired(db: Session) -> list[Job]:
+    """Return jobs whose retention window has passed (created_at + retention_days*86400 < now)."""
+    now = time.time()
+    all_jobs = db.query(Job).all()
+    return [j for j in all_jobs if (j.created_at + (j.retention_days or 1) * 86400) < now]
+
+
+def get_user_jobs(db: Session, user_id: int, limit: int = 100) -> list[Job]:
+    """Return a user's jobs ordered newest-first."""
+    return (
+        db.query(Job)
+        .filter(Job.user_id == user_id)
+        .order_by(Job.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 # ── Magic token CRUD ──────────────────────────────────────────────────────────
