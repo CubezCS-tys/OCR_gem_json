@@ -75,6 +75,7 @@ class ProcessingConfig:
     output_format: Literal["html", "json", "both"] = "html"
     max_output_tokens: int = 65536  # Maximum output tokens (default ~65k for long docs)
     pages_per_chunk: int = 10  # Pages to process per API call (for chunked processing)
+    parallel_chunks: int = 20   # Max concurrent Gemini API calls when processing chunks
     use_chunked_processing: bool = True  # Enable chunked processing for large docs
     extract_images: bool = True  # Extract charts/graphs/figures as actual images
     image_dpi: int = 300  # DPI for rendering pages when extracting images (increased for better fidelity)
@@ -94,6 +95,9 @@ class ProcessingConfig:
         
         if self.pages_per_chunk < 1 or self.pages_per_chunk > 100:
             raise ValueError(f"pages_per_chunk must be between 1 and 100, got {self.pages_per_chunk}")
+
+        if self.parallel_chunks < 1 or self.parallel_chunks > 200:
+            raise ValueError(f"parallel_chunks must be between 1 and 200, got {self.parallel_chunks}")
         
         if self.image_dpi < 50 or self.image_dpi > 600:
             raise ValueError(f"image_dpi must be between 50 and 600, got {self.image_dpi}")
@@ -2486,36 +2490,59 @@ REMEMBER:
         all_pages: list[PageContent] = []
         chunk_size = self.config.pages_per_chunk
         start_time = time.time()
-        
-        # Process in chunks
-        for chunk_idx, start in enumerate(range(1, total_pages + 1, chunk_size), 1):
-            end = min(start + chunk_size - 1, total_pages)
-            progress = (chunk_idx / ((total_pages + chunk_size - 1) // chunk_size)) * 100
-            logger.info(f"Processing chunk {chunk_idx}: pages {start}-{end} of {total_pages} ({progress:.1f}% complete)")
-            
+
+        # Build list of (chunk_idx, start, end) tuples
+        chunk_ranges = [
+            (idx, s, min(s + chunk_size - 1, total_pages))
+            for idx, s in enumerate(range(1, total_pages + 1, chunk_size), 1)
+        ]
+        total_chunks = len(chunk_ranges)
+        logger.info(
+            f"Processing {total_pages} pages in {total_chunks} chunks "
+            f"({chunk_size} pages/chunk, {self.config.parallel_chunks} concurrent workers)"
+        )
+
+        def _fetch_chunk(chunk_idx: int, start: int, end: int):
+            """Worker: extract one chunk and return (start, pages_list)."""
             try:
-                chunk_pages = self._extract_page_range(uploaded_file, start, end)
-                
-                # Ensure page numbers are correct
-                for i, page in enumerate(chunk_pages):
-                    expected_page = start + i
-                    if page.page_number != expected_page:
-                        page.page_number = expected_page
-                
-                all_pages.extend(chunk_pages)
-                logger.info(f"Total pages extracted so far: {len(all_pages)}")
-                
-            except Exception as e:
-                logger.error(f"Failed to extract pages {start}-{end}: {e}")
-                # Create placeholder pages for failed chunks
-                for page_num in range(start, end + 1):
-                    all_pages.append(PageContent(
-                        page_number=page_num,
+                pages = self._extract_page_range(uploaded_file, start, end)
+                # Normalise page numbers
+                for i, page in enumerate(pages):
+                    expected = start + i
+                    if page.page_number != expected:
+                        page.page_number = expected
+                logger.info(f"Chunk {chunk_idx}/{total_chunks} done: pages {start}-{end}")
+                return start, pages
+            except Exception as exc:
+                logger.error(f"Failed to extract pages {start}-{end}: {exc}")
+                placeholders = [
+                    PageContent(
+                        page_number=p,
                         text_blocks=[TextBlock(
                             block_type="paragraph",
-                            content=f"[Page {page_num} extraction failed: {e}]"
+                            content=f"[Page {p} extraction failed: {exc}]"
                         )]
-                    ))
+                    )
+                    for p in range(start, end + 1)
+                ]
+                return start, placeholders
+
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        with _TPE(max_workers=self.config.parallel_chunks) as pool:
+            futures = {
+                pool.submit(_fetch_chunk, idx, s, e): s
+                for idx, s, e in chunk_ranges
+            }
+            chunk_results: dict[int, list] = {}
+            for fut in futures:
+                start_key, pages = fut.result()
+                chunk_results[start_key] = pages
+
+        # Reassemble in original page order
+        for _, s, _ in chunk_ranges:
+            all_pages.extend(chunk_results[s])
+
+        logger.info(f"All {total_chunks} chunks collected ({len(all_pages)} pages total)")
         
         # Sort pages by page number (in case of any ordering issues)
         all_pages.sort(key=lambda p: p.page_number)
@@ -2578,21 +2605,30 @@ REMEMBER:
         total_images = sum(m["images"] for m in quality_metrics)
         pages_with_content = sum(1 for m in quality_metrics if m["has_content"])
         
-        # Calculate processing time
+        # Calculate processing time and actual cost
         elapsed_time = time.time() - start_time
-        
+        actual_cost_usd = cost_estimate["estimated_cost_usd"]
+        cost_per_page = (actual_cost_usd / total_pages) if total_pages else 0.0
+
         logger.info(
             f"Extraction complete: {elapsed_time:.1f}s, "
             f"{total_chars:,} chars, {total_blocks} blocks, "
             f"{total_tables} tables, {total_images} images"
         )
-        
+        logger.info(
+            f"💰 Cost summary: ${actual_cost_usd:.4f} total | "
+            f"${cost_per_page:.5f}/page | "
+            f"{total_pages} pages | "
+            f"{elapsed_time / total_pages:.1f}s/page"
+        )
+
         # Update metadata with actual extracted count
         metadata.total_pages = len(all_pages)
-        
+
         extraction_notes = (
             f"Extracted in {(total_pages + chunk_size - 1) // chunk_size} chunks of {chunk_size} pages. "
-            f"Processing time: {elapsed_time:.1f}s. "
+            f"Processing time: {elapsed_time:.1f}s ({elapsed_time / total_pages:.2f}s/page). "
+            f"Cost: ${actual_cost_usd:.4f} total (${cost_per_page:.5f}/page). "
             f"Content: {total_chars:,} chars, {total_blocks} text blocks, "
             f"{total_tables} tables, {total_images} images. "
             f"Pages with content: {pages_with_content}/{total_pages}."

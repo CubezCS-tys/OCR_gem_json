@@ -60,4 +60,17 @@ Thumbs.db
 # Temporary files
 *.tmp
 temp/
+
+# ocr_editor
+ocr_editor/dist/
+ocr_editor/__pycache__/
+
+# ocr-viewer (Next.js)
+ocr-viewer/node_modules/
+ocr-viewer/.next/
+
+# webapp
+webapp/uploads/
+webapp/*.db
+webapp/__pycache__/
 output_searchable/

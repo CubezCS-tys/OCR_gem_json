@@ -87,7 +87,7 @@ class MistralPipelineConfig:
     include_image_base64: bool = True
     pages_per_chunk: int = 5           # Pages sent to LLM per structuring call
     parallel: bool = False             # Enable parallel chunk processing
-    workers: int = 4                   # Number of parallel workers
+    workers: int = 20                  # Number of parallel workers
     max_retries: int = 3
     retry_delay: float = 2.0
     temperature: float = 0.0          # Deterministic structuring
