@@ -19,10 +19,12 @@ export default function UploadZone({ maxMb, onFile }: Props) {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+    <div className="bg-white rounded-2xl border border-parchment-dark p-6 shadow-sm">
       <div
-        className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
-          dragOver ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-gray-50'
+        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+          dragOver
+            ? 'border-ember bg-ember-light/30'
+            : 'border-gray-200 hover:border-ember hover:bg-parchment/50'
         }`}
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -33,18 +35,18 @@ export default function UploadZone({ maxMb, onFile }: Props) {
           handleFiles(e.dataTransfer.files);
         }}
       >
-        <div className="flex justify-center mb-4">
-          <div className="w-14 h-14 bg-indigo-50 rounded-full flex items-center justify-center">
-            <svg className="w-7 h-7 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <div className="flex justify-center mb-5">
+          <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors ${dragOver ? 'bg-ember/20' : 'bg-ember/10'}`}>
+            <svg className="w-8 h-8 text-ember" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
           </div>
         </div>
-        <p className="font-semibold text-gray-800 mb-1">Drag &amp; drop your file here</p>
-        <p className="text-sm text-gray-500">
-          or <span className="text-indigo-600 font-medium">browse files</span>
+        <p className="font-semibold text-ink mb-1 text-base">Drag &amp; drop your file here</p>
+        <p className="text-sm text-gray-400">
+          or <span className="text-ember font-medium">browse files</span>
         </p>
         <input
           ref={inputRef}
@@ -53,11 +55,11 @@ export default function UploadZone({ maxMb, onFile }: Props) {
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
         />
-        <div className="flex flex-wrap justify-center gap-2 mt-5">
+        <div className="flex flex-wrap justify-center gap-2 mt-6">
           {['PDF', 'JPG', 'PNG', 'TIFF', 'WebP'].map((f) => (
-            <span key={f} className="px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">{f}</span>
+            <span key={f} className="px-2.5 py-0.5 rounded-full bg-parchment text-ink text-xs font-medium">{f}</span>
           ))}
-          <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">Max {maxMb} MB</span>
+          <span className="px-2.5 py-0.5 rounded-full bg-ember-light text-ember-muted text-xs font-medium">Max {maxMb} MB</span>
         </div>
       </div>
     </div>

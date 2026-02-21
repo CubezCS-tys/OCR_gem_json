@@ -1,40 +1,40 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
-  --pro: #f59e0b;
+  --ink: #1E2832;
+  --ember: #D4622A;
+  --parchment: #F5F0E6;
 }
 
 html { scroll-behavior: smooth; }
 
 body {
-  background: #f8f9fb;
-  color: #1a1d23;
-  font-family: 'Inter', system-ui, sans-serif;
+  background: #F5F0E6;
+  color: #1E2832;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 /* scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #C07B6A; border-radius: 3px; }
 
 /* progress bar */
 .progress-bar-wrap {
   width: 100%;
-  height: 6px;
-  background: #e5e7eb;
+  height: 5px;
+  background: #EDE6D6;
   border-radius: 999px;
   overflow: hidden;
   margin-top: 1.5rem;
 }
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #4f46e5, #7c3aed);
+  background: linear-gradient(90deg, #D4622A, #E8864A);
   border-radius: 999px;
   transition: width 0.3s ease;
   width: 0%;
@@ -43,16 +43,16 @@ body {
 /* fmt-chip toggle */
 .fmt-chip input[type='checkbox'] { display: none; }
 .fmt-chip:has(input:checked) {
-  border-color: #7c3aed;
-  background: #ede9fe;
-  color: #5b21b6;
+  border-color: #D4622A;
+  background: #FBE8DC;
+  color: #A34C1E;
 }
 
 /* SVG ring animation */
-.ring-bg { fill: none; stroke: #e5e7eb; stroke-width: 4; }
+.ring-bg { fill: none; stroke: #EDE6D6; stroke-width: 4; }
 .ring-fg {
   fill: none;
-  stroke: #4f46e5;
+  stroke: #D4622A;
   stroke-width: 4;
   stroke-dasharray: 163;
   stroke-dashoffset: 40;
@@ -61,3 +61,10 @@ body {
   animation: spin 1.5s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* hero dot grid */
+.hero-grid {
+  background-color: #1E2832;
+  background-image: radial-gradient(#2C3A4A 1px, transparent 1px);
+  background-size: 24px 24px;
+}

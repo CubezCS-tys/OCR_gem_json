@@ -7,24 +7,30 @@ interface Props {
 
 export default function LoginModal({ authError, onClose }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-8"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 border border-parchment-dark"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-1">
-          <h3 className="text-lg font-semibold text-gray-900">Sign in or start free trial</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-ember" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <h3 className="text-lg font-semibold text-ink">Sign in to ScanToText</h3>
+          </div>
+          <button onClick={onClose} className="text-gray-300 hover:text-gray-500 transition-colors">
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
         </div>
-        <p className="text-sm text-gray-500 mb-6">Use your Google account — no password needed.</p>
+        <p className="text-sm text-gray-400 mb-6">Use your Google account — no password needed.</p>
 
         <a
           href="/auth/google"
-          className="flex items-center justify-center gap-2.5 w-full py-2.5 bg-white hover:bg-gray-50 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 transition-colors shadow-sm"
+          className="flex items-center justify-center gap-2.5 w-full py-2.5 bg-white hover:bg-parchment border border-parchment-dark rounded-xl text-sm font-medium text-ink transition-colors shadow-sm"
         >
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
@@ -36,8 +42,12 @@ export default function LoginModal({ authError, onClose }: Props) {
         </a>
 
         {authError && (
-          <p className="mt-3 text-sm text-red-600 text-center">{authError}</p>
+          <p className="mt-3 text-sm text-red-500 text-center">{authError}</p>
         )}
+
+        <p className="mt-5 text-xs text-center text-gray-400">
+          7-day free trial — no card required
+        </p>
       </div>
     </div>
   );

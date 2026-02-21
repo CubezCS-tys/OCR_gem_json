@@ -9,7 +9,7 @@ export default function ErrorSection({ message, onRetry }: Props) {
   const isRateLimited = message === 'RATE_LIMITED';
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-10 text-center">
+    <div className="bg-white rounded-2xl border border-parchment-dark p-10 text-center shadow-sm">
       <div className="flex justify-center mb-4">
         <div className={`w-16 h-16 ${isRateLimited ? 'bg-amber-100' : 'bg-red-100'} rounded-full flex items-center justify-center`}>
           {isRateLimited ? (
@@ -29,7 +29,7 @@ export default function ErrorSection({ message, onRetry }: Props) {
 
       {isRateLimited ? (
         <>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Free limit reached</h3>
+          <h3 className="text-xl font-semibold text-ink mb-2">Free limit reached</h3>
           <p className="text-sm text-gray-500 mb-6">
             You&apos;ve used your free conversions for this hour.<br/>
             Wait an hour to try again, or sign up for unlimited access.
@@ -37,13 +37,13 @@ export default function ErrorSection({ message, onRetry }: Props) {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a
               href="/?signup=1"
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition-colors"
+              className="px-6 py-2.5 bg-ember hover:bg-ember-dark text-white rounded-xl font-semibold text-sm transition-colors"
             >
               Sign Up — It&apos;s Free
             </a>
             <button
               onClick={onRetry}
-              className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-sm transition-colors"
+              className="px-6 py-2.5 bg-parchment hover:bg-parchment-dark text-ink rounded-xl font-semibold text-sm transition-colors"
             >
               Try Again Later
             </button>
@@ -51,11 +51,11 @@ export default function ErrorSection({ message, onRetry }: Props) {
         </>
       ) : (
         <>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">Processing failed</h3>
+          <h3 className="text-xl font-semibold text-ink mb-2">Processing failed</h3>
           <p className="text-sm text-gray-500 mb-6">{message}</p>
           <button
             onClick={onRetry}
-            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm transition-colors"
+            className="px-6 py-2.5 bg-ink hover:bg-ink-light text-white rounded-xl font-semibold text-sm transition-colors"
           >
             Try Again
           </button>

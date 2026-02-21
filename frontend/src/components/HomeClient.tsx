@@ -69,7 +69,6 @@ export default function HomeClient() {
   useEffect(() => {
     fetchConfig().then(setConfig).catch(() => {});
 
-    // Restore auth from localStorage
     const storedToken = getToken();
     const storedEmail = getEmail();
     if (storedToken) {
@@ -80,7 +79,7 @@ export default function HomeClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle Google OAuth redirect: ?token=...&email=...  or ?auth_error=...
+  // Handle Google OAuth redirect
   useEffect(() => {
     const tok = searchParams.get('token');
     const em  = searchParams.get('email');
@@ -194,7 +193,10 @@ export default function HomeClient() {
     try {
       const data = await getManagePortal(token);
       if (data.portal_url) window.location.href = data.portal_url;
-    } catch {}
+    } catch (e: unknown) {
+      setErrorMsg((e as Error).message);
+      setView('error');
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -218,56 +220,58 @@ export default function HomeClient() {
 
       <main>
         {/* Hero */}
-        <section className="bg-white border-b border-gray-100 py-14">
-          <div className="max-w-5xl mx-auto px-4 text-center">
-            <span className="inline-block px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold mb-4 tracking-wide uppercase">
+        <section className="hero-grid py-20 relative overflow-hidden">
+          <div className="max-w-5xl mx-auto px-4 text-center relative">
+            <span className="inline-block px-3 py-1 rounded-full bg-ember/20 text-ember border border-ember/30 text-xs font-semibold mb-5 tracking-widest uppercase">
               OCR + AI Document Conversion
             </span>
-            <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 leading-tight mb-4">
+            <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight mb-5">
               Every format you need,<br className="hidden md:block"/> from one upload
             </h1>
-            <p className="text-lg text-gray-500 max-w-2xl mx-auto">
-              Searchable PDF, pixel-perfect HTML, semantic HTML, markdown — all powered by Azure, Gemini, and Mistral AI. Free tier included.
+            <p className="text-lg text-gray-400 max-w-2xl mx-auto">
+              Searchable PDF, pixel-perfect HTML, semantic HTML, markdown — powered by Azure, Gemini, and Mistral AI. Free tier included.
             </p>
           </div>
         </section>
 
         {/* App widget */}
-        <div className="max-w-5xl mx-auto px-4 py-10 space-y-4">
-          {view === 'upload' && (
-            <UploadZone maxMb={maxMb} onFile={handleFile} />
-          )}
-          {view === 'file' && (
-            <FileSection
-              filename={filename}
-              fileSizeMb={fileSizeMb}
-              pageCount={pageCount}
-              uploading={uploading}
-              config={config}
-              account={account}
-              onRemove={reset}
-              onConvert={handleConvert}
-              onNeedAuth={() => setLoginOpen(true)}
-            />
-          )}
-          {view === 'processing' && (
-            <ProcessingSection
-              title={procTitle}
-              message={procMsg}
-              durationMs={procDuration}
-            />
-          )}
-          {view === 'result' && result && (
-            <ResultSection
-              jobId={result.job_id}
-              filename={result.filename}
-              formats={result.formats ?? result.formats_produced}
-              onNew={reset}
-            />
-          )}
-          {view === 'error' && (
-            <ErrorSection message={errorMsg} onRetry={reset} />
-          )}
+        <div className="bg-parchment">
+          <div className="max-w-5xl mx-auto px-4 py-10 space-y-4">
+            {view === 'upload' && (
+              <UploadZone maxMb={maxMb} onFile={handleFile} />
+            )}
+            {view === 'file' && (
+              <FileSection
+                filename={filename}
+                fileSizeMb={fileSizeMb}
+                pageCount={pageCount}
+                uploading={uploading}
+                config={config}
+                account={account}
+                onRemove={reset}
+                onConvert={handleConvert}
+                onNeedAuth={() => setLoginOpen(true)}
+              />
+            )}
+            {view === 'processing' && (
+              <ProcessingSection
+                title={procTitle}
+                message={procMsg}
+                durationMs={procDuration}
+              />
+            )}
+            {view === 'result' && result && (
+              <ResultSection
+                jobId={result.job_id}
+                filename={result.filename}
+                formats={result.formats ?? result.formats_produced}
+                onNew={reset}
+              />
+            )}
+            {view === 'error' && (
+              <ErrorSection message={errorMsg} onRetry={reset} />
+            )}
+          </div>
         </div>
 
         <PricingSection
@@ -276,21 +280,22 @@ export default function HomeClient() {
         />
 
         {/* How It Works */}
-        <section className="py-20 bg-white">
+        <section className="py-20 bg-parchment">
           <div className="max-w-5xl mx-auto px-4">
-            <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">How It Works</h2>
+            <h2 className="text-3xl font-bold text-center text-ink mb-2">How It Works</h2>
+            <p className="text-center text-gray-500 mb-14">Three steps to any document format you need.</p>
             <div className="grid md:grid-cols-3 gap-8">
               {[
                 { n: '01', title: 'Upload', desc: 'Drop in any scanned PDF or image — invoices, books, contracts, manuscripts.' },
                 { n: '02', title: 'Choose', desc: 'Free searchable PDF, or Pro for all formats — HTML, semantic, markdown, figures.' },
                 { n: '03', title: 'Download', desc: 'Get a ZIP with every format, or just the searchable PDF. Ready in under a minute.' },
               ].map((s) => (
-                <div key={s.n} className="text-center">
-                  <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-sm font-bold text-indigo-600">{s.n}</span>
+                <div key={s.n} className="bg-white rounded-2xl p-8 border border-parchment-dark">
+                  <div className="w-10 h-10 bg-ember/10 rounded-xl flex items-center justify-center mb-5">
+                    <span className="text-sm font-bold text-ember">{s.n}</span>
                   </div>
-                  <h4 className="font-semibold text-gray-900 mb-2">{s.title}</h4>
-                  <p className="text-sm text-gray-500">{s.desc}</p>
+                  <h4 className="font-semibold text-ink mb-2 text-lg">{s.title}</h4>
+                  <p className="text-sm text-gray-500 leading-relaxed">{s.desc}</p>
                 </div>
               ))}
             </div>

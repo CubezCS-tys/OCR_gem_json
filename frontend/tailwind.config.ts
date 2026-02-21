@@ -5,14 +5,24 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: {
-          DEFAULT: '#4f46e5',
-          hover: '#4338ca',
+        ink: {
+          DEFAULT: '#1E2832',
+          light: '#2C3A4A',
+          dark: '#141B23',
         },
-        pro: '#f59e0b',
+        ember: {
+          DEFAULT: '#D4622A',
+          dark: '#BC561F',
+          light: '#FBE8DC',
+          muted: '#A34C1E',
+        },
+        parchment: {
+          DEFAULT: '#F5F0E6',
+          dark: '#EDE6D6',
+        },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Space Grotesk', 'system-ui', 'sans-serif'],
       },
     },
   },
