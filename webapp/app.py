@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 load_dotenv(Path(__file__).parent / ".env", override=True)
 
+import pydantic
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -50,12 +51,15 @@ from db import (
     update_job,
 )
 from auth import (
+    ADMIN_PASSWORD,
     build_google_auth_url,
     create_access_token,
+    create_admin_token,
     exchange_google_code,
     get_current_user,
     get_optional_user,
     require_active_user,
+    require_admin,
 )
 from ocr_service import (
     SUPPORTED_IMAGE_EXTS,
@@ -678,3 +682,154 @@ async def cleanup_job(job_id: str, db: Session = Depends(get_db)):
     if work_dir.exists():
         shutil.rmtree(work_dir)
     return {"deleted": job_id}
+
+
+# ── Admin ─────────────────────────────────────────────────────────────────────
+
+class AdminLoginBody(pydantic.BaseModel):
+    password: str
+
+
+@app.post("/api/admin/login")
+async def admin_login(body: AdminLoginBody):
+    """Exchange admin password for a short-lived admin JWT."""
+    if not ADMIN_PASSWORD:
+        raise HTTPException(503, "Admin dashboard not configured — set ADMIN_PASSWORD in .env")
+    if not secrets.compare_digest(body.password, ADMIN_PASSWORD):
+        raise HTTPException(401, "Invalid admin password")
+    return {"token": create_admin_token()}
+
+
+@app.get("/api/admin/stats")
+async def admin_stats(
+    _: None = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Aggregate metrics for the admin overview."""
+    from sqlalchemy import func as _func
+    from collections import defaultdict
+    from datetime import datetime
+
+    total_users    = db.query(_func.count(_db.User.id)).scalar() or 0
+    subscribed     = db.query(_func.count(_db.User.id)).filter(_db.User.is_subscribed.is_(True)).scalar() or 0
+    trial_users    = db.query(_func.count(_db.User.id)).filter(_db.User.is_trial.is_(True)).scalar() or 0
+    total_jobs     = db.query(_func.count(_db.Job.job_id)).scalar() or 0
+    total_pages    = db.query(_func.coalesce(_func.sum(_db.Job.page_count), 0)).scalar() or 0
+    anon_jobs      = db.query(_func.count(_db.Job.job_id)).filter(_db.Job.user_id.is_(None)).scalar() or 0
+
+    # Daily jobs — last 14 days (grouped in Python to stay DB-agnostic)
+    cutoff     = time.time() - 14 * 86_400
+    recent     = db.query(_db.Job).filter(_db.Job.created_at >= cutoff).all()
+    daily_map: dict[str, int] = defaultdict(int)
+    for j in recent:
+        day = datetime.utcfromtimestamp(j.created_at).strftime("%Y-%m-%d")
+        daily_map[day] += 1
+
+    daily_jobs = [
+        {
+            "date":  datetime.utcfromtimestamp(time.time() - i * 86_400).strftime("%Y-%m-%d"),
+            "count": daily_map.get(
+                datetime.utcfromtimestamp(time.time() - i * 86_400).strftime("%Y-%m-%d"), 0
+            ),
+        }
+        for i in range(13, -1, -1)
+    ]
+
+    return {
+        "total_users":         total_users,
+        "subscribed":          subscribed,
+        "trial_users":         trial_users,
+        "total_jobs":          total_jobs,
+        "total_pages_processed": int(total_pages),
+        "anon_jobs":           anon_jobs,
+        "daily_jobs":          daily_jobs,
+    }
+
+
+_ADMIN_PAGE_SIZE = 50
+
+
+@app.get("/api/admin/users")
+async def admin_users(
+    page: int = 1,
+    q: str = "",
+    _: None = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Paginated user list (sorted newest-first, optional email search)."""
+    query = db.query(_db.User).order_by(_db.User.created_at.desc())
+    if q.strip():
+        query = query.filter(_db.User.email.ilike(f"%{q.strip()}%"))
+    total = query.count()
+    users = query.offset((max(1, page) - 1) * _ADMIN_PAGE_SIZE).limit(_ADMIN_PAGE_SIZE).all()
+
+    return {
+        "total": total,
+        "page":  page,
+        "pages": max(1, -(-total // _ADMIN_PAGE_SIZE)),  # ceiling div
+        "users": [
+            {
+                "id":                    u.id,
+                "email":                 u.email,
+                "is_subscribed":         u.is_subscribed,
+                "is_trial":              u.is_trial,
+                "trial_active":          u.trial_active,
+                "pages_used":            u.pages_used,
+                "page_limit":            u.page_limit,
+                "created_at":            u.created_at,
+                "trial_expires":         u.trial_expires,
+                "stripe_customer_id":    u.stripe_customer_id or "",
+                "stripe_subscription_id": u.stripe_subscription_id or "",
+                "current_period_end":    u.current_period_end,
+            }
+            for u in users
+        ],
+    }
+
+
+@app.get("/api/admin/jobs")
+async def admin_jobs(
+    page: int = 1,
+    user_id: str = "",
+    status: str = "",
+    _: None = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Paginated job list with optional filters; includes user email."""
+    from sqlalchemy.orm import aliased
+
+    UserAlias = aliased(_db.User)
+    query = (
+        db.query(_db.Job, UserAlias.email)
+        .outerjoin(UserAlias, _db.Job.user_id == UserAlias.id)
+        .order_by(_db.Job.created_at.desc())
+    )
+    if user_id.strip():
+        try:
+            query = query.filter(_db.Job.user_id == int(user_id))
+        except ValueError:
+            pass
+    if status.strip():
+        query = query.filter(_db.Job.status == status.strip())
+
+    total = query.count()
+    rows  = query.offset((max(1, page) - 1) * _ADMIN_PAGE_SIZE).limit(_ADMIN_PAGE_SIZE).all()
+
+    return {
+        "total": total,
+        "page":  page,
+        "pages": max(1, -(-total // _ADMIN_PAGE_SIZE)),
+        "jobs": [
+            {
+                "job_id":        j.job_id,
+                "filename":      j.filename,
+                "page_count":    j.page_count,
+                "status":        j.status,
+                "type":          j.type,
+                "user_email":    email,
+                "created_at":    j.created_at,
+                "retention_days": j.retention_days,
+            }
+            for j, email in rows
+        ],
+    }

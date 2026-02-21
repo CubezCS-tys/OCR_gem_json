@@ -120,6 +120,9 @@ body{{margin:0;padding:20px;background:#525659;display:flex;flex-direction:colum
 .toolbar button{{background:#444;color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;}}
 .toolbar button:hover{{background:#666;}}
 .toolbar button.active{{background:#0078d7;}}
+.toolbar button:disabled{{opacity:.45;cursor:default;}}
+.zoom-level{{min-width:54px;text-align:center;color:#ddd;font-variant-numeric:tabular-nums;}}
+#pages-container{{padding-top:26px;}}
 .debug-mode .w{{outline:1px solid rgba(0,120,215,.3);}}
 .confidence-mode .w[data-conf^="0.7"],.confidence-mode .w[data-conf^="0.6"],.confidence-mode .w[data-conf^="0.5"],.confidence-mode .w[data-conf^="0.4"],.confidence-mode .w[data-conf^="0.3"]{{background:rgba(220,80,60,.25);border-radius:2px;}}
 @media print{{body{{background:#fff;padding:0;}}.page{{box-shadow:none;margin:0;page-break-after:always;}}.toolbar,.page-num{{display:none;}}}}
@@ -129,12 +132,63 @@ body{{margin:0;padding:20px;background:#525659;display:flex;flex-direction:colum
 <div class="toolbar">
   <span>📄 {len(pages)} pages · {total_words} words</span>
   <span style="opacity:.4">|</span>
+  <button onclick="zoomOut()" id="btn-zoom-out" title="Zoom out">-</button>
+  <span id="zoom-level" class="zoom-level">100%</span>
+  <button onclick="zoomIn()" id="btn-zoom-in" title="Zoom in">+</button>
+  <button onclick="fitToPage(true)" id="btn-fit" title="Fit page to viewport">Fit</button>
   <button onclick="document.body.classList.toggle('debug-mode');this.classList.toggle('active')" id="btn-dbg">Debug</button>
   <button onclick="document.body.classList.toggle('confidence-mode');this.classList.toggle('active')" id="btn-conf">Confidence</button>
 </div>
 <div id="pages-container">
 {chr(10).join(pages_html)}
 </div>
+<script>
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 3.0;
+const ZOOM_STEP = 0.1;
+let viewerZoom = 1.0;
+let autoFitOnResize = true;
+
+function clampZoom(value) {{
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
+}}
+
+function updateZoomLabel() {{
+  document.getElementById('zoom-level').textContent = Math.round(viewerZoom * 100) + '%';
+  document.getElementById('btn-zoom-out').disabled = viewerZoom <= MIN_ZOOM + 0.001;
+  document.getElementById('btn-zoom-in').disabled = viewerZoom >= MAX_ZOOM - 0.001;
+}}
+
+function applyZoom(value) {{
+  viewerZoom = clampZoom(value);
+  document.getElementById('pages-container').style.zoom = viewerZoom.toFixed(3);
+  updateZoomLabel();
+}}
+
+function fitToPage(force = false) {{
+  if (force) autoFitOnResize = true;
+  if (!autoFitOnResize) return;
+  const pages = Array.from(document.querySelectorAll('.page'));
+  if (!pages.length) return;
+  const maxWidth = Math.max(...pages.map((p) => p.offsetWidth || parseFloat(p.style.width) || 0));
+  if (!maxWidth) return;
+  const availableWidth = Math.max(320, window.innerWidth - 48);
+  applyZoom(Math.min(1, availableWidth / maxWidth));
+}}
+
+function zoomIn() {{
+  autoFitOnResize = false;
+  applyZoom(viewerZoom + ZOOM_STEP);
+}}
+
+function zoomOut() {{
+  autoFitOnResize = false;
+  applyZoom(viewerZoom - ZOOM_STEP);
+}}
+
+window.addEventListener('load', () => fitToPage(true));
+window.addEventListener('resize', () => fitToPage());
+</script>
 </body>
 </html>"""
 

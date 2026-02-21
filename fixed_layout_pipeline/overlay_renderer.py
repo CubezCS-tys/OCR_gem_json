@@ -470,8 +470,18 @@ body {{
 }}
 .toolbar button:hover {{ background: #505050; }}
 .toolbar button.active {{ background: #0078d4; color: #fff; border-color: #0078d4; }}
+.toolbar button:disabled {{ opacity: 0.45; cursor: default; }}
 .toolbar .spacer {{ flex: 1; }}
 .toolbar .info {{ font-size: 11px; color: #888; }}
+.zoom-level {{
+  min-width: 54px;
+  text-align: center;
+  color: #ddd;
+  font-variant-numeric: tabular-nums;
+}}
+.pages-container {{
+  padding-top: 26px;
+}}
 
 /* ── Page ─────────────────────────────────────────────────────────── */
 .page {{
@@ -547,13 +557,6 @@ body.debug-boxes .tw {{
 body.hide-image .page-img {{
   opacity: 0.08;
 }}
-
-/* ── Fit mode ─────────────────────────────────────────────────────── */
-body.fit-width .page {{
-  width: calc(100vw - 40px) !important;
-  height: auto !important;
-  aspect-ratio: attr(data-ar);
-}}
 </style>
 </head>
 <body{' class="text-only"' if text_only else (' class="replace-text"' if replace_text else '')}>
@@ -561,6 +564,10 @@ body.fit-width .page {{
 <div class="toolbar">
   <strong style="color:#fff;">OCR Overlay Viewer</strong>
   <div class="spacer"></div>
+  <button id="btn-zoom-out" onclick="zoomOut()" title="Zoom out">-</button>
+  <span id="zoom-level" class="zoom-level">100%</span>
+  <button id="btn-zoom-in" onclick="zoomIn()" title="Zoom in">+</button>
+  <button id="btn-fit" onclick="fitToPage(true)" title="Fit page to viewport">Fit</button>
   <button id="btn-debug" onclick="toggleDebug()" title="Show text overlay in red">Debug Text</button>
   <button id="btn-boxes" onclick="toggleBoxes()" title="Show line bounding boxes">Boxes</button>
   <button id="btn-image" onclick="toggleImage()" title="Fade out page image">Hide Image</button>
@@ -568,9 +575,55 @@ body.fit-width .page {{
 </div>
 
 <!-- Pages -->
+<div id="pages-container" class="pages-container">
 {body}
+</div>
 
 <script>
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 3.0;
+const ZOOM_STEP = 0.1;
+let viewerZoom = 1.0;
+let autoFitOnResize = true;
+
+function clampZoom(value) {{
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
+}}
+
+function updateZoomLabel() {{
+  document.getElementById("zoom-level").textContent = Math.round(viewerZoom * 100) + "%";
+  document.getElementById("btn-zoom-out").disabled = viewerZoom <= MIN_ZOOM + 0.001;
+  document.getElementById("btn-zoom-in").disabled = viewerZoom >= MAX_ZOOM - 0.001;
+}}
+
+function applyZoom(value) {{
+  viewerZoom = clampZoom(value);
+  const container = document.getElementById("pages-container");
+  container.style.zoom = viewerZoom.toFixed(3);
+  updateZoomLabel();
+}}
+
+function fitToPage(force = false) {{
+  if (force) autoFitOnResize = true;
+  if (!force && !autoFitOnResize) return;
+  const pages = Array.from(document.querySelectorAll(".page"));
+  if (!pages.length) return;
+  const maxWidth = Math.max(...pages.map((p) => p.offsetWidth || parseFloat(p.style.width) || 0));
+  if (!maxWidth) return;
+  const availableWidth = Math.max(320, window.innerWidth - 48);
+  applyZoom(Math.min(1, availableWidth / maxWidth));
+}}
+
+function zoomIn() {{
+  autoFitOnResize = false;
+  applyZoom(viewerZoom + ZOOM_STEP);
+}}
+
+function zoomOut() {{
+  autoFitOnResize = false;
+  applyZoom(viewerZoom - ZOOM_STEP);
+}}
+
 function toggleDebug() {{
   document.body.classList.toggle("debug-text");
   document.getElementById("btn-debug").classList.toggle("active");
@@ -592,6 +645,11 @@ function toggleImage() {{
 // "some lines look skinny, others look fat" problem.
 document.addEventListener("DOMContentLoaded", function() {{
   fitAllWords();
+  fitToPage(true);
+}});
+
+window.addEventListener("resize", function() {{
+  fitToPage();
 }});
 
 function fitAllWords() {{

@@ -436,6 +436,14 @@ class FixedLayoutRenderer:
     }}
     .toolbar button:hover {{ background: #666; }}
     .toolbar button.active {{ background: #0078d7; }}
+    .toolbar button:disabled {{ opacity: 0.45; cursor: default; }}
+    .zoom-level {{
+      min-width: 54px;
+      text-align: center;
+      color: #ddd;
+      font-variant-numeric: tabular-nums;
+    }}
+    .pages-container {{ padding-top: 28px; }}
 
     /* ─── Print ───────────────────────────────────────────── */
     @media print {{
@@ -451,14 +459,64 @@ class FixedLayoutRenderer:
     <span>{title}</span>
     <span>|</span>
     <span>{doc.page_count()} pages</span>
+    <button onclick="zoomOut()" id="btn-zoom-out" title="Zoom out">-</button>
+    <span id="zoom-level" class="zoom-level">100%</span>
+    <button onclick="zoomIn()" id="btn-zoom-in" title="Zoom in">+</button>
+    <button onclick="fitToPage(true)" id="btn-fit" title="Fit page to viewport">Fit</button>
     <button onclick="toggleDebug()" id="btn-debug">Debug</button>
     <button onclick="toggleTextVis()" id="btn-text">Show Text</button>
   </div>
 
   <!-- Pages -->
+  <div id="pages-container" class="pages-container">
 {pages_html}
+  </div>
 
   <script>
+    const MIN_ZOOM = 0.2;
+    const MAX_ZOOM = 3.0;
+    const ZOOM_STEP = 0.1;
+    let viewerZoom = 1.0;
+    let autoFitOnResize = true;
+
+    function clampZoom(value) {{
+      return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
+    }}
+
+    function updateZoomLabel() {{
+      document.getElementById('zoom-level').textContent = Math.round(viewerZoom * 100) + '%';
+      document.getElementById('btn-zoom-out').disabled = viewerZoom <= MIN_ZOOM + 0.001;
+      document.getElementById('btn-zoom-in').disabled = viewerZoom >= MAX_ZOOM - 0.001;
+    }}
+
+    function applyZoom(value) {{
+      viewerZoom = clampZoom(value);
+      const container = document.getElementById('pages-container');
+      container.style.zoom = viewerZoom.toFixed(3);
+      updateZoomLabel();
+    }}
+
+    function fitToPage(force = false) {{
+      if (force) autoFitOnResize = true;
+      if (!autoFitOnResize) return;
+      const pages = Array.from(document.querySelectorAll('.page'));
+      if (!pages.length) return;
+      const maxWidth = Math.max(...pages.map((p) => p.offsetWidth || parseFloat(p.style.width) || 0));
+      if (!maxWidth) return;
+      const availableWidth = Math.max(320, window.innerWidth - 48);
+      applyZoom(Math.min(1, availableWidth / maxWidth));
+    }}
+
+    function zoomIn() {{
+      autoFitOnResize = false;
+      applyZoom(viewerZoom + ZOOM_STEP);
+    }}
+
+    function zoomOut() {{
+      autoFitOnResize = false;
+      applyZoom(viewerZoom - ZOOM_STEP);
+    }}
+
     // ─── Toggle debug bounding boxes ─────────────────────
     let debugMode = {'true' if self.config.debug_boxes else 'false'};
     function toggleDebug() {{
@@ -520,6 +578,9 @@ class FixedLayoutRenderer:
       }});
       document.body.removeChild(m);
     }}
+
+    document.addEventListener('DOMContentLoaded', () => fitToPage(true));
+    window.addEventListener('resize', () => fitToPage());
   </script>
 </body>
 </html>'''

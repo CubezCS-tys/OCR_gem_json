@@ -30,6 +30,11 @@ JWT_TTL_SECS = int(os.getenv("JWT_TTL_SECS", str(24 * 3600)))  # 24 h default
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
 
+# ── Admin config ──────────────────────────────────────────────────────────────
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+ADMIN_JWT_TTL  = 8 * 3600  # 8 hours
+
+
 # ── Token helpers ─────────────────────────────────────────────────────────────
 
 def create_access_token(email: str) -> str:
@@ -39,6 +44,40 @@ def create_access_token(email: str) -> str:
         "exp": int(time.time()) + JWT_TTL_SECS,
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def create_admin_token() -> str:
+    """Issue a short-lived JWT for the admin dashboard (role=admin)."""
+    payload = {
+        "sub":  "admin",
+        "role": "admin",
+        "iat":  int(time.time()),
+        "exp":  int(time.time()) + ADMIN_JWT_TTL,
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def require_admin(
+    authorization: Optional[str] = Header(default=None),
+) -> None:
+    """FastAPI dependency: verifies Bearer token has role=admin, raises 401 otherwise."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        if payload.get("role") != "admin":
+            raise ValueError("not admin role")
+    except (JWTError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid or expired admin token: {exc}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def decode_access_token(token: str) -> str:
