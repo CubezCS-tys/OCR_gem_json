@@ -90,10 +90,13 @@ def process_one_pdf(
         n_pages = len(result.pages) if result.pages else 0
 
         # Save OCR JSON
-        json_mod.dump(
-            result.as_dict(), open(out_json, "w", encoding="utf-8"),
-            ensure_ascii=False, indent=2,
-        )
+        with open(out_json, "w", encoding="utf-8") as f:
+            json_mod.dump(
+                result.as_dict(),
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
 
         # Download searchable PDF
         stream = client.get_analyze_result_pdf(
@@ -134,7 +137,7 @@ async def process_all_pdfs(
 
     logger.info("%d PDFs in %s — %d workers", len(pdf_files), input_dir, max_workers)
     output_dir.mkdir(parents=True, exist_ok=True)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     sem = asyncio.Semaphore(max_workers)
 
     async def _bounded(p: Path) -> dict:

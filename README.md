@@ -1,215 +1,110 @@
-# PDF to HTML Converter with Google Gemini
+# OCR_gem_json
 
-Convert Arabic/RTL PDFs to structured HTML using Google Gemini's document understanding API with distributed processing for scale.
+OCR conversion platform with three active engines:
 
-## Features
+- Azure Document Intelligence for searchable PDFs and pixel-perfect overlays
+- Gemini for semantic HTML
+- Mistral for markdown + images
 
-- ✅ **Multi-language support:** Arabic, English, Hebrew, and other RTL languages
-- ✅ **Structured extraction:** Headers, footers, paragraphs, tables, images, equations
-- ✅ **Math rendering:** LaTeX equations with MathJax
-- ✅ **Chunked processing:** Handle large documents (default: 15 pages per chunk)
-- ✅ **Image extraction:** Extract and embed images from PDFs
-- ✅ **JSON output:** Structured data for further processing
-- ✅ **HTML rebuild:** Regenerate HTML from JSON without API calls
-- 🚀 **Distributed processing:** Celery + Redis for production scale
-- 📊 **Real-time monitoring:** Web dashboard and CLI tools
-- 💰 **Cost optimization:** PDF deduplication and result caching
+## Active Components
 
-## Quick Start
+- `webapp/` - FastAPI backend used in production
+- `frontend/` - customer-facing Next.js frontend
+- `fixed_layout_pipeline/` - Azure pipeline core (searchable PDF + OCR JSON + overlay HTML)
+- `llm_pipelines/` - consolidated Gemini/Mistral stack
 
-### Single Document Processing
+## Output Formats
+
+The webapp supports:
+
+- `searchable_pdf` (Azure)
+- `pixel_html` (Azure + overlay renderer)
+- `semantic_html` (Gemini)
+- `markdown` (Mistral OCR pass 1)
+
+## Quick Start (Current Stack)
+
+### 1) Setup
 
 ```bash
-# Clone or download this repo
 cd OCR_gem_json
-
-# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Set your Gemini API key
-export GEMINI_API_KEY="your-api-key-here"
-# Or create .env file: echo "GEMINI_API_KEY=your-key" > .env
+pip install -r webapp/requirements.txt
 ```
 
-Get your API key at: https://aistudio.google.com/app/apikey
+### 2) Configure Environment
 
-### 2. Process a PDF
+Create/update `.env` in repo root and set at minimum:
+
+- `AZURE_DI_ENDPOINT`
+- `AZURE_DI_API_KEY`
+- `GEMINI_API_KEY`
+- `MISTRAL_API_KEY`
+- `JWT_SECRET`
+
+### 3) Run Backend
 
 ```bash
-# Basic usage
-python pdf_to_html.py pdfs/document.pdf
-
-# With JSON output
-python pdf_to_html.py pdfs/document.pdf --format both
-
-# Custom output name
-python pdf_to_html.py pdfs/document.pdf output.html
-
-# Extract images (requires PyMuPDF)
-python pdf_to_html.py pdfs/document.pdf --extract-images
-
-# High resolution processing
-python pdf_to_html.py pdfs/document.pdf -r high
+cd webapp
+python3 run.py --reload
 ```
 
-### 3. Rebuild HTML from JSON
+### 4) Run Frontend
 
 ```bash
-# Regenerate HTML without API calls
-python rebuild_html.py json_outputs/document.json
-
-# Custom output
-python rebuild_html.py json_outputs/document.json -o custom.html
-
-# Re-extract images
-python rebuild_html.py json_outputs/document.json --pdf pdfs/document.pdf --extract-images
+cd frontend
+npm install
+npm run dev
 ```
 
-## Production Scale Processing
+## CLI Entry Points
 
-For batch processing and distributed workloads, use the Celery + Redis pipeline:
-
-### Quick Setup
+### Fixed-layout pipeline (Azure)
 
 ```bash
-# Run automated setup
-./deploy.sh
-
-# Or manual setup:
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env and add GEMINI_API_KEY
-
-# Start Redis
-redis-server
-
-# Start Celery workers
-celery -A celery_config worker --loglevel=info
-
-# Start monitoring dashboard
-celery -A celery_config flower
+python3 -m fixed_layout_pipeline --help
+python3 -m fixed_layout_pipeline pipeline --input pdfs/scanned --output output_final --workers 4 --dpi 200 --mode replace-text
 ```
 
-### Submit Jobs
+### LLM pipelines (Gemini/Mistral)
+
+Preferred command style:
 
 ```bash
-# Single PDF
-python submit_jobs.py document.pdf
-
-# Entire directory
-python submit_jobs.py --directory ./pdfs --output ./outputs
-
-# High priority processing
-python submit_jobs.py urgent.pdf --priority high
-
-# Check task status
-python submit_jobs.py --status <task_id>
+python3 -m llm_pipelines.pdf_to_html input.pdf output.html
+python3 -m llm_pipelines.mistral_ocr_pipeline input.pdf --output-dir outputs
+python3 -m llm_pipelines.mistral_batch_ocr --pdfs-dir ./pdfs --output-dir ./batch_out
 ```
 
-### Monitor Progress
+Compatibility shims still exist at repo root (`pdf_to_html.py`, `mistral_ocr_pipeline.py`, etc.) and forward into `llm_pipelines/*`.
 
-```bash
-# Real-time CLI monitoring
-python monitor.py
+## Current Project Structure
 
-# Check statistics
-python monitor.py --stats
-
-# Web dashboard (Flower)
-# Open http://localhost:5555
-```
-
-**Features:**
-- 📦 **PDF deduplication:** Automatic hash-based duplicate detection
-- 💾 **Result caching:** 7-day cache for instant retrieval
-- ⚡ **Priority queues:** URGENT, HIGH, NORMAL, LOW priorities
-- 🔄 **Auto-retry:** Exponential backoff on failures
-- 📊 **Real-time monitoring:** CLI and web dashboards
-- 🌐 **Multi-worker:** Scale across multiple machines
-
-See [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) for complete deployment guide.
-
-## Project Structure
-
-```
+```text
 OCR_gem_json/
-├── pdf_to_html.py      # Main script: PDF → JSON → HTML
-├── rebuild_html.py     # Rebuild HTML from JSON
-├── celery_config.py    # Celery configuration
-├── tasks.py            # Celery task definitions
-├── submit_jobs.py      # Job submission CLI
-├── monitor.py          # Monitoring CLI
-├── deploy.sh           # Production deployment script
-├── requirements.txt    # Dependencies
-├── README.md          # This file
-├── PRODUCTION_SETUP.md # Production deployment guide
-├── USAGE.md           # Detailed usage guide
-├── .env               # API key (git-ignored)
-├── venv/              # Virtual environment
-├── pdfs/              # Input PDFs
-├── json_outputs/      # Structured JSON output
-├── html_outputs/      # Generated HTML files
-├── archives/          # Old files/experiments
-└── docs/              # Additional documentation
+├── webapp/
+├── frontend/
+├── fixed_layout_pipeline/
+├── llm_pipelines/
+├── batch1_flp/
+├── archival/
+├── requirements.txt
+├── .env
+└── README.md
 ```
-
-## Key Scripts
-
-### pdf_to_html.py
-
-Main processing script. Uploads PDF to Gemini, extracts structured data, generates HTML.
-
-**Arguments:**
-- `input`: PDF file path
-- `output`: Output file path (optional)
-- `--format`: Output format (`html`, `json`, `both`)
-- `--resolution`: Media resolution (`low`, `medium`, `high`)
-- `--chunk-size`: Pages per chunk (default: 15)
-- `--extract-images`: Extract actual images
-- `--image-dpi`: Image resolution (default: 150)
-- `--max-tokens`: Max output tokens (default: 65536)
-
-### rebuild_html.py
-
-Regenerate HTML from existing JSON without API calls.
-
-**Arguments:**
-- `json_file`: Input JSON path
-- `-o, --output`: Output HTML path
-- `--pdf`: Original PDF (for image extraction)
-- `--extract-images`: Re-extract images
-- `--image-dpi`: Image resolution
-
-## Cost Estimation
-
-Gemini 3 Flash Preview pricing (Jan 2026):
-- **Input:** $0.50 per 1M tokens
-- **Output:** $3.00 per 1M tokens
-
-Typical cost: **$0.05-$0.10 per 35-page document** (depending on complexity)
-
-## Requirements
-
-- Python 3.10+
-- Google Gemini API key
-- `google-genai` SDK
-- `pydantic` for validation
-- `PyMuPDF` (optional, for image extraction)
 
 ## Documentation
 
-- [USAGE.md](USAGE.md) - Detailed usage examples
-- [docs/claude.md](docs/claude.md) - Architecture notes
-- [docs/PDF_PROCESSING.md](docs/PDF_PROCESSING.md) - PDF processing details
+- `webapp/README.md` - API/backend runtime and process flow
+- `fixed_layout_pipeline/README.md` - Azure pipeline CLI/API
+- `llm_pipelines/README.md` - Gemini/Mistral module map and usage
 
-## License
+## Legacy/Archived Items
 
-MIT License
+Older docs, control-panel tooling, old viewers, and test scripts were moved under:
 
-## Support
+- `archival/root_cleanup_2026-02-21/`
 
-For issues or questions, please open an issue on GitHub.
+Use those only if you explicitly need legacy workflows.

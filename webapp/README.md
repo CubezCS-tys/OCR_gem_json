@@ -1,67 +1,147 @@
-# ScanToText — Free OCR Web App
+# ScanToText Webapp
 
-A simple B2C web application that converts scanned PDFs and images into searchable documents.
+FastAPI backend for upload/process/download OCR jobs with free and pro tiers.
 
-## Features
+## What This Folder Does
 
-| Tier | Input | Output | Price |
-|------|-------|--------|-------|
-| **Free** | Scanned PDF | Searchable PDF (text-selectable, Ctrl+F) | $0 |
-| **Free** | Image (JPG/PNG/TIFF/WebP) | Searchable PDF | $0 |
-| **Pro** (Stripe) | Scanned PDF or Image | Pixel-perfect HTML recreation | Pay per document |
+- Accepts PDF/image uploads
+- Free flow: generate searchable PDF
+- Pro flow: runs parallel processors and returns a ZIP with requested formats
+- Stores job/user state in DB (SQLite by default, PostgreSQL supported)
+- Handles auth (Google OAuth + JWT), Stripe billing, admin endpoints
 
-## Quick Start
+## Key Files
 
-### 1. Install dependencies
+- `app.py`: FastAPI app + routes
+- `ocr_service.py`: processing orchestration
+- `run.py`: local dev runner
+- `db.py`: SQLAlchemy models and job/user operations
+- `auth.py`: JWT + Google auth
+- `stripe_service.py`: Stripe checkout/webhook
+- `alembic/`: DB migrations
+
+## Run Commands
+
+### 1) Install
 
 ```bash
 cd webapp
 pip install -r requirements.txt
 ```
 
-### 2. Configure environment
+### 2) Configure env
 
 ```bash
 cp .env.example .env
-# Edit .env with your Azure DI + Stripe keys
 ```
 
-### 3. Run
+Set at minimum:
+
+- `AZURE_DI_ENDPOINT`
+- `AZURE_DI_API_KEY`
+- `JWT_SECRET`
+
+If you use billing/auth features, also set Stripe and Google OAuth variables from `.env.example`.
+
+### 3) Start (dev)
 
 ```bash
-python run.py
-# Open http://localhost:8000
+cd webapp
+python3 run.py --reload
 ```
 
-## Architecture
+Equivalent direct command:
 
-```
-webapp/
-├── app.py              # FastAPI backend
-├── ocr_service.py      # Wraps fixed_layout_pipeline (no modifications)
-├── stripe_service.py   # Stripe checkout + webhook handling
-├── run.py              # Entry point
-├── requirements.txt
-├── .env.example
-├── static/
-│   ├── index.html      # Single-page frontend
-│   ├── style.css
-│   └── app.js
-└── uploads/            # Temporary file storage (auto-created)
+```bash
+cd webapp
+uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-The backend imports from `fixed_layout_pipeline` as a library — **zero modifications** to the existing pipeline code.
+### 4) Start (prod-style)
 
-## Environment Variables
+```bash
+cd webapp
+gunicorn app:app \
+  --worker-class uvicorn.workers.UvicornWorker \
+  --workers 4 \
+  --bind 0.0.0.0:8000 \
+  --timeout 120 \
+  --keep-alive 5
+```
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `AZURE_DI_ENDPOINT` | Yes | Azure Document Intelligence endpoint |
-| `AZURE_DI_API_KEY` | Yes | Azure Document Intelligence API key |
-| `STRIPE_SECRET_KEY` | Yes | Stripe secret key (sk_test_... or sk_live_...) |
-| `STRIPE_PUBLISHABLE_KEY` | Yes | Stripe publishable key (pk_test_... or pk_live_...) |
-| `STRIPE_WEBHOOK_SECRET` | Yes | Stripe webhook signing secret (whsec_...) |
-| `STRIPE_PRICE_ID` | Yes | Stripe Price ID for the HTML conversion product |
-| `PRO_PRICE_CENTS` | No | Price in cents (default: 299 = $2.99) |
-| `MAX_FILE_SIZE_MB` | No | Max upload size in MB (default: 50) |
-| `BASE_URL` | No | Public URL (default: http://localhost:8000) |
+### 5) Database migration commands
+
+```bash
+cd webapp
+alembic upgrade head
+alembic revision -m "your_migration_name"
+```
+
+## API Workflow Commands
+
+### Free flow
+
+Upload:
+
+```bash
+curl -F "file=@/path/to/input.pdf" http://localhost:8000/api/upload
+```
+
+Process free:
+
+```bash
+curl -X POST http://localhost:8000/api/process/free/<job_id>
+```
+
+Check status:
+
+```bash
+curl http://localhost:8000/api/status/<job_id>
+```
+
+Download:
+
+```bash
+curl -L http://localhost:8000/api/download/<job_id> -o result.pdf
+```
+
+### Pro flow
+
+Requires bearer JWT:
+
+```bash
+curl -X POST "http://localhost:8000/api/process/pro/<job_id>?formats=searchable_pdf,pixel_html,semantic_html,markdown" \
+  -H "Authorization: Bearer <jwt_token>"
+```
+
+## Output Formats in Pro
+
+- `searchable_pdf`
+- `pixel_html`
+- `semantic_html`
+- `markdown`
+
+`ocr_service.py` runs Azure/Gemini/Mistral workers in parallel and packages outputs into ZIP.
+
+Format-to-engine mapping:
+
+- `searchable_pdf` -> Azure DI (`fixed_layout_pipeline.webapp_api`)
+- `pixel_html` -> Azure DI + overlay renderer (`fixed_layout_pipeline.webapp_api`)
+- `semantic_html` -> Gemini (`llm_pipelines.pdf_to_html`)
+- `markdown` -> Mistral OCR pass 1 (`llm_pipelines.mistral_ocr_pipeline`)
+
+## Integration Boundary
+
+Webapp imports OCR runtime through:
+
+- `fixed_layout_pipeline.webapp_api` (Azure searchable/pdf+overlay)
+- `llm_pipelines.pdf_to_html` (Gemini semantic HTML)
+- `llm_pipelines.mistral_ocr_pipeline` (Mistral markdown/images)
+
+This keeps webapp functionality stable even when internal OCR modules are refactored.
+
+## Repo Layout Note
+
+`llm_pipelines/` contains the real Gemini/Mistral implementation code.
+Top-level files like `pdf_to_html.py` are compatibility shims for old CLI/imports.
+New code should import from `llm_pipelines.*`.

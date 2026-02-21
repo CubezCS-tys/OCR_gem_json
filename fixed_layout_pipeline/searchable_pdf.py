@@ -20,6 +20,7 @@ API flow
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
@@ -36,15 +37,17 @@ def generate_searchable_pdf(
     config: AzureConfig,
     *,
     pages: Optional[str] = None,
+    output_json_path: Optional[Path] = None,
 ) -> Path:
     """
-    Generate a searchable PDF from a scanned PDF via Azure DI.
+    Generate a searchable PDF from a scanned PDF via Azure DI (prebuilt-read).
 
     Args:
-        pdf_path:    Path to the input (analog / scanned) PDF.
-        output_path: Where to write the searchable PDF.
-        config:      Azure DI credentials (endpoint + api_key).
-        pages:       Optional page range string, e.g. ``"1-3"`` (1-based).
+        pdf_path:         Path to the input (analog / scanned) PDF.
+        output_path:      Where to write the searchable PDF.
+        config:           Azure DI credentials (endpoint + api_key).
+        pages:            Optional page range string, e.g. ``"1-3"`` (1-based).
+        output_json_path: If provided, the Azure OCR result JSON is saved here.
 
     Returns:
         The *output_path* for convenience.
@@ -106,6 +109,14 @@ def generate_searchable_pdf(
         len(result.pages) if result.pages else 0,
     )
 
+    # ── Save OCR JSON (Azure prebuilt-read result) ────────────────────────────
+    if output_json_path is not None:
+        output_json_path = Path(output_json_path)
+        output_json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_json_path, "w", encoding="utf-8") as jf:
+            json.dump(result.as_dict(), jf, ensure_ascii=False, indent=2)
+        logger.info("OCR JSON saved: %s", output_json_path)
+
     # ── Download the searchable PDF ──────────────────────────────────────────
     logger.info("Downloading searchable PDF (result_id=%s)...", operation_id)
     pdf_stream = client.get_analyze_result_pdf(
@@ -136,6 +147,7 @@ def generate_searchable_pdf_from_bytes(
     config: AzureConfig,
     *,
     pages: Optional[str] = None,
+    output_json_path: Optional[Path] = None,
 ) -> Path:
     """
     Same as :func:`generate_searchable_pdf` but accepts raw bytes.
@@ -174,6 +186,14 @@ def generate_searchable_pdf_from_bytes(
 
     result = poller.result()
     operation_id = poller.details["operation_id"]
+
+    # ── Save OCR JSON ────────────────────────────────────────────────────────
+    if output_json_path is not None:
+        output_json_path = Path(output_json_path)
+        output_json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_json_path, "w", encoding="utf-8") as jf:
+            json.dump(result.as_dict(), jf, ensure_ascii=False, indent=2)
+        logger.info("OCR JSON saved: %s", output_json_path)
 
     pdf_stream = client.get_analyze_result_pdf(
         model_id=result.model_id,

@@ -90,20 +90,14 @@ def _run_azure(pdf_path: Path, work_dir: Path, formats: list[str]) -> dict[str, 
     """Azure prebuilt-read → searchable PDF + pixel-perfect HTML."""
     partial: dict[str, Path | None] = {}
     try:
-        from fixed_layout_pipeline.batch_pipeline import process_one
-        from fixed_layout_pipeline.config import AzureConfig
-
-        config = AzureConfig()
-        config.validate()
+        from fixed_layout_pipeline.webapp_api import process_one_with_azure_env
 
         azure_out = work_dir / "azure_output"
         azure_out.mkdir(parents=True, exist_ok=True)
 
-        res = process_one(
+        res = process_one_with_azure_env(
             pdf_path=pdf_path,
             output_dir=azure_out,
-            endpoint=config.endpoint,
-            api_key=config.api_key,
             dpi=300,
             render_mode="replace-text",
         )
@@ -138,7 +132,7 @@ def _run_gemini(pdf_path: Path, work_dir: Path, stem: str) -> dict[str, Path | N
         root = str(Path(__file__).resolve().parent.parent)
         if root not in _sys.path:
             _sys.path.insert(0, root)
-        from pdf_to_html import pdf_to_html as _pdf_to_html
+        from llm_pipelines.pdf_to_html import pdf_to_html as _pdf_to_html
         sem_path = work_dir / f"{stem}_semantic.html"
         res = _pdf_to_html(str(pdf_path), str(sem_path))
         result = sem_path if sem_path.exists() else None
@@ -152,7 +146,7 @@ def _run_gemini(pdf_path: Path, work_dir: Path, stem: str) -> dict[str, Path | N
 def _run_mistral(pdf_path: Path, work_dir: Path) -> dict[str, Path | None]:
     """Mistral OCR Pass 1 only → raw markdown (no LLM structuring pass)."""
     try:
-        from mistral_ocr_pipeline import MistralOCRPipeline, MistralPipelineConfig
+        from llm_pipelines.mistral_ocr_pipeline import MistralOCRPipeline, MistralPipelineConfig
 
         mistral_out = work_dir / "mistral_output"
         mistral_out.mkdir(parents=True, exist_ok=True)
@@ -309,22 +303,19 @@ def generate_searchable_pdf_only(
     if parent not in sys.path:
         sys.path.insert(0, parent)
 
-    from fixed_layout_pipeline.config import AzureConfig
-    from fixed_layout_pipeline.searchable_pdf import (
-        generate_searchable_pdf,
-        generate_searchable_pdf_from_bytes,
+    from fixed_layout_pipeline.webapp_api import (
+        generate_searchable_pdf_from_bytes_with_azure_env,
+        generate_searchable_pdf_with_azure_env,
     )
 
-    config = AzureConfig()
-    config.validate()
     output_path = work_dir / f"{Path(filename).stem}_searchable.pdf"
 
     if _is_pdf(filename):
         input_pdf = work_dir / "input.pdf"
         input_pdf.write_bytes(file_bytes)
-        generate_searchable_pdf(input_pdf, output_path, config)
+        generate_searchable_pdf_with_azure_env(input_pdf, output_path)
     else:
         pdf_bytes = _image_to_pdf_bytes(file_bytes)
-        generate_searchable_pdf_from_bytes(pdf_bytes, output_path, config)
+        generate_searchable_pdf_from_bytes_with_azure_env(pdf_bytes, output_path)
 
     return output_path

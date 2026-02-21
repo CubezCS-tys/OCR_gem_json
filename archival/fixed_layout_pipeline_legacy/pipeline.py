@@ -18,17 +18,15 @@ from pathlib import Path
 from typing import Optional
 
 from .config import PipelineConfig
-from .figure_extractor import extract_figures
 from .html_renderer import FixedLayoutRenderer
 from .ingest import extract_source_metadata, rasterise_pdf
 from .ocr_engine import analyze_pdf, analyze_page_image
-from .preprocess import PreprocessResult, preprocess_page, load_image_from_bytes
+from .preprocess import preprocess_page
 from .reading_order import resolve_reading_order
 from .schema import (
     CanonicalDocument,
     Page,
     PageImage,
-    ProcessingInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,12 +84,12 @@ class Pipeline:
         logger.info(f"{'='*60}")
 
         # ─── Stage 1: Extract source metadata ────────────────────
-        logger.info("[1/6] Extracting source metadata...")
+        logger.info("[1/7] Extracting source metadata...")
         source = extract_source_metadata(pdf_path)
         logger.info(f"  Pages: {source.page_count}, Size: {source.file_size_bytes:,} bytes")
 
         # ─── Stage 2: Rasterise pages ────────────────────────────
-        logger.info(f"[2/6] Rasterising at {self.config.raster.dpi} DPI...")
+        logger.info(f"[2/7] Rasterising at {self.config.raster.dpi} DPI...")
         page_images_dir = output_dir / stem / "pages" if self.config.keep_intermediates else None
 
         page_images = rasterise_pdf(
@@ -114,7 +112,7 @@ class Pipeline:
             self.config.preprocess.binarise,
             self.config.preprocess.auto_orient,
         ]):
-            logger.info("[3/6] Preprocessing pages...")
+            logger.info("[3/7] Preprocessing pages...")
             preprocessed_images = []
             for i, page_img in enumerate(page_images):
                 # Load the rasterised image
@@ -169,10 +167,10 @@ class Pipeline:
 
             logger.info(f"  Applied: {preprocessing_steps}")
         else:
-            logger.info("[3/6] Preprocessing: skipped (all toggles off)")
+            logger.info("[3/7] Preprocessing: skipped (all toggles off)")
 
         # ─── Stage 4: OCR with Azure Document Intelligence ───────
-        logger.info("[4/6] Running Azure Document Intelligence OCR...")
+        logger.info("[4/7] Running Azure Document Intelligence OCR...")
 
         if preprocessed_images:
             # Send preprocessed images one by one
@@ -197,7 +195,16 @@ class Pipeline:
         if self.config.extract_figures:
             logger.info("[5/7] Extracting figures from pages...")
             figure_count = sum(1 for p in doc.pages for b in p.blocks if b.block_type.value == "figure")
+            can_extract_figures = False
             if figure_count > 0:
+                try:
+                    from .figure_extractor import extract_figures  # noqa: PLC0415
+                except ImportError as exc:
+                    logger.warning("  Figure extraction unavailable (%s), skipping", exc)
+                else:
+                    can_extract_figures = True
+
+            if figure_count > 0 and can_extract_figures:
                 # Load PIL images for figure extraction
                 from PIL import Image
                 import numpy as np
@@ -226,7 +233,7 @@ class Pipeline:
                 
                 doc = extract_figures(doc, output_dir / stem, pil_images)
                 logger.info(f"  Extracted {figure_count} figures")
-            else:
+            elif figure_count == 0:
                 logger.info("  No figures detected")
         else:
             logger.info("[5/7] Figure extraction: disabled")
@@ -259,7 +266,7 @@ class Pipeline:
             from .searchable_pdf import generate_searchable_pdf
 
             spdf_path = output_dir / stem / f"{stem}_searchable.pdf"
-            logger.info("[8] Generating searchable PDF via Azure DI prebuilt-read...")
+            logger.info("[8/8 optional] Generating searchable PDF via Azure DI prebuilt-read...")
             try:
                 generate_searchable_pdf(
                     pdf_path=pdf_path,
@@ -270,7 +277,10 @@ class Pipeline:
             except Exception as exc:
                 logger.warning(f"  Searchable PDF generation failed: {exc}")
         else:
-            logger.info("[8] Searchable PDF: disabled (set generate_searchable_pdf=True to enable)")
+            logger.info(
+                "[8/8 optional] Searchable PDF: disabled "
+                "(set generate_searchable_pdf=True to enable)"
+            )
 
         elapsed = time.time() - start_time
         doc.processing.processing_time_seconds = elapsed

@@ -10,7 +10,13 @@ from pathlib import Path
 from celery import Task
 from celery.utils.log import get_task_logger
 from celery_config import app, PRIORITY_NORMAL
-from pdf_to_html import PDFProcessor, ProcessingConfig, MediaResolution, DocumentStructure, HTMLRenderer
+from llm_pipelines.pdf_to_html import (
+    PDFProcessor,
+    ProcessingConfig,
+    MediaResolution,
+    DocumentStructure,
+    HTMLRenderer,
+)
 
 # Gemini 2.5 Flash pricing (as of January 2026)
 # https://ai.google.dev/pricing
@@ -292,7 +298,7 @@ def rebuild_html_task(
         
         # Extract images if requested
         if extract_images and pdf_path:
-            from pdf_to_html import ImageExtractor, HAS_PYMUPDF
+            from llm_pipelines.pdf_to_html import ImageExtractor, HAS_PYMUPDF
             
             if HAS_PYMUPDF:
                 self.update_state(

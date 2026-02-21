@@ -162,10 +162,10 @@ def on_startup():
         _root = str(Path(__file__).resolve().parent.parent)
         if _root not in _sys.path:
             _sys.path.insert(0, _root)
-        from fixed_layout_pipeline.config import AzureConfig  # noqa: F401
-        from fixed_layout_pipeline.searchable_pdf import (  # noqa: F401
-            generate_searchable_pdf,
-            generate_searchable_pdf_from_bytes,
+        from fixed_layout_pipeline.webapp_api import (  # noqa: F401
+            generate_searchable_pdf_from_bytes_with_azure_env,
+            generate_searchable_pdf_with_azure_env,
+            process_one_with_azure_env,
         )
         logger.info("OCR pipeline modules pre-loaded (worker warm-up OK)")
     except Exception as _e:

@@ -45,7 +45,7 @@ examples/output/*.html
 output/
 *.html
 outputs_2_prompt_audit/
-
+2026/
 
 # Testing
 .pytest_cache/
@@ -92,6 +92,7 @@ pdfs/
 new_pipeline/
 output_with_figures/
 output_final.zip
+batch1_flp/
 
 # Large generated JSONs
 *_canonical.json

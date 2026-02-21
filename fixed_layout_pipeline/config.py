@@ -9,10 +9,14 @@ word-level bounding boxes, reading order, and table structure.
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 # Auto-load .env from workspace root
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency in minimal envs
+    def load_dotenv(*_args, **_kwargs) -> bool:
+        return False
+
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 

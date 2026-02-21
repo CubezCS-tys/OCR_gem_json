@@ -209,7 +209,7 @@ async def run_pipeline(
         len(pdf_files), input_dir, output_dir, max_workers, render_mode,
     )
     output_dir.mkdir(parents=True, exist_ok=True)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     sem = asyncio.Semaphore(max_workers)
 
     async def _bounded(p: Path) -> dict:

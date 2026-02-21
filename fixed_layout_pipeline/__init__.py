@@ -1,37 +1,60 @@
 """
-Fixed-Layout OCR Pipeline
-=========================
+Core fixed-layout OCR package exports.
 
-Canonical JSON + Fixed-Layout HTML Overlay architecture for
-pixel-accurate reproduction of scanned Arabic/English/French documents.
-
-Primary OCR engine: Azure Document Intelligence (prebuilt-layout)
-Architecture: PDF → Rasterise → Preprocess → OCR → Canonical JSON → HTML overlay
-
-Usage:
-    from fixed_layout_pipeline import Pipeline, PipelineConfig
-
-    config = PipelineConfig.from_env()
-    pipeline = Pipeline(config)
-    doc, html_path = pipeline.process("document.pdf")
-    pipeline.regenerate_html("output/doc_canonical.json")
+This package is intentionally minimal:
+- searchable PDF generation
+- OCR JSON export
+- pixel-perfect overlay HTML rendering
+- async/parallel batch processing
 """
 
-from .config import PipelineConfig
-from .pipeline import Pipeline, process_pdf
-from .schema import CanonicalDocument
-from .html_renderer import FixedLayoutRenderer
+from __future__ import annotations
 
-__version__ = "1.1.0"
+import importlib
+from typing import TYPE_CHECKING, Any
+
+__version__ = "1.3.0"
+
 __all__ = [
-    "Pipeline",
-    "PipelineConfig",
-    "CanonicalDocument",
-    "FixedLayoutRenderer",
-    "process_pdf",
-    # New modules (v1.1)
-    "batch_searchable",
-    "validate_pdfs",
-    "gemini_html",
-    "read_html_renderer",
+    "AzureConfig",
+    "process_one",
+    "run_pipeline",
+    "generate_searchable_pdf",
+    "generate_searchable_pdf_from_bytes",
+    "process_one_with_azure_env",
+    "generate_searchable_pdf_with_azure_env",
+    "generate_searchable_pdf_from_bytes_with_azure_env",
 ]
+
+if TYPE_CHECKING:
+    from .batch_pipeline import process_one, run_pipeline
+    from .config import AzureConfig
+    from .searchable_pdf import (
+        generate_searchable_pdf,
+        generate_searchable_pdf_from_bytes,
+    )
+    from .webapp_api import (
+        generate_searchable_pdf_from_bytes_with_azure_env,
+        generate_searchable_pdf_with_azure_env,
+        process_one_with_azure_env,
+    )
+
+
+def __getattr__(name: str) -> Any:
+    if name == "AzureConfig":
+        from .config import AzureConfig
+        return AzureConfig
+    if name in {"process_one", "run_pipeline"}:
+        batch_pipeline = importlib.import_module(".batch_pipeline", __name__)
+        return getattr(batch_pipeline, name)
+    if name in {"generate_searchable_pdf", "generate_searchable_pdf_from_bytes"}:
+        searchable_pdf = importlib.import_module(".searchable_pdf", __name__)
+        return getattr(searchable_pdf, name)
+    if name in {
+        "process_one_with_azure_env",
+        "generate_searchable_pdf_with_azure_env",
+        "generate_searchable_pdf_from_bytes_with_azure_env",
+    }:
+        webapp_api = importlib.import_module(".webapp_api", __name__)
+        return getattr(webapp_api, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
