@@ -8,13 +8,13 @@ your DocumentStructure schema using Gemini for reasoning.
 
 Usage:
     # Process single file
-    python3 batch_to_structured.py batch_markdown/0308-036-091-007.json
+    python3 -m llm_pipelines.batch_to_structured batch_markdown/0308-036-091-007.json
     
     # Process all batch results
-    python3 batch_to_structured.py batch_markdown/*.json
+    python3 -m llm_pipelines.batch_to_structured batch_markdown/*.json
     
     # Use Mistral Large instead of Gemini
-    python3 batch_to_structured.py batch_markdown/*.json --provider mistral
+    python3 -m llm_pipelines.batch_to_structured batch_markdown/*.json --provider mistral
 """
 
 import os
@@ -46,10 +46,7 @@ from mistralai import Mistral
 from pydantic import ValidationError
 
 # Reuse schemas and renderer from existing pipeline
-try:
-    from .pdf_to_html import DocumentStructure, HTMLRenderer
-except ImportError:  # pragma: no cover - direct script execution fallback
-    from pdf_to_html import DocumentStructure, HTMLRenderer
+from .pdf_to_html import DocumentStructure, HTMLRenderer
 
 logging.basicConfig(
     level=logging.INFO,

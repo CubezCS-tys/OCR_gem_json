@@ -38,10 +38,7 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 import dotenv
-try:
-    from .image_utils import normalise_data_uri
-except ImportError:  # pragma: no cover - direct script execution fallback
-    from image_utils import normalise_data_uri
+from .image_utils import normalise_data_uri
 
 dotenv.load_dotenv()
 

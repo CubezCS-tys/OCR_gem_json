@@ -4,16 +4,13 @@ Simple script to regenerate HTML from edited JSON files.
 Used by the frontend API to rebuild HTML after user edits.
 
 Usage:
-    python rebuild_html.py <json_path> <output_html_path>
+    python3 -m llm_pipelines.rebuild_html_simple <json_path> <output_html_path>
 """
 
 import sys
 import json
 import pathlib
-try:
-    from .pdf_to_html import DocumentStructure, HTMLRenderer
-except ImportError:  # pragma: no cover - direct script execution fallback
-    from pdf_to_html import DocumentStructure, HTMLRenderer
+from .pdf_to_html import DocumentStructure, HTMLRenderer
 
 def rebuild_html(json_path: str, html_path: str) -> None:
     """Rebuild HTML from JSON document structure."""
@@ -40,7 +37,7 @@ def rebuild_html(json_path: str, html_path: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python rebuild_html.py <json_path> <output_html_path>")
+        print("Usage: python3 -m llm_pipelines.rebuild_html_simple <json_path> <output_html_path>")
         sys.exit(1)
     
     json_path = sys.argv[1]

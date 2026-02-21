@@ -85,8 +85,8 @@ def parse_batch_results(jsonl_file: str, output_dir: str):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 parse_batch_results.py <jsonl_file> [output_dir]")
-        print("Example: python3 parse_batch_results.py batch_markdown/batch_*.jsonl batch_markdown/")
+        print("Usage: python3 -m llm_pipelines.parse_batch_results <jsonl_file> [output_dir]")
+        print("Example: python3 -m llm_pipelines.parse_batch_results batch_markdown/batch_*.jsonl batch_markdown/")
         sys.exit(1)
     
     jsonl_file = sys.argv[1]

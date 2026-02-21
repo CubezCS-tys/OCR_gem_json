@@ -9,10 +9,7 @@ Shows different ways to use the batch OCR API:
 """
 
 from pathlib import Path
-try:
-    from .mistral_batch_ocr import MistralBatchOCR, BatchOCRConfig
-except ImportError:  # pragma: no cover - direct script execution fallback
-    from mistral_batch_ocr import MistralBatchOCR, BatchOCRConfig
+from .mistral_batch_ocr import MistralBatchOCR, BatchOCRConfig
 
 # ---------------------------------------------------------------------------
 # Example 1: Process entire directory with defaults

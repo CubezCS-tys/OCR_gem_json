@@ -6,7 +6,7 @@ Production-grade Mistral OCR pipeline with two-pass architecture.
 Pass 1: Mistral OCR  → rich markdown text per page
 Pass 2: Mistral Large → transform into DocumentStructure schema (same as Gemini pipeline)
 
-Outputs the SAME Pydantic models as pdf_to_html.py, so HTMLRenderer works unchanged.
+Outputs the SAME Pydantic models as `llm_pipelines.pdf_to_html`, so HTMLRenderer works unchanged.
 
 Architecture:
     PDF
@@ -17,8 +17,8 @@ Architecture:
                          └─> structured.json + final.html
 
 Usage:
-    python mistral_ocr_pipeline.py <pdf_path> [--output-dir ./outputs] [--pages-per-chunk 5]
-    python mistral_ocr_pipeline.py <pdf_path> --parallel --workers 8 --pages-per-chunk 2
+    python3 -m llm_pipelines.mistral_ocr_pipeline <pdf_path> [--output-dir ./outputs] [--pages-per-chunk 5]
+    python3 -m llm_pipelines.mistral_ocr_pipeline <pdf_path> --parallel --workers 8 --pages-per-chunk 2
 """
 
 import os
@@ -39,28 +39,16 @@ from google import genai
 from google.genai import types
 
 # Reuse EXACT schemas + renderer from the Gemini pipeline
-try:
-    from .pdf_to_html import (
-        DocumentStructure,
-        DocumentMetadata,
-        PageContent,
-        TextBlock,
-        Table,
-        Image,
-        HTMLRenderer,
-    )
-    from .image_utils import normalise_data_uri
-except ImportError:  # pragma: no cover - direct script execution fallback
-    from pdf_to_html import (
-        DocumentStructure,
-        DocumentMetadata,
-        PageContent,
-        TextBlock,
-        Table,
-        Image,
-        HTMLRenderer,
-    )
-    from image_utils import normalise_data_uri
+from .pdf_to_html import (
+    DocumentStructure,
+    DocumentMetadata,
+    PageContent,
+    TextBlock,
+    Table,
+    Image,
+    HTMLRenderer,
+)
+from .image_utils import normalise_data_uri
 
 load_dotenv()
 

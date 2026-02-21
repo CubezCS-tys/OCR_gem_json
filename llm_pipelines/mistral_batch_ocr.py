@@ -7,8 +7,8 @@ Handles batch submission of PDFs to Mistral OCR API with automatic
 chunking, polling, and result retrieval.
 
 Usage:
-    python mistral_batch_ocr.py --pdfs-dir ./pdfs --output-dir ./raw_ocr
-    python mistral_batch_ocr.py --pdf-list pdfs.txt --batch-size 500
+    python3 -m llm_pipelines.mistral_batch_ocr --pdfs-dir ./pdfs --output-dir ./raw_ocr
+    python3 -m llm_pipelines.mistral_batch_ocr --pdf-list pdfs.txt --batch-size 500
 """
 
 import os

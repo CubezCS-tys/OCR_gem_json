@@ -78,8 +78,6 @@ python3 -m llm_pipelines.mistral_ocr_pipeline input.pdf --output-dir outputs
 python3 -m llm_pipelines.mistral_batch_ocr --pdfs-dir ./pdfs --output-dir ./batch_out
 ```
 
-Compatibility shims still exist at repo root (`pdf_to_html.py`, `mistral_ocr_pipeline.py`, etc.) and forward into `llm_pipelines/*`.
-
 ## Current Project Structure
 
 ```text

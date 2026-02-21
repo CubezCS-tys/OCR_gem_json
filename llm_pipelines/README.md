@@ -2,10 +2,6 @@
 
 Consolidated Gemini/Mistral OCR stack used by the project.
 
-This folder contains the real implementation code. Root-level files like
-`pdf_to_html.py` and `mistral_ocr_pipeline.py` are compatibility shims that
-forward to modules in this package.
-
 ## What Lives Here
 
 - `pdf_to_html.py`
@@ -42,13 +38,6 @@ python3 -m llm_pipelines.mistral_ocr_pipeline input.pdf --output-dir outputs
 python3 -m llm_pipelines.mistral_batch_ocr --pdfs-dir ./pdfs --output-dir ./batch_out
 ```
 
-Compatibility form (still supported for now):
-
-```bash
-python3 pdf_to_html.py input.pdf output.html
-python3 mistral_ocr_pipeline.py input.pdf --output-dir outputs
-```
-
 ## Environment Variables
 
 Set as needed per workflow:
@@ -66,4 +55,3 @@ Set as needed per workflow:
 
 - Keep package imports as `from llm_pipelines...` from external modules.
 - Inside this package, prefer relative imports (`from .module import ...`).
-- If removing root shim files, update docs/scripts that still call them directly.

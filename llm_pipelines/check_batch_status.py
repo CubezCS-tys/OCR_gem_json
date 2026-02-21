@@ -5,10 +5,7 @@ Quick status check for batch job.
 
 from pathlib import Path
 import json
-try:
-    from .mistral_batch_ocr import MistralBatchOCR, BatchOCRConfig
-except ImportError:  # pragma: no cover - direct script execution fallback
-    from mistral_batch_ocr import MistralBatchOCR, BatchOCRConfig
+from .mistral_batch_ocr import MistralBatchOCR, BatchOCRConfig
 
 config = BatchOCRConfig(output_dir="batch_markdown")
 pipeline = MistralBatchOCR(config)

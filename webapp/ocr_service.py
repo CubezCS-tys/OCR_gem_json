@@ -126,7 +126,7 @@ def _run_azure(pdf_path: Path, work_dir: Path, formats: list[str]) -> dict[str, 
 
 
 def _run_gemini(pdf_path: Path, work_dir: Path, stem: str) -> dict[str, Path | None]:
-    """Gemini (pdf_to_html.py) → semantic HTML."""
+    """Gemini (llm_pipelines.pdf_to_html) -> semantic HTML."""
     try:
         import sys as _sys
         root = str(Path(__file__).resolve().parent.parent)

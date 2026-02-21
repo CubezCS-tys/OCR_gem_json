@@ -143,5 +143,4 @@ This keeps webapp functionality stable even when internal OCR modules are refact
 ## Repo Layout Note
 
 `llm_pipelines/` contains the real Gemini/Mistral implementation code.
-Top-level files like `pdf_to_html.py` are compatibility shims for old CLI/imports.
 New code should import from `llm_pipelines.*`.

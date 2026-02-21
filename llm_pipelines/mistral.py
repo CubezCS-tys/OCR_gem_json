@@ -3,16 +3,13 @@
 Quick demo / test script for the Mistral OCR two-pass pipeline.
 
 Usage:
-    python mistral.py                          # process default test PDF
-    python mistral.py /path/to/file.pdf        # process specific PDF
-    python mistral.py /path/to/file.pdf -o out # custom output dir
+    python3 -m llm_pipelines.mistral                          # process default test PDF
+    python3 -m llm_pipelines.mistral /path/to/file.pdf        # process specific PDF
+    python3 -m llm_pipelines.mistral /path/to/file.pdf -o out # custom output dir
 """
 
 import sys
-try:
-    from .mistral_ocr_pipeline import MistralOCRPipeline, MistralPipelineConfig
-except ImportError:  # pragma: no cover - direct script execution fallback
-    from mistral_ocr_pipeline import MistralOCRPipeline, MistralPipelineConfig
+from .mistral_ocr_pipeline import MistralOCRPipeline, MistralPipelineConfig
 
 # ── defaults ──
 DEFAULT_PDF = "/home/k22015806/Desktop/OCR_gem_json/pdfs/0005-052-002-003.pdf"
