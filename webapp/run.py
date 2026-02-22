@@ -20,7 +20,7 @@ if parent not in sys.path:
 def main():
     parser = argparse.ArgumentParser(description="ScanToText — Free OCR Web App")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind (default: 0.0.0.0)")
-    parser.add_argument("--port", type=int, default=8000, help="Port (default: 8000)")
+    parser.add_argument("--port", type=int, default=9000, help="Port (default: 8000)")
     parser.add_argument("--reload", action="store_true", help="Auto-reload on code changes")
     args = parser.parse_args()
 

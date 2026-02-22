@@ -59,12 +59,20 @@ export default function Navbar({ account, onAuthClick, onManageClick }: Props) {
               )}
             </div>
           ) : (
-            <button
-              onClick={onAuthClick}
-              className="text-sm bg-ember hover:bg-ember-dark text-white rounded-lg px-4 py-1.5 font-semibold transition-colors"
-            >
-              Free Trial
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onAuthClick}
+                className="text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={onAuthClick}
+                className="text-sm bg-ember hover:bg-ember-dark text-white rounded-lg px-4 py-1.5 font-semibold transition-colors"
+              >
+                Free Trial
+              </button>
+            </div>
           )}
         </div>
       </div>

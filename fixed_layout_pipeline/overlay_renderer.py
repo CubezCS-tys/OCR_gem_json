@@ -49,7 +49,6 @@ DEFAULT_IMAGE_QUALITY = 85
 
 # ── BiDi helpers ──────────────────────────────────────────────────────────────
 
-_STRONG_BIDI = frozenset({"L", "R", "AL"})
 _RTL_BIDI    = frozenset({"R", "AL"})
 
 
@@ -62,10 +61,6 @@ def _first_strong_dir(text: str) -> str:
         if cat == "L":
             return "ltr"
     return "rtl"  # default for Arabic docs
-
-
-def _has_strong_char(text: str) -> bool:
-    return any(unicodedata.bidirectional(ch) in _STRONG_BIDI for ch in text)
 
 
 # ── Page rasterisation ────────────────────────────────────────────────────────
@@ -134,6 +129,11 @@ def _polygon_to_rect(polygon: list[float]) -> tuple[float, float, float, float]:
     return x_min, y_min, x_max - x_min, y_max - y_min
 
 
+def _polygon_to_points(polygon: list[float]) -> list[tuple[float, float]]:
+    """Convert a flattened polygon list into point tuples."""
+    return [(polygon[i], polygon[i + 1]) for i in range(0, len(polygon) - 1, 2)]
+
+
 # ── Text replacement helpers ──────────────────────────────────────────────────
 
 def _sample_bg_color(
@@ -187,18 +187,25 @@ def _sample_bg_color(
     return (m[0], m[1], m[2])
 
 
-def _erase_text_regions(img, lines: list[dict], dpi: int, padding: int = 2):
-    """Paint over OCR text bboxes with sampled background colour."""
+def _erase_text_regions(
+    img,
+    regions: list[dict],
+    dpi: int,
+    padding: int = 2,
+    *,
+    use_polygons: bool = False,
+):
+    """Paint over OCR text regions with sampled background colour."""
     from PIL import ImageDraw as _ImageDraw
 
     draw = _ImageDraw.Draw(img)
     erased = 0
 
-    for line in lines:
-        polygon = line.get("polygon", [])
+    for region in regions:
+        polygon = region.get("polygon", [])
         if len(polygon) < 8:
             continue
-        text = line.get("content", "").strip()
+        text = region.get("content", "").strip()
         if not text:
             continue
 
@@ -211,11 +218,18 @@ def _erase_text_regions(img, lines: list[dict], dpi: int, padding: int = 2):
             continue
 
         bg = _sample_bg_color(img, left, top, width, height)
-        draw.rectangle(
-            [left - padding, top - padding,
-             left + width + padding, top + height + padding],
-            fill=bg,
-        )
+        points = _polygon_to_points(polygon)
+        if use_polygons and len(points) >= 4:
+            poly_px = []
+            for x, y in points[:4]:
+                poly_px.append((x * dpi, y * dpi))
+            draw.polygon(poly_px, fill=bg)
+        else:
+            draw.rectangle(
+                [left - padding, top - padding,
+                 left + width + padding, top + height + padding],
+                fill=bg,
+            )
         erased += 1
 
     return erased
@@ -245,8 +259,9 @@ def _rasterise_and_erase(
 
         # Erase text from the raster
         if page_idx < len(ocr_pages):
-            lines = ocr_pages[page_idx].get("lines", [])
-            n = _erase_text_regions(img, lines, dpi)
+            # Use line regions for clean replacement coverage.
+            regions = ocr_pages[page_idx].get("lines", [])
+            n = _erase_text_regions(img, regions, dpi, use_polygons=False)
             logger.debug("Page %d: erased %d text regions", page_idx + 1, n)
 
         # Encode to data URI
@@ -270,6 +285,32 @@ def _rasterise_and_erase(
 
 # ── HTML builder ──────────────────────────────────────────────────────────────
 
+def _render_page_container(
+    page_index: int,
+    page_dir: str,
+    page_width_px: float,
+    page_height_px: float,
+    page_image_uri: str | None,
+    text_html: list[str],
+    *,
+    text_only: bool = False,
+) -> str:
+    img_tag = (
+        ""
+        if text_only
+        else f'      <img class="page-img" src="{page_image_uri}"\n'
+             f'           alt="Page {page_index + 1}" loading="lazy" />\n'
+    )
+    return f'''
+    <div class="page" id="page-{page_index}" dir="{page_dir}"
+         style="width:{page_width_px:.0f}px; height:{page_height_px:.0f}px;">
+{img_tag}      <div class="text-layer">
+{chr(10).join(text_html)}
+      </div>
+      <div class="page-num">{page_index + 1}</div>
+    </div>'''
+
+
 def render_page_overlay(
     page_data: dict,
     page_image_uri: str | None,
@@ -277,11 +318,11 @@ def render_page_overlay(
     page_index: int,
     text_only: bool = False,
 ) -> str:
-    """Render one page: background image + positioned invisible text lines."""
+    """Render one page in v1 mode: line-level axis-aligned overlays."""
 
-    page_w_in = page_data["width"]     # inches
-    page_h_in = page_data["height"]    # inches
-    pw = page_w_in * dpi               # pixels
+    page_w_in = page_data["width"]  # inches
+    page_h_in = page_data["height"]  # inches
+    pw = page_w_in * dpi  # pixels
     ph = page_h_in * dpi
 
     lines_html = []
@@ -314,7 +355,8 @@ def render_page_overlay(
         escaped = html_mod.escape(text)
 
         lines_html.append(
-            f'        <div class="tw" dir="{line_dir}" '
+            f'        <div class="tw tw-line" dir="{line_dir}" '
+            f'data-fit="legacy" data-angle="0" '
             f'style="left:{left_px:.1f}px; top:{top_px:.1f}px; '
             f'width:{width_px:.1f}px; height:{height_px:.1f}px; '
             f'font-size:{font_size:.1f}px; line-height:{height_px:.1f}px;">'
@@ -325,37 +367,15 @@ def render_page_overlay(
         " ".join(l.get("content", "") for l in page_data.get("lines", []))
     )
 
-    img_tag = (
-        ''
-        if text_only
-        else f'      <img class="page-img" src="{page_image_uri}"\n'
-             f'           alt="Page {page_index + 1}" loading="lazy" />\n'
+    return _render_page_container(
+        page_index,
+        page_dir,
+        pw,
+        ph,
+        page_image_uri,
+        lines_html,
+        text_only=text_only,
     )
-
-    return f'''
-    <div class="page" id="page-{page_index}" dir="{page_dir}"
-         style="width:{pw:.0f}px; height:{ph:.0f}px;">
-{img_tag}      <div class="text-layer">
-{chr(10).join(lines_html)}
-      </div>
-      <div class="page-num">{page_index + 1}</div>
-    </div>'''
-
-
-def _build_line_inner(line: dict, line_dir: str) -> str:
-    """
-    Build the inner HTML for one line.
-    If words are available, wrap opposite-direction words in <span dir="...">.
-    Otherwise just use the line text.
-    """
-    # Get words that belong to this line (by span overlap)
-    text = line.get("content", "")
-    escaped = html_mod.escape(text)
-
-    # We don't have word-to-line mapping in prebuilt-read JSON directly,
-    # so we use the line text. The browser's BiDi algorithm handles
-    # mixed-direction text within the line correctly when dir is set.
-    return escaped
 
 
 # ── Full document ─────────────────────────────────────────────────────────────
@@ -424,7 +444,8 @@ def render_document(
     total_lines = sum(len(p.get("lines", [])) for p in pages)
     total_words = sum(len(p.get("words", [])) for p in pages)
     logger.info(
-        "Rendered %d pages, %d lines, %d words", len(pages), total_lines, total_words
+        "Rendered %d pages, %d lines, %d words",
+        len(pages), total_lines, total_words,
     )
 
     return _wrap_html(
@@ -513,6 +534,16 @@ body {{
   color: transparent;
   white-space: pre;
   overflow: visible;
+  transform-origin: left top;
+}}
+
+.tw-ar {{
+  font-family: 'Traditional Arabic', 'Noto Naskh Arabic', 'Amiri',
+               'Simplified Arabic', 'Tahoma', serif;
+}}
+
+.tw-la {{
+  font-family: 'Noto Serif', 'Times New Roman', 'Georgia', serif;
 }}
 
 /* Text-only / replace-text mode: visible black text */
@@ -638,11 +669,6 @@ function toggleImage() {{
 }}
 
 // ── Text fitting ──────────────────────────────────────────────────
-// Two-pass fitting: 
-//   1. Adjust font-size so text naturally fills ~target width
-//   2. Apply a small scaleX correction for the remainder
-// This keeps scaleX close to 1.0 for all lines, avoiding the
-// "some lines look skinny, others look fat" problem.
 document.addEventListener("DOMContentLoaded", function() {{
   fitAllWords();
   fitToPage(true);
@@ -652,49 +678,40 @@ window.addEventListener("resize", function() {{
   fitToPage();
 }});
 
+function legacyFit(el, targetW, targetH) {{
+  let fontSize = parseFloat(el.style.fontSize) || (targetH * 0.75);
+  const maxIter = 8;
+  for (let i = 0; i < maxIter; i++) {{
+    el.style.fontSize = fontSize.toFixed(2) + "px";
+    el.style.lineHeight = targetH.toFixed(1) + "px";
+    el.style.width = "auto";
+    const natural = el.scrollWidth;
+    if (natural <= 0) break;
+    const ratio = targetW / natural;
+    if (ratio > 0.99 && ratio < 1.01) break;
+    fontSize = fontSize * ratio;
+    fontSize = Math.max(4, Math.min(fontSize, targetH * 1.1));
+  }}
+
+  el.style.fontSize = fontSize.toFixed(2) + "px";
+  el.style.lineHeight = targetH.toFixed(1) + "px";
+  el.style.width = "auto";
+  const finalNatural = el.scrollWidth;
+  if (finalNatural > 0 && targetW > 0) {{
+    const scaleX = targetW / finalNatural;
+    el.style.transform = "scaleX(" + scaleX.toFixed(6) + ")";
+  }} else {{
+    el.style.transform = "none";
+  }}
+}}
+
 function fitAllWords() {{
-  const els = document.querySelectorAll(".tw");
+  const els = document.querySelectorAll(".tw[data-fit]");
   els.forEach(el => {{
     const targetW = parseFloat(el.style.width);
     const targetH = parseFloat(el.style.height);
     if (targetW <= 0 || targetH <= 0) return;
-
-    // Reset any previous transform
-    el.style.transform = "none";
-
-    // Pass 1: Adjust font-size to approximate target width
-    // Start from the CSS font-size, then scale proportionally
-    let fontSize = parseFloat(el.style.fontSize) || (targetH * 0.75);
-    const maxIter = 8;  // more iterations for tighter convergence
-
-    for (let i = 0; i < maxIter; i++) {{
-      el.style.fontSize = fontSize.toFixed(2) + "px";
-      el.style.lineHeight = targetH.toFixed(1) + "px";
-      el.style.width = "auto";
-      const natural = el.scrollWidth;
-      if (natural <= 0) break;
-      
-      const ratio = targetW / natural;
-      // If within 1% of target, scaleX handles the rest
-      if (ratio > 0.99 && ratio < 1.01) break;
-      
-      // Scale font-size proportionally
-      fontSize = fontSize * ratio;
-      // Clamp to reasonable bounds (don't go bigger than bbox height)
-      fontSize = Math.max(4, Math.min(fontSize, targetH * 1.1));
-    }}
-
-    // Pass 2: final scaleX correction (should be close to 1.0 now)
-    el.style.fontSize = fontSize.toFixed(2) + "px";
-    el.style.lineHeight = targetH.toFixed(1) + "px";
-    el.style.width = "auto";
-    const finalNatural = el.scrollWidth;
-
-    if (finalNatural > 0 && targetW > 0) {{
-      const scaleX = targetW / finalNatural;
-      el.style.transform = "scaleX(" + scaleX.toFixed(6) + ")";
-      el.style.transformOrigin = "left top";
-    }}
+    legacyFit(el, targetW, targetH);
   }});
 }}
 </script>
@@ -808,7 +825,6 @@ Examples:
                         help="Skip images; render visible text on white background")
     parser.add_argument("--replace-text", action="store_true",
                         help="Erase scanned text from image, overlay clean rendered text")
-
     args = parser.parse_args()
 
     logging.basicConfig(
