@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_DPI = 200          # good quality / file-size balance
 DEFAULT_IMAGE_FORMAT = "webp"
 DEFAULT_IMAGE_QUALITY = 85
+PageRaster = tuple[str, int, int]  # (data_uri, width_px, height_px)
 
 # ── BiDi helpers ──────────────────────────────────────────────────────────────
 
@@ -63,6 +64,53 @@ def _first_strong_dir(text: str) -> str:
     return "rtl"  # default for Arabic docs
 
 
+def _pixmap_to_data_uri(
+    pix,
+    image_format: str = DEFAULT_IMAGE_FORMAT,
+    image_quality: int = DEFAULT_IMAGE_QUALITY,
+) -> str:
+    """Encode a PyMuPDF pixmap to a base64 data URI."""
+    buf = BytesIO()
+    if image_format == "webp":
+        # PyMuPDF doesn't support webp natively; fall back to PNG or use Pillow
+        try:
+            from PIL import Image as PILImage
+            img = PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            img.save(buf, format="WEBP", quality=image_quality)
+            mime = "image/webp"
+        except ImportError:
+            buf.write(pix.tobytes("png"))
+            mime = "image/png"
+    elif image_format == "jpeg":
+        buf.write(pix.tobytes("jpeg"))
+        mime = "image/jpeg"
+    else:
+        buf.write(pix.tobytes("png"))
+        mime = "image/png"
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
+def _pil_to_data_uri(
+    img,
+    image_format: str = DEFAULT_IMAGE_FORMAT,
+    image_quality: int = DEFAULT_IMAGE_QUALITY,
+) -> str:
+    """Encode a PIL image to a base64 data URI."""
+    buf = BytesIO()
+    if image_format == "webp":
+        img.save(buf, format="WEBP", quality=image_quality)
+        mime = "image/webp"
+    elif image_format == "jpeg":
+        img.save(buf, format="JPEG", quality=image_quality)
+        mime = "image/jpeg"
+    else:
+        img.save(buf, format="PNG")
+        mime = "image/png"
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
 # ── Page rasterisation ────────────────────────────────────────────────────────
 
 def rasterise_pdf(
@@ -70,39 +118,19 @@ def rasterise_pdf(
     dpi: int = DEFAULT_DPI,
     image_format: str = DEFAULT_IMAGE_FORMAT,
     image_quality: int = DEFAULT_IMAGE_QUALITY,
-) -> list[str]:
+) -> list[PageRaster]:
     """
     Rasterise every page of *pdf_path* and return a list of
-    base64-encoded data URIs (one per page).
+    (base64 data URI, width_px, height_px) tuples (one per page).
     """
     doc = fitz.open(str(pdf_path))
     zoom = dpi / 72.0
     mat = fitz.Matrix(zoom, zoom)
-    data_uris: list[str] = []
+    data_uris: list[PageRaster] = []
 
     for page in doc:
         pix = page.get_pixmap(matrix=mat, alpha=False)
-
-        buf = BytesIO()
-        if image_format == "webp":
-            # PyMuPDF doesn't support webp natively; fall back to PNG or use Pillow
-            try:
-                from PIL import Image as PILImage
-                img = PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
-                img.save(buf, format="WEBP", quality=image_quality)
-                mime = "image/webp"
-            except ImportError:
-                buf.write(pix.tobytes("png"))
-                mime = "image/png"
-        elif image_format == "jpeg":
-            buf.write(pix.tobytes("jpeg"))
-            mime = "image/jpeg"
-        else:
-            buf.write(pix.tobytes("png"))
-            mime = "image/png"
-
-        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-        data_uris.append(f"data:{mime};base64,{b64}")
+        data_uris.append((_pixmap_to_data_uri(pix, image_format, image_quality), pix.width, pix.height))
 
     doc.close()
     return data_uris
@@ -132,6 +160,72 @@ def _polygon_to_rect(polygon: list[float]) -> tuple[float, float, float, float]:
 def _polygon_to_points(polygon: list[float]) -> list[tuple[float, float]]:
     """Convert a flattened polygon list into point tuples."""
     return [(polygon[i], polygon[i + 1]) for i in range(0, len(polygon) - 1, 2)]
+
+
+def _safe_float(value) -> float | None:
+    """Best-effort float conversion for OCR numeric fields."""
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalise_unit(unit: str | None) -> str:
+    """Normalise OCR page unit labels to a small canonical set."""
+    unit_norm = (unit or "inch").strip().lower()
+    if unit_norm in {"in", "inch", "inches"}:
+        return "inch"
+    if unit_norm in {"px", "pixel", "pixels"}:
+        return "pixel"
+    if unit_norm in {"pt", "pts", "point", "points"}:
+        return "point"
+    return unit_norm
+
+
+def _compute_page_scale_and_size(
+    page_data: dict,
+    raster_width_px: float | None,
+    raster_height_px: float | None,
+    dpi_fallback: float,
+) -> tuple[float, float, float, float]:
+    """
+    Return (scale_x, scale_y, page_width_px, page_height_px).
+
+    Preferred mapping is always OCR-page-units -> actual raster pixel size.
+    Falls back to historical DPI logic only when raster/page dimensions are missing.
+    """
+    page_w = _safe_float(page_data.get("width")) or 0.0
+    page_h = _safe_float(page_data.get("height")) or 0.0
+    unit = _normalise_unit(page_data.get("unit"))
+
+    if (
+        raster_width_px is not None
+        and raster_height_px is not None
+        and page_w > 0
+        and page_h > 0
+    ):
+        scale_x = float(raster_width_px) / page_w
+        scale_y = float(raster_height_px) / page_h
+        return scale_x, scale_y, float(raster_width_px), float(raster_height_px)
+
+    if page_w <= 0 or page_h <= 0:
+        width_px = float(raster_width_px) if raster_width_px is not None else 0.0
+        height_px = float(raster_height_px) if raster_height_px is not None else 0.0
+        return 1.0, 1.0, width_px, height_px
+
+    # No raster dimensions available (text-only path): keep sensible fallback.
+    if unit == "pixel":
+        scale_x = 1.0
+        scale_y = 1.0
+    else:
+        scale_x = float(dpi_fallback)
+        scale_y = float(dpi_fallback)
+
+    width_px = float(raster_width_px) if raster_width_px is not None else page_w * scale_x
+    height_px = float(raster_height_px) if raster_height_px is not None else page_h * scale_y
+    return scale_x, scale_y, width_px, height_px
 
 
 # ── Text replacement helpers ──────────────────────────────────────────────────
@@ -190,7 +284,8 @@ def _sample_bg_color(
 def _erase_text_regions(
     img,
     regions: list[dict],
-    dpi: int,
+    scale_x: float,
+    scale_y: float,
     padding: int = 2,
     *,
     use_polygons: bool = False,
@@ -210,10 +305,10 @@ def _erase_text_regions(
             continue
 
         lx, ly, lw, lh = _polygon_to_rect(polygon)
-        left  = int(lx * dpi)
-        top   = int(ly * dpi)
-        width = int(lw * dpi)
-        height = int(lh * dpi)
+        left = int(round(lx * scale_x))
+        top = int(round(ly * scale_y))
+        width = int(round(lw * scale_x))
+        height = int(round(lh * scale_y))
         if width < 1 or height < 1:
             continue
 
@@ -222,7 +317,7 @@ def _erase_text_regions(
         if use_polygons and len(points) >= 4:
             poly_px = []
             for x, y in points[:4]:
-                poly_px.append((x * dpi, y * dpi))
+                poly_px.append((x * scale_x, y * scale_y))
             draw.polygon(poly_px, fill=bg)
         else:
             draw.rectangle(
@@ -241,7 +336,7 @@ def _rasterise_and_erase(
     dpi: int = DEFAULT_DPI,
     image_format: str = DEFAULT_IMAGE_FORMAT,
     image_quality: int = DEFAULT_IMAGE_QUALITY,
-) -> list[str]:
+) -> list[PageRaster]:
     """
     Rasterise each page, erase OCR text regions with background colour,
     and return base64 data URIs.
@@ -251,7 +346,7 @@ def _rasterise_and_erase(
     doc = fitz.open(str(pdf_path))
     zoom = dpi / 72.0
     mat  = fitz.Matrix(zoom, zoom)
-    data_uris: list[str] = []
+    data_uris: list[PageRaster] = []
 
     for page_idx, page in enumerate(doc):
         pix = page.get_pixmap(matrix=mat, alpha=False)
@@ -260,24 +355,15 @@ def _rasterise_and_erase(
         # Erase text from the raster
         if page_idx < len(ocr_pages):
             # Use line regions for clean replacement coverage.
-            regions = ocr_pages[page_idx].get("lines", [])
-            n = _erase_text_regions(img, regions, dpi, use_polygons=False)
+            page_data = ocr_pages[page_idx]
+            scale_x, scale_y, _, _ = _compute_page_scale_and_size(
+                page_data, pix.width, pix.height, dpi,
+            )
+            regions = page_data.get("lines", [])
+            n = _erase_text_regions(img, regions, scale_x, scale_y, use_polygons=False)
             logger.debug("Page %d: erased %d text regions", page_idx + 1, n)
 
-        # Encode to data URI
-        buf = BytesIO()
-        if image_format == "webp":
-            img.save(buf, format="WEBP", quality=image_quality)
-            mime = "image/webp"
-        elif image_format == "jpeg":
-            img.save(buf, format="JPEG", quality=image_quality)
-            mime = "image/jpeg"
-        else:
-            img.save(buf, format="PNG")
-            mime = "image/png"
-
-        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-        data_uris.append(f"data:{mime};base64,{b64}")
+        data_uris.append((_pil_to_data_uri(img, image_format, image_quality), pix.width, pix.height))
 
     doc.close()
     return data_uris
@@ -297,7 +383,7 @@ def _render_page_container(
 ) -> str:
     img_tag = (
         ""
-        if text_only
+        if text_only or not page_image_uri
         else f'      <img class="page-img" src="{page_image_uri}"\n'
              f'           alt="Page {page_index + 1}" loading="lazy" />\n'
     )
@@ -314,16 +400,18 @@ def _render_page_container(
 def render_page_overlay(
     page_data: dict,
     page_image_uri: str | None,
-    dpi: int,
     page_index: int,
+    *,
+    raster_width_px: float | None = None,
+    raster_height_px: float | None = None,
+    dpi_fallback: int = DEFAULT_DPI,
     text_only: bool = False,
 ) -> str:
     """Render one page in v1 mode: line-level axis-aligned overlays."""
 
-    page_w_in = page_data["width"]  # inches
-    page_h_in = page_data["height"]  # inches
-    pw = page_w_in * dpi  # pixels
-    ph = page_h_in * dpi
+    scale_x, scale_y, pw, ph = _compute_page_scale_and_size(
+        page_data, raster_width_px, raster_height_px, dpi_fallback,
+    )
 
     lines_html = []
 
@@ -337,11 +425,10 @@ def render_page_overlay(
             continue
 
         lx, ly, lw, lh = _polygon_to_rect(polygon)
-        # Convert inches → pixels
-        left_px  = lx * dpi
-        top_px   = ly * dpi
-        width_px = lw * dpi
-        height_px = lh * dpi
+        left_px = lx * scale_x
+        top_px = ly * scale_y
+        width_px = lw * scale_x
+        height_px = lh * scale_y
 
         if width_px < 1 or height_px < 1:
             continue
@@ -435,8 +522,21 @@ def render_document(
     show_text_only = text_only  # don't strip image in replace-text mode
     pages_html = []
     for i, page_data in enumerate(pages):
-        img_uri = page_images[i] if page_images else None
-        pages_html.append(render_page_overlay(page_data, img_uri, dpi, i, show_text_only))
+        if page_images and i < len(page_images):
+            img_uri, raster_w, raster_h = page_images[i]
+        else:
+            img_uri, raster_w, raster_h = None, None, None
+        pages_html.append(
+            render_page_overlay(
+                page_data,
+                img_uri,
+                i,
+                raster_width_px=raster_w,
+                raster_height_px=raster_h,
+                dpi_fallback=dpi,
+                text_only=show_text_only,
+            )
+        )
 
     title = html_mod.escape(pdf_path.stem)
     doc_dir = _first_strong_dir(ocr_data.get("content", ""))
@@ -525,7 +625,8 @@ body {{
 /* ── Text layer ───────────────────────────────────────────────────── */
 .text-layer {{
   position: absolute; inset: 0;
-  z-index: 1;
+  z-index: 2;
+  pointer-events: none;
   /* Allow text selection on the transparent layer */
 }}
 
@@ -534,6 +635,15 @@ body {{
   color: transparent;
   white-space: pre;
   overflow: visible;
+  transform-origin: left top;
+  pointer-events: auto;
+}}
+
+.tw[dir="rtl"] {{
+  transform-origin: right top;
+}}
+
+.tw[dir="ltr"] {{
   transform-origin: left top;
 }}
 
@@ -669,7 +779,14 @@ function toggleImage() {{
 }}
 
 // ── Text fitting ──────────────────────────────────────────────────
-document.addEventListener("DOMContentLoaded", function() {{
+document.addEventListener("DOMContentLoaded", async function() {{
+  if (document.fonts && document.fonts.ready) {{
+    try {{
+      await document.fonts.ready;
+    }} catch (err) {{
+      // Ignore font-loading errors and proceed with available metrics.
+    }}
+  }}
   fitAllWords();
   fitToPage(true);
 }});
@@ -744,7 +861,8 @@ def process_single(
 
     html_str = render_document(
         pdf_path, json_path, dpi, image_format, image_quality,
-        text_only=text_only, replace_text=replace_text,
+        text_only=text_only,
+        replace_text=replace_text,
     )
     output_path.write_text(html_str, encoding="utf-8")
     logger.info("Written %s (%.1f KB)", output_path.name, output_path.stat().st_size / 1024)
@@ -789,7 +907,8 @@ def process_directory(
         try:
             result = process_single(
                 pdf, json_f, out, dpi, image_format, image_quality,
-                text_only=text_only, replace_text=replace_text,
+                text_only=text_only,
+                replace_text=replace_text,
             )
             results.append(result)
         except Exception as e:
