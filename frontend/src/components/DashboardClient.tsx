@@ -68,13 +68,25 @@ function JobRow({ job }: { job: DashboardJob }) {
       </td>
       <td className="py-3 px-4">
         {job.download_url ? (
-          <a
-            href={job.download_url}
-            className="inline-flex items-center gap-1 px-3 py-1.5 bg-ember hover:bg-ember-dark text-white text-xs font-medium rounded-lg transition-colors"
-            download
-          >
-            ↓ Download
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={job.download_url}
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-ember hover:bg-ember-dark text-white text-xs font-medium rounded-lg transition-colors"
+              download
+            >
+              ↓ Download
+            </a>
+            {job.type === 'pro' && (
+              <a
+                href={`/api/corrections/tool?doc_id=${job.job_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-3 py-1.5 border border-parchment-dark hover:bg-parchment text-ink text-xs font-medium rounded-lg transition-colors"
+              >
+                ✏ Correct
+              </a>
+            )}
+          </div>
         ) : (
           <span className="text-xs text-gray-300">
             {job.is_expired ? '—' : job.status !== 'done' ? '—' : 'File missing'}

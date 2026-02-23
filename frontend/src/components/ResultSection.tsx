@@ -4,10 +4,11 @@ interface Props {
   jobId: string;
   filename?: string;
   formats?: string[];
+  isPro?: boolean;
   onNew: () => void;
 }
 
-export default function ResultSection({ jobId, filename, formats, onNew }: Props) {
+export default function ResultSection({ jobId, filename, formats, isPro, onNew }: Props) {
   return (
     <div className="bg-white rounded-2xl border border-parchment-dark p-10 text-center shadow-sm">
       <div className="flex justify-center mb-4">
@@ -40,6 +41,20 @@ export default function ResultSection({ jobId, filename, formats, onNew }: Props
           </svg>
           Download
         </a>
+        {isPro && (
+          <a
+            href={`/api/corrections/tool?doc_id=${jobId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 border border-parchment-dark hover:bg-parchment text-ink rounded-xl font-semibold text-sm transition-colors"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Correct
+          </a>
+        )}
         <button
           onClick={onNew}
           className="inline-flex items-center justify-center gap-2 px-6 py-2.5 border border-parchment-dark hover:bg-parchment text-ink rounded-xl font-semibold text-sm transition-colors"

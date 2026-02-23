@@ -265,6 +265,7 @@ export default function HomeClient() {
                 jobId={result.job_id}
                 filename={result.filename}
                 formats={result.formats ?? result.formats_produced}
+                isPro={account?.is_active ?? false}
                 onNew={reset}
               />
             )}

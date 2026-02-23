@@ -88,6 +88,8 @@ from stripe_service import (
     verify_webhook,
 )
 
+from correction_api import router as correction_router
+
 # ── Setup ─────────────────────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("scantotext")
@@ -119,6 +121,7 @@ limiter = Limiter(key_func=_real_ip, default_limits=[], storage_uri=_REDIS_URL, 
 app = FastAPI(title="ScanToText", version="3.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.include_router(correction_router)
 
 # Restrict CORS to the same origin in production; fall back to * in dev.
 _cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", BASE_URL).split(",") if o.strip()]
