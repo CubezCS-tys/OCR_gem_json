@@ -95,6 +95,22 @@ class RendererConfig:
 
 
 @dataclass
+class GeminiConfig:
+    """Gemini API configuration for equations-only hybrid extraction."""
+    api_key: str = field(
+        default_factory=lambda: os.environ.get("GEMINI_API_KEY", "")
+    )
+    model: str = "gemini-3-flash-preview"
+
+    def validate(self) -> None:
+        if not self.api_key:
+            raise ValueError(
+                "GEMINI_API_KEY not set. "
+                "Export it or pass api_key= to GeminiConfig."
+            )
+
+
+@dataclass
 class PipelineConfig:
     """Top-level pipeline configuration."""
     azure: AzureConfig = field(default_factory=AzureConfig)

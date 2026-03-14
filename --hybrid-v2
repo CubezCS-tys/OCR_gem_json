@@ -1,0 +1,6 @@
+usage: __main__.py render [-h] --pdf PDF [--json JSON] [-o OUTPUT] [--dpi DPI]
+                          [--mode {overlay,replace-text,text-only}] [-v]
+                          [--gemini-key GEMINI_KEY]
+                          [--gemini-model GEMINI_MODEL]
+                          [--gemini-workers GEMINI_WORKERS] [--hybrid-v2]
+__main__.py render: error: the following arguments are required: --pdf

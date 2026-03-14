@@ -119,7 +119,7 @@ curl -X POST "http://localhost:8000/api/process/pro/<job_id>?formats=searchable_
 - `searchable_pdf`
 - `pixel_html`
 - `semantic_html`
-- `markdown`
+- `markdown` (plus sidecars: `mistral_json`, `mistral_html`)
 
 `ocr_service.py` runs Azure/Gemini/Mistral workers in parallel and packages outputs into ZIP.
 
@@ -128,7 +128,7 @@ Format-to-engine mapping:
 - `searchable_pdf` -> Azure DI (`fixed_layout_pipeline.webapp_api`)
 - `pixel_html` -> Azure DI + overlay renderer (`fixed_layout_pipeline.webapp_api`)
 - `semantic_html` -> Gemini (`llm_pipelines.pdf_to_html`)
-- `markdown` -> Mistral OCR pass 1 (`llm_pipelines.mistral_ocr_pipeline`)
+- `markdown` -> Mistral fidelity OCR (`llm_pipelines.mistral_fidelity_pipeline`)
 
 ## Integration Boundary
 
@@ -136,7 +136,7 @@ Webapp imports OCR runtime through:
 
 - `fixed_layout_pipeline.webapp_api` (Azure searchable/pdf+overlay)
 - `llm_pipelines.pdf_to_html` (Gemini semantic HTML)
-- `llm_pipelines.mistral_ocr_pipeline` (Mistral markdown/images)
+- `llm_pipelines.mistral_fidelity_pipeline` (Mistral markdown/json/html/images)
 
 This keeps webapp functionality stable even when internal OCR modules are refactored.
 

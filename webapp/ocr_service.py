@@ -9,7 +9,8 @@ Output formats:
   1. Searchable PDF    (Azure prebuilt-read)
   2. Pixel-Perfect HTML (overlay_renderer on prebuilt-read JSON)
   3. Semantic HTML      (gemini_html.render on prebuilt-read JSON + PDF)
-  4. Markdown + Images  (Mistral OCR pipeline — independent)
+  4. Markdown + Images  (Mistral OCR fidelity pipeline — independent)
+     Sidecars: canonical JSON + deterministic HTML
 """
 
 from __future__ import annotations
@@ -134,7 +135,12 @@ def _run_gemini(pdf_path: Path, work_dir: Path, stem: str) -> dict[str, Path | N
             _sys.path.insert(0, root)
         from llm_pipelines.pdf_to_html import pdf_to_html as _pdf_to_html
         sem_path = work_dir / f"{stem}_semantic.html"
-        res = _pdf_to_html(str(pdf_path), str(sem_path))
+        res = _pdf_to_html(
+            str(pdf_path),
+            str(sem_path),
+            dual_page_processing=True,
+            direct_html_mode=True,
+        )
         result = sem_path if sem_path.exists() else None
         logger.info("Gemini done — %s", res.get("method"))
         return {"semantic_html": result}
@@ -144,56 +150,42 @@ def _run_gemini(pdf_path: Path, work_dir: Path, stem: str) -> dict[str, Path | N
 
 
 def _run_mistral(pdf_path: Path, work_dir: Path) -> dict[str, Path | None]:
-    """Mistral OCR Pass 1 only → raw markdown (no LLM structuring pass)."""
+    """Mistral fidelity pipeline -> markdown + canonical JSON + deterministic HTML."""
     try:
-        from llm_pipelines.mistral_ocr_pipeline import MistralOCRPipeline, MistralPipelineConfig
+        from llm_pipelines.mistral_fidelity_pipeline import (
+            MistralFidelityConfig,
+            MistralFidelityPipeline,
+        )
 
         mistral_out = work_dir / "mistral_output"
         mistral_out.mkdir(parents=True, exist_ok=True)
 
-        # Minimal config — Pass 2 options are irrelevant since we skip it
-        config = MistralPipelineConfig(output_dir=str(mistral_out))
-        pipeline = MistralOCRPipeline(config)
-
-        # Pass 1 only: upload → OCR
-        file_id = pipeline._upload_pdf(str(pdf_path))
-        ocr_pages = pipeline._run_ocr(file_id)
-
-        # Write the raw OCR markdown
-        stem = pdf_path.stem
-        md_path = mistral_out / f"{stem}_raw_ocr.md"
-        with open(md_path, "w", encoding="utf-8") as f:
-            for pg in ocr_pages:
-                f.write(f"\n\n---\n## PAGE {pg['page_index'] + 1}\n\n")
-                f.write(pg["markdown"])
-
-        # Save any images extracted by Mistral OCR into images/
-        import base64 as _b64
-        images_dir = mistral_out / "images"
-        img_count = 0
-        for pg in ocr_pages:
-            for img in pg.get("images", []):
-                b64 = img.get("image_base64")
-                if not b64:
-                    continue
-                images_dir.mkdir(parents=True, exist_ok=True)
-                img_id = img.get("id") or f"img{img_count}"
-                img_path = images_dir / f"page{pg['page_index'] + 1}_{img_id}.png"
-                try:
-                    # Strip data-URI prefix if present
-                    raw = b64.split(",", 1)[-1] if "," in b64 else b64
-                    img_path.write_bytes(_b64.b64decode(raw))
-                    img_count += 1
-                except Exception as img_err:
-                    logger.warning("Could not save image %s: %s", img_id, img_err)
-
-        logger.info(
-            "Mistral OCR done (Pass 1 only) — %d pages, %d images → %s",
-            len(ocr_pages), img_count, md_path.name,
+        config = MistralFidelityConfig(
+            output_dir=str(mistral_out),
+            table_format="html",
+            include_image_base64=True,
+            inline_images_in_json=False,
+            save_json=True,
+            save_markdown=True,
+            save_html=True,
+            save_images=True,
         )
-        partial: dict[str, Path | None] = {"markdown": md_path}
-        if img_count:
-            partial["mistral_images_dir"] = images_dir
+        pipeline = MistralFidelityPipeline(config)
+        out = pipeline.process(str(pdf_path))
+
+        partial: dict[str, Path | None] = {
+            "markdown": out.get("markdown_path"),
+            "mistral_json": out.get("json_path"),
+            "mistral_html": out.get("html_path"),
+        }
+        if out.get("images_dir"):
+            partial["mistral_images_dir"] = out["images_dir"]
+        logger.info(
+            "Mistral fidelity OCR done -> md=%s json=%s html=%s",
+            bool(partial.get("markdown")),
+            bool(partial.get("mistral_json")),
+            bool(partial.get("mistral_html")),
+        )
         return partial
     except Exception as e:
         logger.error("Mistral pipeline failed: %s", e)
@@ -281,6 +273,8 @@ def package_results(results: dict[str, Path | None], stem: str, work_dir: Path) 
                     "semantic_html": f"{stem}_semantic.html",
                     "gemini_html": f"{stem}_gemini_semantic.html",
                     "markdown": f"{stem}.md",
+                    "mistral_json": f"{stem}_mistral_ocr.json",
+                    "mistral_html": f"{stem}_mistral_layout.html",
                 }
                 arcname = nice_names.get(key, path.name)
                 zf.write(path, arcname)

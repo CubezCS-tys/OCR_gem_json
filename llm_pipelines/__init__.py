@@ -3,6 +3,7 @@
 __all__ = [
     "pdf_to_html",
     "mistral_ocr_pipeline",
+    "mistral_fidelity_pipeline",
     "mistral_batch_ocr",
     "batch_to_structured",
     "image_utils",

@@ -10,3 +10,10 @@ azure-core>=1.30.0
 # PDF rasterisation + image handling for pixel-perfect HTML
 PyMuPDF>=1.24.0
 Pillow>=10.0.0
+
+# Gemini SDK (text extraction stage of hybrid pipeline)
+google-genai>=0.8.0
+
+# Fuzzy string matching for Azure↔Gemini text merger
+# Falls back to stdlib difflib if not installed, but rapidfuzz is ~30x faster
+rapidfuzz>=3.0.0

@@ -75,6 +75,7 @@ Preferred command style:
 ```bash
 python3 -m llm_pipelines.pdf_to_html input.pdf output.html
 python3 -m llm_pipelines.mistral_ocr_pipeline input.pdf --output-dir outputs
+python3 -m llm_pipelines.mistral_fidelity_pipeline input.pdf --output-dir outputs
 python3 -m llm_pipelines.mistral_batch_ocr --pdfs-dir ./pdfs --output-dir ./batch_out
 ```
 

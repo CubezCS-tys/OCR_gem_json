@@ -243,7 +243,7 @@ async def get_config():
             {"id": "searchable_pdf",  "name": "Searchable PDF",      "desc": "Text-selectable PDF"},
             {"id": "pixel_html",      "name": "Pixel-Perfect HTML",  "desc": "Exact layout with positioned text"},
             {"id": "semantic_html",   "name": "Semantic HTML",       "desc": "Reflowed HTML (Gemini)"},
-            {"id": "markdown",        "name": "Markdown + Images",   "desc": "Clean markdown (Mistral)"},
+            {"id": "markdown",        "name": "Markdown + Images",   "desc": "Mistral OCR markdown plus JSON/HTML sidecars"},
         ],
     }
 

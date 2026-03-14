@@ -1,10 +1,9 @@
 """
 Unified Batch Pipeline: Scanned PDF → Searchable PDF + OCR JSON + HTML
 
-One Azure API call per document (prebuilt-read @ $1.50/1K pages) produces:
-  1. Searchable PDF (invisible text layer)
-  2. OCR JSON (words, lines, bounding boxes)
-  3. Replace-text HTML (scan image with text erased + clean rendered text)
+Two Azure API calls per document:
+  1. prebuilt-read  + output=[PDF]      → searchable PDF       ($1.50/1K pages)
+  2. prebuilt-layout + features=[FORMULAS] → OCR JSON with formulas ($10.00/1K pages)
 
 All three outputs land in a per-document subfolder.
 
@@ -56,17 +55,20 @@ def process_one(
     api_key: str,
     dpi: int = 200,
     render_mode: str = "replace-text",
+    formulas: bool = True,
 ) -> dict:
     """
     Full pipeline for one PDF:
-      1. Azure prebuilt-read → searchable PDF + OCR JSON  (API call)
-      2. overlay_renderer → HTML                          (local)
+      1a. Azure prebuilt-read  → searchable PDF          (API call 1)
+      1b. Azure prebuilt-layout + FORMULAS → OCR JSON    (API call 2)
+      2.  overlay_renderer → HTML                        (local)
 
     Returns a result dict with status, pages, cost, timings, etc.
     """
     from azure.ai.documentintelligence.models import (
         AnalyzeDocumentRequest,
         AnalyzeOutputOption,
+        DocumentAnalysisFeature,
     )
 
     stem = pdf_path.stem
@@ -76,6 +78,8 @@ def process_one(
     out_pdf  = doc_folder / f"{stem}_searchable.pdf"
     out_json = doc_folder / f"{stem}_ocr.json"
     out_html = doc_folder / f"{stem}_{render_mode.replace('-', '_')}.html"
+    if formulas:
+        out_html = doc_folder / f"{stem}_formulas.html"
 
     # ── Skip if all three outputs exist ──────────────────────────────────
     if (out_pdf.exists() and out_pdf.stat().st_size > 0
@@ -88,7 +92,7 @@ def process_one(
     n_pages = 0
     api_elapsed = 0.0
 
-    # ── Step 1: Azure API (only if PDF or JSON missing) ──────────────────
+    # ── Step 1: Azure API calls (only if PDF or JSON missing) ─────────
     need_api = not (
         out_pdf.exists() and out_pdf.stat().st_size > 0
         and out_json.exists() and out_json.stat().st_size > 0
@@ -97,30 +101,25 @@ def process_one(
     if need_api:
         try:
             pdf_bytes = pdf_path.read_bytes()
-            logger.info(
-                "📤 %s (%.1f KB) → Azure prebuilt-read …",
-                stem, len(pdf_bytes) / 1024,
-            )
-
             client = _get_client(endpoint, api_key)
             api_start = time.time()
-            poller = client.begin_analyze_document(
+
+            # ── Call 1: prebuilt-read → searchable PDF ────────────────
+            logger.info(
+                "📤 %s (%.1f KB) → Azure prebuilt-read (searchable PDF) …",
+                stem, len(pdf_bytes) / 1024,
+            )
+            poller_read = client.begin_analyze_document(
                 model_id="prebuilt-read",
                 body=AnalyzeDocumentRequest(bytes_source=pdf_bytes),
                 output=[AnalyzeOutputOption.PDF],
             )
-            result = poller.result()
-            op_id = poller.details["operation_id"]
-            n_pages = len(result.pages) if result.pages else 0
-            api_elapsed = time.time() - api_start
-
-            # Save OCR JSON
-            with open(out_json, "w", encoding="utf-8") as f:
-                json_mod.dump(result.as_dict(), f, ensure_ascii=False, indent=2)
+            result_read = poller_read.result()
+            op_id = poller_read.details["operation_id"]
 
             # Download searchable PDF
             stream = client.get_analyze_result_pdf(
-                model_id=result.model_id, result_id=op_id,
+                model_id=result_read.model_id, result_id=op_id,
             )
             written = 0
             with open(out_pdf, "wb") as f:
@@ -128,8 +127,29 @@ def process_one(
                     f.write(chunk)
                     written += len(chunk)
 
+            # ── Call 2: prebuilt-layout + FORMULAS → OCR JSON ─────────
+            features = [DocumentAnalysisFeature.FORMULAS] if formulas else []
+            model_id = "prebuilt-layout"
             logger.info(
-                "✅ %s → %d pages, %.1f KB PDF, %.1fs API",
+                "📤 %s → Azure %s%s …",
+                stem, model_id,
+                " + FORMULAS" if formulas else "",
+            )
+            poller_layout = client.begin_analyze_document(
+                model_id=model_id,
+                body=AnalyzeDocumentRequest(bytes_source=pdf_bytes),
+                features=features if features else None,
+            )
+            result_layout = poller_layout.result()
+            n_pages = len(result_layout.pages) if result_layout.pages else 0
+            api_elapsed = time.time() - api_start
+
+            # Save layout+formulas OCR JSON (richer than prebuilt-read JSON)
+            with open(out_json, "w", encoding="utf-8") as f:
+                json_mod.dump(result_layout.as_dict(), f, ensure_ascii=False, indent=2)
+
+            logger.info(
+                "✅ %s → %d pages, %.1f KB PDF, %.1fs API (2 calls)",
                 stem, n_pages, written / 1024, api_elapsed,
             )
 
@@ -151,14 +171,22 @@ def process_one(
 
     # ── Step 2: Render HTML (local, fast) ────────────────────────────────
     try:
-        from .overlay_renderer import render_document
-
         render_start = time.time()
-        html_str = render_document(
-            out_pdf, out_json, dpi=dpi,
-            replace_text=(render_mode == "replace-text"),
-            text_only=(render_mode == "text-only"),
-        )
+
+        if formulas:
+            from .overlay_renderer import render_document_with_formulas
+            html_str = render_document_with_formulas(
+                out_pdf, out_json, dpi=dpi,
+                replace_text=(render_mode == "replace-text"),
+            )
+        else:
+            from .overlay_renderer import render_document
+            html_str = render_document(
+                out_pdf, out_json, dpi=dpi,
+                replace_text=(render_mode == "replace-text"),
+                text_only=(render_mode == "text-only"),
+            )
+
         out_html.write_text(html_str, encoding="utf-8")
         render_elapsed = time.time() - render_start
 
@@ -197,6 +225,7 @@ async def run_pipeline(
     max_workers: int = 4,
     dpi: int = 200,
     render_mode: str = "replace-text",
+    formulas: bool = True,
 ) -> list[dict]:
     """Process every PDF in *input_dir* in parallel."""
     pdf_files = sorted(input_dir.glob("*.pdf"))
@@ -205,8 +234,9 @@ async def run_pipeline(
         return []
 
     logger.info(
-        "📂 %d PDFs in %s → %s (%d workers, %s mode)",
+        "📂 %d PDFs in %s → %s (%d workers, %s mode%s)",
         len(pdf_files), input_dir, output_dir, max_workers, render_mode,
+        ", formulas" if formulas else "",
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     loop = asyncio.get_running_loop()
@@ -217,6 +247,7 @@ async def run_pipeline(
             return await loop.run_in_executor(
                 executor,
                 process_one, p, output_dir, endpoint, api_key, dpi, render_mode,
+                formulas,
             )
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -237,7 +268,8 @@ async def run_pipeline(
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 
-COST_PER_PAGE = 1.50 / 1000  # $1.50 per 1K pages
+# prebuilt-read: $1.50/1K pages + prebuilt-layout: $10.00/1K pages = $11.50/1K
+COST_PER_PAGE = 11.50 / 1000
 
 
 def print_summary(results: list[dict]) -> None:
@@ -267,7 +299,7 @@ def print_summary(results: list[dict]) -> None:
         print(f"  ⏱  Total time (sum):  {total_time:.1f}s")
         print()
         print(f"  💰 Azure cost:  ${cost:.4f}")
-        print(f"     (prebuilt-read @ $1.50 / 1K pages)")
+        print(f"     (prebuilt-read @ $1.50 + prebuilt-layout @ $10.00 / 1K pages)")
     if errors:
         print()
         print("  Failed documents:")
@@ -276,7 +308,7 @@ def print_summary(results: list[dict]) -> None:
     print()
     print("  Output per document:")
     print("    {stem}_searchable.pdf   — searchable PDF")
-    print("    {stem}_ocr.json         — OCR bounding boxes")
-    print("    {stem}_replace_text.html — rendered HTML")
+    print("    {stem}_ocr.json         — OCR bounding boxes + formulas")
+    print("    {stem}_formulas.html    — rendered HTML with MathJax equations")
     print("=" * 64)
     print()

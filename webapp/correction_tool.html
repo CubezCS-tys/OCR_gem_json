@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR Correction Tool — ScanToText</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Design tokens (matches frontend tailwind.config.ts) ───────────── */
+:root {
+  --ink:           #1E2832;
+  --ink-light:     #2C3A4A;
+  --ink-dark:      #141B23;
+  --ember:         #D4622A;
+  --ember-dark:    #BC561F;
+  --ember-light:   #FBE8DC;
+  --ember-muted:   #A34C1E;
+  --parchment:     #F5F0E6;
+  --parchment-dark:#EDE6D6;
+  --white:         #ffffff;
+  --border:        #EDE6D6;
+  --text-muted:    #6B7280;
+  --text-faint:    #9CA3AF;
+  --canvas-bg:     #525659;
+  --shadow:        0 1px 3px rgba(30,40,50,.12), 0 1px 2px rgba(30,40,50,.08);
+  --shadow-md:     0 4px 16px rgba(30,40,50,.14);
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; overflow: hidden;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-size: 13px;
+  background: var(--parchment);
+  color: var(--ink);
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C07B6A; border-radius: 3px; }
+
+/* ── App skeleton ──────────────────────────────────────────────────── */
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── Topbar ────────────────────────────────────────────────────────── */
+#topbar {
+  display: flex; align-items: center;
+  padding: 0 16px; height: 52px;
+  background: var(--ink); color: #fff;
+  border-bottom: 1px solid var(--ink-light);
+  flex-shrink: 0; gap: 8px; flex-wrap: nowrap;
+}
+#topbar .logo {
+  font-weight: 700; font-size: 15px; color: #fff;
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-right: 8px;
+}
+#topbar .logo svg { color: var(--ember); }
+.top-sep { width: 1px; background: var(--ink-light); height: 24px; margin: 0 4px; flex-shrink: 0; }
+.tb-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  font-size: 12px; font-weight: 500; white-space: nowrap; flex-shrink: 0;
+  border: 1px solid var(--ink-light); background: var(--ink-light); color: #d0d8e0;
+  transition: background .15s, border-color .15s;
+}
+.tb-btn:hover { background: #3a4e60; border-color: #3a4e60; color: #fff; }
+.tb-btn:disabled { opacity: .4; cursor: default; }
+.tb-btn.primary { background: var(--ember); border-color: var(--ember); color: #fff; }
+.tb-btn.primary:hover { background: var(--ember-dark); border-color: var(--ember-dark); }
+.tb-btn.active { background: var(--ember); border-color: var(--ember); color: #fff; }
+#zoom-val {
+  width: 46px; text-align: center; padding: 4px;
+  background: var(--ink-dark); border: 1px solid var(--ink-light);
+  color: #d0d8e0; border-radius: 6px; font-size: 12px; font-family: inherit;
+}
+#mode-badge {
+  margin-left: auto; font-size: 11px; font-weight: 700; padding: 3px 10px;
+  border-radius: 20px; flex-shrink: 0; letter-spacing: .04em;
+}
+#mode-badge.online  { background: #14532d33; color: #4ade80; border: 1px solid #14532d; }
+#mode-badge.offline { background: var(--ember-light); color: var(--ember-muted); border: 1px solid #f0c8aa; }
+
+/* ── Find/replace bar ─────────────────────────────────────────────── */
+#fr-panel {
+  display: none; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 16px; background: var(--parchment-dark);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+#fr-panel.open { display: flex; }
+#fr-find, #fr-repl {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--white); color: var(--ink); font-size: 12px;
+  font-family: inherit; width: 160px;
+}
+#fr-find:focus, #fr-repl:focus { outline: none; border-color: var(--ember); }
+#fr-count { font-size: 11px; color: var(--text-muted); min-width: 70px; }
+.fr-btn {
+  padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 12px;
+  font-weight: 500; border: 1px solid var(--border); background: var(--white);
+  color: var(--ink); font-family: inherit;
+}
+.fr-btn:hover { background: var(--parchment); }
+
+/* ── Main ─────────────────────────────────────────────────────────── */
+#main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Left panel ───────────────────────────────────────────────────── */
+#left-panel {
+  width: 292px; flex-shrink: 0;
+  background: var(--white); display: flex; flex-direction: column; overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+
+/* ── Workspace split ──────────────────────────────────────────────── */
+#workspace { flex: 1; display: flex; min-width: 0; overflow: hidden; }
+.work-pane {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;
+}
+#orig-panel { border-right: 1px solid var(--border); background: #f8f5ee; }
+#canvas-panel { background: #1f2329; }
+.pane-head {
+  height: 38px; display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  padding: 0 10px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: #c8cfd9; background: #232c37; border-bottom: 1px solid #384351;
+}
+#orig-panel .pane-head { background: var(--parchment-dark); color: var(--text-muted); border-bottom-color: var(--border); }
+.pane-head .small-btn { margin-left: auto; padding: 4px 8px; font-size: 11px; }
+.pane-head .small-btn + .small-btn { margin-left: 0; }
+.pane-body { flex: 1; min-height: 0; overflow: hidden; }
+
+/* ── Tab bar ──────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  background: var(--parchment);
+}
+.tab-btn {
+  flex: 1; padding: 9px 2px; text-align: center; font-size: 11px; font-weight: 500;
+  cursor: pointer; color: var(--text-muted);
+  border-bottom: 2px solid transparent; transition: all .15s;
+  font-family: inherit;
+}
+.tab-btn.active { color: var(--ember); border-bottom-color: var(--ember); }
+.tab-btn:hover:not(.active) { color: var(--ink); }
+.tab-pane { display: none; flex: 1; overflow-y: auto; padding: 12px; }
+.tab-pane.active { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── Left panel content ───────────────────────────────────────────── */
+.section-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-faint); margin-top: 10px; margin-bottom: 6px;
+}
+.section-label:first-child { margin-top: 0; }
+.phrase-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.phrase-btn {
+  padding: 4px 8px; background: var(--parchment); border: 1px solid var(--border);
+  color: var(--ink); border-radius: 8px; cursor: pointer; font-size: 13px;
+  direction: rtl; font-family: 'Traditional Arabic', 'Noto Naskh Arabic', serif;
+  line-height: 1.7; transition: background .12s, border-color .12s;
+}
+.phrase-btn:hover { background: var(--ember-light); border-color: #f0c8aa; color: var(--ember-muted); }
+.diacritic-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.diacritic-btn {
+  padding: 6px 2px; background: var(--parchment); border: 1px solid var(--border);
+  color: var(--ink); border-radius: 6px; cursor: pointer; font-size: 18px;
+  text-align: center; direction: rtl;
+  font-family: 'Traditional Arabic', 'Noto Naskh Arabic', serif;
+  transition: background .12s;
+}
+.diacritic-btn:hover { background: var(--ember-light); border-color: #f0c8aa; }
+.custom-phrase-row { display: flex; gap: 6px; }
+.custom-phrase-input {
+  flex: 1; padding: 5px 8px; background: var(--parchment); border: 1px solid var(--border);
+  color: var(--ink); border-radius: 8px; font-size: 13px; direction: rtl;
+  font-family: 'Traditional Arabic', 'Noto Naskh Arabic', serif; font-family: inherit;
+}
+.custom-phrase-input:focus { outline: none; border-color: var(--ember); }
+
+/* ── Page list ────────────────────────────────────────────────────── */
+.page-thumb {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px;
+  border-radius: 8px; cursor: pointer; color: var(--text-muted);
+  transition: background .12s;
+}
+.page-thumb:hover { background: var(--parchment); }
+.page-thumb.active { background: var(--ember-light); color: var(--ember-muted); }
+.page-thumb-num { font-size: 11px; font-weight: 700; width: 24px; flex-shrink: 0; }
+.page-thumb-info { font-size: 11px; }
+
+/* ── Stats ────────────────────────────────────────────────────────── */
+.stat-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px;
+  color: var(--text-muted);
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-val { font-weight: 600; color: var(--ink); }
+
+/* ── Controls ─────────────────────────────────────────────────────── */
+.small-btn {
+  padding: 5px 12px; background: var(--parchment); border: 1px solid var(--border);
+  color: var(--ink); border-radius: 8px; cursor: pointer; font-size: 12px;
+  font-weight: 500; font-family: inherit; transition: background .12s;
+}
+.small-btn:hover { background: var(--parchment-dark); }
+.small-btn.danger { border-color: #fca5a5; color: #dc2626; }
+.small-btn.danger:hover { background: #fef2f2; }
+.dir-toggle { display: flex; gap: 4px; }
+.dir-btn {
+  flex: 1; padding: 5px; background: var(--parchment); border: 1px solid var(--border);
+  color: var(--text-muted); border-radius: 8px; cursor: pointer;
+  font-size: 12px; font-weight: 500; text-align: center; font-family: inherit;
+  transition: all .12s;
+}
+.dir-btn.active {
+  background: var(--ember-light); border-color: #f0c8aa; color: var(--ember-muted);
+}
+.no-selection {
+  color: var(--text-faint); font-size: 12px; text-align: center; padding: 24px 8px;
+}
+
+/* ── Canvas ───────────────────────────────────────────────────────── */
+#canvas-area {
+  flex: 1; overflow: auto; background: var(--canvas-bg); position: relative;
+  background-image: radial-gradient(rgba(0,0,0,.15) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+#zoom-wrapper { transform-origin: top center; display: flex; flex-direction: column; align-items: center; padding: 24px; gap: 16px; }
+.editor-page-label {
+  font-size: 11px; font-weight: 500; color: #aaa;
+  text-align: center; padding: 2px 10px;
+  background: rgba(0,0,0,.25); border-radius: 20px; align-self: center;
+}
+.editor-page {
+  position: relative; background: #fff;
+  box-shadow: 0 8px 32px rgba(0,0,0,.35); flex-shrink: 0;
+}
+.page-img {
+  display: block; position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%; object-fit: fill; pointer-events: none;
+}
+
+/* ── Drop hint ────────────────────────────────────────────────────── */
+#drop-hint {
+  background: rgba(255,255,255,.06); border: 2px dashed rgba(255,255,255,.18);
+  border-radius: 16px; margin: 40px;
+  padding: 60px 48px; text-align: center; color: #aab0ba; line-height: 2;
+}
+#drop-hint .icon { font-size: 40px; margin-bottom: 8px; }
+
+/* ── Editor blocks ────────────────────────────────────────────────── */
+.editor-block {
+  position: absolute; cursor: pointer; box-sizing: border-box;
+  border: 1px solid transparent; color: #000; overflow: visible;
+  white-space: pre; line-height: 1.4; direction: rtl;
+  font-family: 'Traditional Arabic', 'Noto Naskh Arabic', 'Amiri', serif;
+  transition: border-color .1s;
+}
+.editor-block.editing {
+  white-space: pre-wrap; overflow: visible;
+}
+.editor-block:hover { border-color: rgba(212,98,42,.5); }
+.editor-block.selected { border: 2px solid var(--ember) !important; background: rgba(212,98,42,.06); z-index: 10; }
+.editor-block.modified { border-color: #22c55e !important; }
+.editor-block.found    { border-color: #3b82f6 !important; background: rgba(59,130,246,.1); }
+.editor-block.editing {
+  border-color: #3b82f6 !important;
+  background: rgba(59,130,246,.08);
+  cursor: text;
+}
+
+/* Resize handles */
+.rh {
+  position: absolute; width: 8px; height: 8px;
+  background: var(--ember); border: 2px solid #fff;
+  border-radius: 2px; z-index: 20;
+}
+.rh-nw { top:-4px;  left:-4px;              cursor: nw-resize; }
+.rh-n  { top:-4px;  left:calc(50% - 4px);   cursor: n-resize;  }
+.rh-ne { top:-4px;  right:-4px;             cursor: ne-resize; }
+.rh-e  { top:calc(50% - 4px); right:-4px;  cursor: e-resize;  }
+.rh-se { bottom:-4px; right:-4px;           cursor: se-resize; }
+.rh-s  { bottom:-4px; left:calc(50% - 4px); cursor: s-resize;  }
+.rh-sw { bottom:-4px; left:-4px;            cursor: sw-resize; }
+.rh-w  { top:calc(50% - 4px); left:-4px;   cursor: w-resize;  }
+
+/* ── Inline box editor ────────────────────────────────────────────── */
+#inline-toolbar {
+  position: absolute; z-index: 50; display: none;
+  min-width: 360px; max-width: min(92vw, 560px);
+  padding: 8px; border-radius: 10px; border: 1px solid var(--border);
+  background: rgba(255,255,255,.97); box-shadow: var(--shadow-md);
+  color: var(--ink);
+}
+#inline-toolbar.open { display: flex; flex-direction: column; gap: 6px; }
+.inline-row { display: flex; align-items: center; gap: 6px; }
+.inline-row label { font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: .04em; }
+.inline-row input {
+  width: 58px; padding: 4px 6px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--parchment); color: var(--ink);
+  font-size: 12px; font-family: inherit;
+}
+.inline-row input:focus { outline: none; border-color: var(--ember); }
+.inline-spacer { margin-left: auto; }
+.inline-nudge-btn {
+  width: 28px; height: 26px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--parchment); cursor: pointer; font-size: 12px; color: var(--ink);
+}
+.inline-nudge-btn:hover { background: var(--ember-light); border-color: #f0c8aa; }
+
+/* ── Original pane ────────────────────────────────────────────────── */
+#orig-area {
+  height: 100%; overflow: auto; background: #5a616b;
+  background-image: radial-gradient(rgba(255,255,255,.08) 1px, transparent 1px);
+  background-size: 18px 18px; position: relative;
+}
+#orig-empty {
+  margin: 28px; border: 2px dashed rgba(255,255,255,.35); border-radius: 12px;
+  padding: 34px 24px; text-align: center; color: #e5e7eb; line-height: 1.8; font-size: 12px;
+}
+#orig-view { width: 100%; height: 100%; min-height: 100%; }
+#orig-view iframe, #orig-view object, #orig-view img {
+  display: block; width: 100%; height: 100%; min-height: 100%;
+  border: 0; background: #fff;
+}
+#orig-view img { object-fit: contain; background: #2f3641; }
+
+/* ── Status bar ───────────────────────────────────────────────────── */
+#statusbar {
+  height: 26px; background: var(--ink); border-top: 1px solid var(--ink-light);
+  display: flex; align-items: center; padding: 0 14px; gap: 18px;
+  font-size: 11px; color: #7a8fa0; flex-shrink: 0;
+}
+#statusbar .sb-sep { width: 1px; background: var(--ink-light); height: 14px; }
+#statusbar span.highlight { color: #c0cdd8; font-weight: 500; }
+
+/* ── Settings inputs ──────────────────────────────────────────────── */
+#api-url-input {
+  width: 100%; padding: 5px 8px; background: var(--parchment); border: 1px solid var(--border);
+  color: var(--ink); border-radius: 8px; font-size: 12px; font-family: inherit;
+}
+#api-url-input:focus { outline: none; border-color: var(--ember); }
+#connect-status { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+@media (max-width: 1120px) {
+  #workspace { flex-direction: column; }
+  #orig-panel { border-right: 0; border-bottom: 1px solid var(--border); }
+  #inline-toolbar { min-width: 300px; }
+}
+
+@media (max-width: 900px) {
+  #main { flex-direction: column; }
+  #left-panel {
+    width: 100%;
+    height: 42vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  #workspace { min-height: 0; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="logo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      ScanToText
+    </div>
+    <div class="top-sep"></div>
+    <button class="tb-btn" id="btn-open">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      Open
+    </button>
+    <button class="tb-btn" id="btn-open-orig" title="Load original PDF/image">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      Original
+    </button>
+    <button class="tb-btn primary" id="btn-export">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export
+    </button>
+    <button class="tb-btn primary" id="btn-save" style="display:none">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      Save
+    </button>
+    <div class="top-sep"></div>
+    <button class="tb-btn" id="btn-undo" disabled title="Ctrl+Z">↩ Undo</button>
+    <button class="tb-btn" id="btn-redo" disabled title="Ctrl+Y">↪ Redo</button>
+    <div class="top-sep"></div>
+    <button class="tb-btn" id="btn-fr" title="Ctrl+F">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Find
+    </button>
+    <button class="tb-btn" id="btn-add-block" disabled title="Or double-click page">＋ Block</button>
+    <button class="tb-btn" id="btn-del-block" disabled title="Delete">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+    </button>
+    <div class="top-sep"></div>
+    <button class="tb-btn" id="btn-zoom-out">−</button>
+    <input id="zoom-val" type="text" value="100%" readonly>
+    <button class="tb-btn" id="btn-zoom-in">＋</button>
+    <button class="tb-btn" id="btn-zoom-fit">Fit</button>
+    <div class="top-sep"></div>
+    <button class="tb-btn" id="btn-toggle-img" title="Toggle background image">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      Image
+    </button>
+    <span id="mode-badge" class="offline">OFFLINE</span>
+  </div>
+
+  <!-- FIND/REPLACE BAR -->
+  <div id="fr-panel">
+    <input id="fr-find" type="text" placeholder="Find…" dir="auto">
+    <button class="fr-btn" id="btn-fr-prev">◀</button>
+    <button class="fr-btn" id="btn-fr-next">▶</button>
+    <span id="fr-count">—</span>
+    <input id="fr-repl" type="text" placeholder="Replace with…" dir="auto">
+    <button class="fr-btn" id="btn-fr-replace">Replace</button>
+    <button class="fr-btn" id="btn-fr-all">All</button>
+    <button class="fr-btn" id="btn-fr-close" style="color:#dc2626">✕</button>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+
+    <!-- LEFT PANEL -->
+    <div id="left-panel">
+      <div class="tab-bar">
+        <div class="tab-btn active" data-tab="left-arabic">Arabic</div>
+        <div class="tab-btn" data-tab="left-pages">Pages</div>
+        <div class="tab-btn" data-tab="left-stats">Stats</div>
+        <div class="tab-btn" data-tab="left-settings">Settings</div>
+      </div>
+
+      <div class="tab-pane active" id="left-arabic">
+        <div class="section-label">Islamic Phrases</div>
+        <div class="phrase-grid" id="phrase-grid"></div>
+        <div class="custom-phrase-row" style="margin-top:8px">
+          <input class="custom-phrase-input" id="custom-phrase-input" placeholder="Add custom phrase…" dir="rtl">
+          <button class="small-btn" id="btn-add-phrase">＋</button>
+        </div>
+        <div class="section-label">Diacritics</div>
+        <div class="diacritic-grid" id="diacritic-grid"></div>
+        <div class="section-label">Special Chars</div>
+        <div class="phrase-grid" id="special-grid"></div>
+      </div>
+
+      <div class="tab-pane" id="left-pages">
+        <div id="page-list"><div class="no-selection">No document loaded.</div></div>
+      </div>
+
+      <div class="tab-pane" id="left-stats">
+        <div id="stats-content"><div class="no-selection">Open a document to see stats.</div></div>
+      </div>
+
+      <div class="tab-pane" id="left-settings">
+        <div class="section-label">Online Mode</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:11px;font-weight:600;color:var(--text-muted)">API Base URL</div>
+          <input id="api-url-input" type="text" placeholder="http://localhost:8000">
+          <button class="small-btn" id="btn-connect" style="width:100%;margin-top:2px">Connect &amp; Load</button>
+          <div id="connect-status"></div>
+        </div>
+        <div class="section-label" style="margin-top:14px">Zoom</div>
+        <input type="range" id="zoom-slider" min="20" max="200" value="100" style="width:100%">
+        <div class="section-label" style="margin-top:14px">Tips</div>
+        <div style="font-size:11px;color:var(--text-muted);line-height:2.1">
+          <div>Double-click a box to edit text directly in place.</div>
+          <div>Use the floating editor above selected box for style/position.</div>
+          <div>Ctrl+Z / Ctrl+Y undo/redo, Ctrl+F find, Del delete box.</div>
+          <div>Arrows nudge 1px, Shift+Arrows nudge 10px.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="workspace">
+      <div class="work-pane" id="orig-panel">
+        <div class="pane-head">
+          Original Preview
+          <button class="small-btn" id="btn-open-orig-sm">Open</button>
+          <button class="small-btn" id="btn-clear-orig">Clear</button>
+        </div>
+        <div class="pane-body">
+          <div id="orig-area">
+            <div id="orig-empty">
+              <div style="font-size:14px;font-weight:600;margin-bottom:6px">Upload the original PDF/image</div>
+              <div>Use the <strong>Original</strong> button above or drag a file into this pane.</div>
+            </div>
+            <div id="orig-view"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="work-pane" id="canvas-panel">
+        <div class="pane-head">Correction Canvas</div>
+        <div class="pane-body">
+          <div id="canvas-area">
+            <div id="zoom-wrapper">
+              <div id="drop-hint">
+                <div class="icon">📂</div>
+                <div style="font-size:15px;font-weight:600;margin-bottom:6px">Open or drop a replace_text.html file</div>
+                <div style="font-size:12px">Use <code style="background:rgba(255,255,255,.1);padding:1px 6px;border-radius:4px">?doc_id=</code> for online mode</div>
+                <div style="font-size:12px">Double-click any block to edit text directly.</div>
+              </div>
+            </div>
+
+            <div id="inline-toolbar">
+              <div class="inline-row">
+                <button class="small-btn" id="inline-edit-toggle">Edit Text</button>
+                <div class="dir-toggle">
+                  <button class="dir-btn active" id="inline-dir-rtl" type="button">RTL</button>
+                  <button class="dir-btn" id="inline-dir-ltr" type="button">LTR</button>
+                </div>
+                <button class="small-btn" id="inline-revert">↺ Revert</button>
+                <button class="small-btn danger" id="inline-delete">Delete</button>
+              </div>
+              <div class="inline-row">
+                <label>Size</label><input type="number" id="inline-fontsize" min="6" max="72" step="0.5">
+                <label>LH</label><input type="number" id="inline-lineheight" min="0.8" max="3" step="0.05">
+                <span class="inline-spacer"></span>
+                <label>Nudge</label>
+                <button class="inline-nudge-btn" id="inline-nudge-up" title="Up">↑</button>
+                <button class="inline-nudge-btn" id="inline-nudge-left" title="Left">←</button>
+                <button class="inline-nudge-btn" id="inline-nudge-right" title="Right">→</button>
+                <button class="inline-nudge-btn" id="inline-nudge-down" title="Down">↓</button>
+              </div>
+              <div class="inline-row">
+                <label>X</label><input type="number" id="inline-left">
+                <label>Y</label><input type="number" id="inline-top">
+                <label>W</label><input type="number" id="inline-width" min="1">
+                <label>H</label><input type="number" id="inline-height" min="1">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div id="statusbar">
+    <span id="sb-pages">—</span>
+    <div class="sb-sep"></div>
+    <span id="sb-blocks">—</span>
+    <div class="sb-sep"></div>
+    <span id="sb-changes">0 changes</span>
+    <div class="sb-sep"></div>
+    <span id="sb-sel">—</span>
+    <span style="margin-left:auto;font-size:10px">Ctrl+S to save · Del to delete block · Dbl-click to add block</span>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept=".html,.htm" style="display:none">
+<input type="file" id="orig-file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tif,.tiff,.html,.htm" style="display:none">
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════════════
+// Static data
+// ═══════════════════════════════════════════════════════════════════════
+const ISLAMIC_PHRASES = [
+  { label:'ﷺ', text:'ﷺ' },
+  { label:'صلى الله عليه وسلم', text:'صلى الله عليه وسلم' },
+  { label:'رضي الله عنه', text:'رضي الله عنه' },
+  { label:'رضي الله عنها', text:'رضي الله عنها' },
+  { label:'رضي الله عنهم', text:'رضي الله عنهم' },
+  { label:'رحمه الله', text:'رحمه الله' },
+  { label:'حفظه الله', text:'حفظه الله' },
+  { label:'وفقه الله', text:'وفقه الله' },
+  { label:'بسم الله', text:'بسم الله' },
+  { label:'الحمد لله', text:'الحمد لله' },
+  { label:'أعوذ بالله', text:'أعوذ بالله' },
+  { label:'السلام عليكم', text:'السلام عليكم ورحمة الله وبركاته' },
+  { label:'إن شاء الله', text:'إن شاء الله' },
+  { label:'ما شاء الله', text:'ما شاء الله' },
+  { label:'جزاك الله', text:'جزاك الله خيراً' },
+  { label:'سبحان الله', text:'سبحان الله' },
+  { label:'الله أكبر', text:'الله أكبر' },
+  { label:'البسملة', text:'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ' },
+  { label:'﴿ ﴾', text:'﴿﴾' },
+  { label:'انظر:', text:'انظر:' },
+  { label:'المصدر:', text:'المصدر:' },
+  { label:'(ص)', text:'(ص)' },
+  { label:'المرجع:', text:'المرجع:' },
+  { label:'هامش:', text:'هامش:' },
+];
+
+const DIACRITICS = [
+  { text:'\u064E', title:'Fatha' },   { text:'\u0650', title:'Kasra' },
+  { text:'\u064F', title:'Damma' },   { text:'\u0652', title:'Sukun' },
+  { text:'\u0651', title:'Shadda' },  { text:'\u064B', title:'Fathatan' },
+  { text:'\u064D', title:'Kasratan'},{ text:'\u064C', title:'Dammatan' },
+  { text:'\u0640', title:'Tatweel' }, { text:'\u0670', title:'Sup. Alef' },
+  { text:'\u06DA', title:'Quranic stop' }, { text:'\u06D6', title:'Quranic mark' },
+];
+
+const SPECIAL_CHARS = [
+  '﴿','﴾','«','»','…','—','،','؛','؟','٪','✓','■',
+];
+
+// ═══════════════════════════════════════════════════════════════════════
+// App
+// ═══════════════════════════════════════════════════════════════════════
+const App = {
+  pages: [],       // [{width, height, _imgEl, blocks:[...]}]
+  selPage: -1, selBlock: -1,
+  zoom: 1.0,
+  imgVisible: true,
+  history: [], histIdx: -1,
+  dirty: false,
+  mode: 'offline',
+  apiBase: '', docId: '',
+  changeCount: 0,
+  customPhrases: [],
+  findMatches: [], findIdx: -1,
+  _rawOriginalHtml: '',
+  _origObjectUrl: '',
+
+  // ── Init ───────────────────────────────────────────────────────────
+  init() {
+    this._buildArabicPanel();
+    this._setupTabs();
+    this._setupToolbar();
+    this._setupInlineToolbar();
+    this._setupKeyboard();
+    this._setupDragDrop();
+    this._loadCustomPhrases();
+    this._detectOnlineMode();
+    window.addEventListener('resize', () => this._positionInlineToolbar());
+    document.getElementById('canvas-area').addEventListener('scroll', () => this._positionInlineToolbar(), { passive: true });
+  },
+
+  // ── Arabic panel ───────────────────────────────────────────────────
+  _buildArabicPanel() {
+    const pg = document.getElementById('phrase-grid');
+    const addPhrase = (p, container) => {
+      const b = document.createElement('button');
+      b.className = 'phrase-btn'; b.textContent = p.label;
+      b.title = p.text !== p.label ? p.text : '';
+      b.onclick = () => this.insertText(p.text);
+      container.appendChild(b);
+    };
+    ISLAMIC_PHRASES.forEach(p => addPhrase(p, pg));
+    this.customPhrases.forEach(p => addPhrase(p, pg));
+
+    document.getElementById('btn-add-phrase').onclick = () => {
+      const inp = document.getElementById('custom-phrase-input');
+      const t = inp.value.trim(); if (!t) return;
+      const p = { label: t, text: t };
+      this.customPhrases.push(p); addPhrase(p, pg);
+      this._saveCustomPhrases(); inp.value = '';
+    };
+
+    const dg = document.getElementById('diacritic-grid');
+    DIACRITICS.forEach(d => {
+      const b = document.createElement('button');
+      b.className = 'diacritic-btn'; b.title = d.title;
+      b.textContent = 'م' + d.text;
+      b.onclick = () => this.insertText(d.text);
+      dg.appendChild(b);
+    });
+
+    const sg = document.getElementById('special-grid');
+    SPECIAL_CHARS.forEach(c => {
+      const b = document.createElement('button');
+      b.className = 'phrase-btn'; b.textContent = c;
+      b.onclick = () => this.insertText(c);
+      sg.appendChild(b);
+    });
+  },
+
+  _loadCustomPhrases() {
+    try { this.customPhrases = JSON.parse(localStorage.getItem('ocr-custom-phrases') || '[]'); }
+    catch { this.customPhrases = []; }
+  },
+  _saveCustomPhrases() {
+    localStorage.setItem('ocr-custom-phrases', JSON.stringify(this.customPhrases));
+  },
+
+  // ── Tabs ───────────────────────────────────────────────────────────
+  _setupTabs() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.onclick = () => {
+        const panel = btn.closest('#left-panel');
+        if (!panel) return;
+        panel.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        panel.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+      };
+    });
+  },
+
+  // ── Toolbar ────────────────────────────────────────────────────────
+  _setupToolbar() {
+    const htmlInput = document.getElementById('file-input');
+    const origInput = document.getElementById('orig-file-input');
+
+    document.getElementById('btn-open').onclick = () => htmlInput.click();
+    htmlInput.onchange = e => {
+      if (e.target.files[0]) this._loadFile(e.target.files[0]);
+      e.target.value = '';
+    };
+
+    const openOrig = () => origInput.click();
+    document.getElementById('btn-open-orig').onclick = openOrig;
+    document.getElementById('btn-open-orig-sm').onclick = openOrig;
+    document.getElementById('btn-clear-orig').onclick = () => this._clearOriginalPreview();
+    origInput.onchange = e => {
+      if (e.target.files[0]) this._loadOriginalFile(e.target.files[0]);
+      e.target.value = '';
+    };
+
+    document.getElementById('btn-export').onclick = () => this.exportHtml();
+    document.getElementById('btn-save').onclick   = () => this.saveToServer();
+    document.getElementById('btn-undo').onclick   = () => this.undo();
+    document.getElementById('btn-redo').onclick   = () => this.redo();
+    document.getElementById('btn-fr').onclick     = () => this._toggleFR();
+    document.getElementById('btn-add-block').onclick = () => {
+      const pi = this.selPage >= 0 ? this.selPage : 0;
+      if (this.pages.length) this.addBlock(pi, 100, 100);
+    };
+    document.getElementById('btn-del-block').onclick = () => this.deleteSelectedBlock();
+    document.getElementById('btn-zoom-out').onclick   = () => this.setZoom(this.zoom - 0.1);
+    document.getElementById('btn-zoom-in').onclick    = () => this.setZoom(this.zoom + 0.1);
+    document.getElementById('btn-zoom-fit').onclick   = () => this.zoomFit();
+    document.getElementById('zoom-slider').oninput = e => this.setZoom(+e.target.value / 100);
+    document.getElementById('btn-toggle-img').onclick = () => this._toggleImage();
+
+    // Find/replace
+    document.getElementById('btn-fr-prev').onclick    = () => this.findPrev();
+    document.getElementById('btn-fr-next').onclick    = () => this.findNext();
+    document.getElementById('btn-fr-replace').onclick = () => this.replaceOne();
+    document.getElementById('btn-fr-all').onclick     = () => this.replaceAll();
+    document.getElementById('btn-fr-close').onclick   = () => this._closeFR();
+    document.getElementById('fr-find').oninput = () => this._doFind();
+    document.getElementById('fr-find').onkeydown = e => {
+      if (e.key === 'Enter') { e.shiftKey ? this.findPrev() : this.findNext(); }
+      if (e.key === 'Escape') this._closeFR();
+    };
+
+    document.getElementById('btn-connect').onclick = () => this._manualConnect();
+    document.getElementById('api-url-input').onchange = e => { this.apiBase = e.target.value.trim(); };
+  },
+
+  _setupInlineToolbar() {
+    const bar = document.getElementById('inline-toolbar');
+    bar.addEventListener('mousedown', e => e.stopPropagation());
+
+    document.getElementById('inline-edit-toggle').onclick = () => {
+      const el = this._selectedBlockEl();
+      if (!el) return;
+      this._setBlockEditing(!el.isContentEditable, true);
+    };
+    document.getElementById('inline-delete').onclick = () => this.deleteSelectedBlock();
+    document.getElementById('inline-revert').onclick = () => this._revertBlock();
+    document.getElementById('inline-dir-rtl').onclick = () => this.updateBlockProp('dir', 'rtl');
+    document.getElementById('inline-dir-ltr').onclick = () => this.updateBlockProp('dir', 'ltr');
+    document.getElementById('inline-fontsize').onchange = e => this.updateBlockProp('fontSize', +e.target.value);
+    document.getElementById('inline-lineheight').onchange = e => this.updateBlockProp('lineHeight', +e.target.value);
+    ['left', 'top', 'width', 'height'].forEach(k => {
+      document.getElementById('inline-' + k).onchange = e => this.updateBlockProp(k, +e.target.value);
+    });
+
+    const nudge = (dx, dy, e) => {
+      if (this.selPage >= 0 && this.selBlock >= 0) this._nudgeBlock(dx * (e.shiftKey ? 10 : 1), dy * (e.shiftKey ? 10 : 1));
+    };
+    document.getElementById('inline-nudge-up').onclick = e => nudge(0, -1, e);
+    document.getElementById('inline-nudge-down').onclick = e => nudge(0, 1, e);
+    document.getElementById('inline-nudge-left').onclick = e => nudge(-1, 0, e);
+    document.getElementById('inline-nudge-right').onclick = e => nudge(1, 0, e);
+  },
+
+  // ── Keyboard ───────────────────────────────────────────────────────
+  _setupKeyboard() {
+    document.addEventListener('keydown', e => {
+      const inInput = ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName) || e.target.isContentEditable;
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z') { e.preventDefault(); this.undo(); return; }
+        if (e.key === 'y') { e.preventDefault(); this.redo(); return; }
+        if (e.key === 'f') { e.preventDefault(); this._openFR(); return; }
+        if (e.key === 's') { e.preventDefault(); this.mode === 'online' ? this.saveToServer() : this.exportHtml(); return; }
+      }
+      if (inInput) return;
+      if (e.key === 'Escape') { this.deselect(); return; }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && this.selBlock >= 0) {
+        e.preventDefault(); this.deleteSelectedBlock(); return;
+      }
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key) && this.selBlock >= 0) {
+        e.preventDefault();
+        const d = e.shiftKey ? 10 : 1;
+        const dx = e.key==='ArrowLeft' ? -d : e.key==='ArrowRight' ? d : 0;
+        const dy = e.key==='ArrowUp'   ? -d : e.key==='ArrowDown'  ? d : 0;
+        this._nudgeBlock(dx, dy);
+      }
+    });
+  },
+
+  // ── Drag & drop ────────────────────────────────────────────────────
+  _setupDragDrop() {
+    const ca = document.getElementById('canvas-area');
+    ca.addEventListener('dragover', e => e.preventDefault());
+    ca.addEventListener('drop', e => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f && /\.html?$/i.test(f.name)) this._loadFile(f);
+    });
+
+    const oa = document.getElementById('orig-area');
+    oa.addEventListener('dragover', e => e.preventDefault());
+    oa.addEventListener('drop', e => {
+      e.preventDefault();
+      const f = e.dataTransfer.files[0];
+      if (f) this._loadOriginalFile(f);
+    });
+  },
+
+  // ── Online mode ────────────────────────────────────────────────────
+  _detectOnlineMode() {
+    const params = new URLSearchParams(location.search);
+    const docId  = params.get('doc_id');
+    const api    = params.get('api') || location.origin;
+    if (docId) {
+      this.docId = docId; this.apiBase = api;
+      this._setMode('online');
+      this._loadDocFromServer(docId);
+    } else {
+      this._setMode('offline');
+    }
+  },
+
+  _setMode(m) {
+    this.mode = m;
+    const badge = document.getElementById('mode-badge');
+    badge.textContent = m.toUpperCase(); badge.className = m;
+    document.getElementById('btn-save').style.display = m === 'online' ? '' : 'none';
+    document.getElementById('api-url-input').value = this.apiBase;
+  },
+
+  async _loadDocFromServer(docId) {
+    document.getElementById('connect-status').textContent = 'Loading…';
+    try {
+      const r = await fetch(`${this.apiBase}/api/corrections/docs/${docId}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      this._parseAndRender(await r.text(), `doc:${docId}`);
+      document.getElementById('connect-status').textContent = `✓ Loaded ${docId}`;
+    } catch(err) {
+      document.getElementById('connect-status').textContent = `Error: ${err.message}`;
+      this._setMode('offline');
+    }
+  },
+
+  async saveToServer() {
+    if (this.mode !== 'online') return;
+    const html = this._buildExportHtml();
+    try {
+      const r = await fetch(`${this.apiBase}/api/corrections/docs/${this.docId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html_content: html }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      this.dirty = false; this._updateStatusBar();
+      document.getElementById('connect-status').textContent = '✓ Saved';
+    } catch(err) { alert(`Save failed: ${err.message}`); }
+  },
+
+  _manualConnect() {
+    const url   = document.getElementById('api-url-input').value.trim();
+    const docId = prompt('Enter doc_id to load:');
+    if (!docId) return;
+    this.apiBase = url; this.docId = docId;
+    this._setMode('online');
+    this._loadDocFromServer(docId);
+  },
+
+  // ── File loading ───────────────────────────────────────────────────
+  _loadFile(file) {
+    const r = new FileReader();
+    r.onload = e => this._parseAndRender(e.target.result, file.name);
+    r.readAsText(file, 'UTF-8');
+  },
+
+  _clearOriginalPreview() {
+    if (this._origObjectUrl) URL.revokeObjectURL(this._origObjectUrl);
+    this._origObjectUrl = '';
+    document.getElementById('orig-view').innerHTML = '';
+    document.getElementById('orig-empty').style.display = '';
+  },
+
+  _loadOriginalFile(file) {
+    this._clearOriginalPreview();
+    const url = URL.createObjectURL(file);
+    this._origObjectUrl = url;
+    document.getElementById('orig-empty').style.display = 'none';
+
+    const host = document.getElementById('orig-view');
+    const name = file.name.toLowerCase();
+    const mime = (file.type || '').toLowerCase();
+
+    if (mime.startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = file.name;
+      host.appendChild(img);
+      return;
+    }
+
+    if (mime === 'application/pdf' || name.endsWith('.pdf')) {
+      const iframe = document.createElement('iframe');
+      iframe.src = url + '#toolbar=0&view=FitH';
+      iframe.title = file.name;
+      host.appendChild(iframe);
+      return;
+    }
+
+    if (mime.includes('html') || name.endsWith('.html') || name.endsWith('.htm')) {
+      const iframe = document.createElement('iframe');
+      iframe.src = url;
+      iframe.title = file.name;
+      host.appendChild(iframe);
+      return;
+    }
+
+    const frame = document.createElement('iframe');
+    frame.src = url;
+    frame.title = file.name;
+    host.appendChild(frame);
+  },
+
+  _parseAndRender(htmlStr, name) {
+    this.pages = []; this.selPage = -1; this.selBlock = -1;
+    this.history = []; this.histIdx = -1;
+    this.dirty = false; this.changeCount = 0;
+    this._rawOriginalHtml = htmlStr;
+    this._hideInlineToolbar();
+    document.getElementById('btn-del-block').disabled = true;
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlStr, 'text/html');
+    const pageDivs = doc.querySelectorAll('.page');
+    if (!pageDivs.length) { alert('No .page elements found in this HTML file.'); return; }
+
+    pageDivs.forEach(pageDiv => {
+      const w = parseInt(pageDiv.style.width)  || 800;
+      const h = parseInt(pageDiv.style.height) || 1000;
+
+      // ── Image: import the node directly so the src attribute is guaranteed intact ──
+      let _imgEl = null;
+      const origImg = pageDiv.querySelector('img.page-img, img');
+      if (origImg) {
+        _imgEl = document.importNode(origImg, false); // copies all attributes to main doc
+        _imgEl.removeAttribute('loading');            // drop lazy-loading
+        _imgEl.className = 'page-img';
+      }
+
+      // ── Blocks: .tw divs (may be inside .text-layer) ──
+      const blocks = [];
+      pageDiv.querySelectorAll('.tw').forEach(tw => {
+        const s = tw.style;
+        const fontSize = parseFloat(s.fontSize) || 14;
+        // Preserve font family from source class (.tw-la = Latin, .tw-ar = Arabic/default)
+        const fontFamily = tw.classList.contains('tw-la')
+          ? "'Noto Serif','Times New Roman','Georgia',serif"
+          : "'Traditional Arabic','Noto Naskh Arabic','Amiri',serif";
+        blocks.push({
+          id:         tw.id || ('blk_' + Math.random().toString(36).slice(2)),
+          left:       parseFloat(s.left)       || 0,
+          top:        parseFloat(s.top)        || 0,
+          width:      parseFloat(s.width)      || 100,
+          height:     parseFloat(s.height)     || 20,
+          fontSize,
+          lineHeight: this._normalizeLineHeight(s.lineHeight, fontSize),
+          dir:        (s.direction || tw.getAttribute('dir') || 'rtl') === 'ltr' ? 'ltr' : 'rtl',
+          fontFamily,
+          text:       tw.textContent || '',
+          original:   tw.textContent || '',
+          modified:   false,
+        });
+      });
+
+      this.pages.push({ width: w, height: h, _imgEl, blocks });
+    });
+
+    this._pushHistory(this._snapshot());
+    this._renderDocument();
+    this._updatePageList();
+    this._updateStats();
+    this._updateStatusBar();
+    document.getElementById('drop-hint').style.display = 'none';
+    document.getElementById('btn-add-block').disabled = false;
+
+    // Auto-fit on first load
+    requestAnimationFrame(() => this.zoomFit());
+  },
+
+  // ── Rendering ──────────────────────────────────────────────────────
+  _renderDocument() {
+    const wrapper = document.getElementById('zoom-wrapper');
+    wrapper.querySelectorAll('.editor-page, .editor-page-label').forEach(el => el.remove());
+
+    this.pages.forEach((page, pi) => {
+      const label = document.createElement('div');
+      label.className = 'editor-page-label';
+      label.textContent = `Page ${pi + 1} of ${this.pages.length}`;
+      wrapper.appendChild(label);
+      wrapper.appendChild(this._createPageElement(page, pi));
+    });
+
+    this.setZoom(this.zoom);
+    // Apply fit-scaling after fonts are ready so rendering matches original HTML output
+    const doFit = () => this._fitAllBlocks();
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(doFit).catch(doFit);
+    } else {
+      setTimeout(doFit, 300);
+    }
+  },
+
+  // Apply same legacyFit algorithm as overlay_renderer.py so blocks scale identically
+  _fitAllBlocks() {
+    document.querySelectorAll('.editor-block:not([contenteditable="true"])').forEach(el => {
+      const pi = +el.dataset.pi, bi = +el.dataset.bi;
+      if (!this.pages[pi]) return;
+      const blk = this.pages[pi].blocks[bi];
+      if (!blk) return;
+      this._applyLegacyFit(el, blk);
+    });
+  },
+
+  _applyLegacyFit(el, blk) {
+    const targetW = blk.width, targetH = blk.lineHeight * blk.fontSize;
+    if (targetW <= 0 || targetH <= 0) return;
+
+    // Temporarily reset width to measure natural text width
+    el.style.width = 'auto';
+    el.style.transform = 'none';
+
+    let fontSize = blk.fontSize;
+    const maxIter = 8;
+    for (let i = 0; i < maxIter; i++) {
+      el.style.fontSize = fontSize.toFixed(2) + 'px';
+      const natural = el.scrollWidth;
+      if (natural <= 0) break;
+      const ratio = targetW / natural;
+      if (ratio > 0.99 && ratio < 1.01) break;
+      fontSize = Math.max(4, Math.min(fontSize * ratio, targetH * 1.1));
+    }
+
+    el.style.fontSize = fontSize.toFixed(2) + 'px';
+    const finalNatural = el.scrollWidth;
+    if (finalNatural > 0 && targetW > 0) {
+      el.style.transform = `scaleX(${(targetW / finalNatural).toFixed(6)})`;
+    }
+    // Restore actual box width
+    el.style.width = blk.width + 'px';
+  },
+
+  _createPageElement(page, pi) {
+    const el = document.createElement('div');
+    el.className = 'editor-page'; el.id = `page-${pi}`;
+    el.style.width = page.width + 'px'; el.style.height = page.height + 'px';
+
+    if (page._imgEl && this.imgVisible) {
+      const img = page._imgEl.cloneNode(false);
+      img.onerror = () => { el.style.outline = '3px solid red'; document.getElementById('sb-sel').textContent = 'IMG LOAD ERROR — check console'; };
+      el.appendChild(img);
+    }
+
+    el.addEventListener('dblclick', e => {
+      if (e.target === el || e.target.classList.contains('page-img')) {
+        const rect = el.getBoundingClientRect();
+        this.addBlock(pi, (e.clientX - rect.left) / this.zoom, (e.clientY - rect.top) / this.zoom);
+      }
+    });
+    el.addEventListener('mousedown', e => {
+      if (e.target === el || e.target.classList.contains('page-img')) this.deselect();
+    });
+
+    page.blocks.forEach((blk, bi) => el.appendChild(this._createBlockElement(blk, pi, bi)));
+    return el;
+  },
+
+
+  _createBlockElement(blk, pi, bi) {
+    const el = document.createElement('div');
+    el.className = 'editor-block' + (blk.modified ? ' modified' : '');
+    el.id = `block-${pi}-${bi}`; el.dataset.pi = pi; el.dataset.bi = bi;
+    this._applyBlockStyle(el, blk); el.textContent = blk.text;
+    el.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      this.selectBlock(pi, bi);
+      if (el.isContentEditable) return;
+      this._startDrag(e, pi, bi, el);
+    });
+    el.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      this.selectBlock(pi, bi);
+      this._setBlockEditing(true, true);
+    });
+    el.addEventListener('input', () => {
+      if (this.selPage === pi && this.selBlock === bi) this.updateBlockText(el.textContent || '', { fromDom: true });
+    });
+    el.addEventListener('keydown', e => {
+      if (!el.isContentEditable) return;
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        this._setBlockEditing(false, false);
+        el.blur();
+      }
+    });
+    el.addEventListener('blur', () => {
+      if (el.isContentEditable) this._setBlockEditing(false, false);
+    });
+    return el;
+  },
+
+  _applyBlockStyle(el, blk) {
+    el.style.left = blk.left + 'px'; el.style.top = blk.top + 'px';
+    el.style.width = blk.width + 'px'; el.style.height = blk.height + 'px';
+    el.style.fontSize = blk.fontSize + 'px';
+    // Use pixel line-height matching box height — same as original renderer output
+    el.style.lineHeight = (blk.lineHeight * blk.fontSize).toFixed(2) + 'px';
+    el.style.direction = blk.dir; el.style.color = '#000';
+    el.style.fontFamily = blk.fontFamily || "'Traditional Arabic','Noto Naskh Arabic','Amiri',serif";
+  },
+
+  _normalizeLineHeight(rawLineHeight, fontSize) {
+    const raw = String(rawLineHeight || '').trim();
+    if (!raw || raw === 'normal') return 1.4;
+
+    let lh = parseFloat(raw);
+    if (!Number.isFinite(lh) || lh <= 0) return 1.4;
+
+    // Source HTML uses px line-height; convert to unitless ratio for editor controls.
+    if (raw.endsWith('px') || lh > 10) {
+      if (Number.isFinite(fontSize) && fontSize > 0) lh /= fontSize;
+    }
+
+    return Math.max(0.8, Math.min(3, +lh.toFixed(3)));
+  },
+
+  // ── Selection ──────────────────────────────────────────────────────
+  _selectedBlockEl() {
+    if (this.selPage < 0 || this.selBlock < 0) return null;
+    return document.getElementById(`block-${this.selPage}-${this.selBlock}`);
+  },
+
+  selectBlock(pi, bi) {
+    if (this.selPage >= 0 && this.selBlock >= 0) {
+      const prev = document.getElementById(`block-${this.selPage}-${this.selBlock}`);
+      if (prev) {
+        this._setBlockEditing(false, false, prev);
+        prev.classList.remove('selected');
+        this._removeHandles(prev);
+      }
+    }
+    this.selPage = pi; this.selBlock = bi;
+    const el = document.getElementById(`block-${pi}-${bi}`);
+    if (!el) return;
+    el.classList.add('selected'); this._addHandles(el, pi, bi);
+    this._updateInlineToolbar(this.pages[pi].blocks[bi], el);
+    this._updateStatusBar();
+    this._updatePageList();
+    document.getElementById('btn-del-block').disabled = false;
+  },
+
+  deselect() {
+    if (this.selPage >= 0 && this.selBlock >= 0) {
+      const el = document.getElementById(`block-${this.selPage}-${this.selBlock}`);
+      if (el) {
+        this._setBlockEditing(false, false, el);
+        el.classList.remove('selected');
+        this._removeHandles(el);
+      }
+    }
+    this.selPage = -1; this.selBlock = -1;
+    this._hideInlineToolbar();
+    document.getElementById('btn-del-block').disabled = true;
+    this._updateStatusBar();
+    this._updatePageList();
+  },
+
+  _addHandles(el, pi, bi) {
+    this._removeHandles(el);
+    ['nw','n','ne','e','se','s','sw','w'].forEach(d => {
+      const h = document.createElement('div'); h.className = `rh rh-${d}`;
+      h.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); this._startResize(e, pi, bi, d, el); });
+      el.appendChild(h);
+    });
+  },
+  _removeHandles(el) { el.querySelectorAll('.rh').forEach(h => h.remove()); },
+
+  _setBlockEditing(enabled, focusAtEnd = false, targetEl = null) {
+    const el = targetEl || this._selectedBlockEl();
+    if (!el) return;
+
+    if (enabled) {
+      el.contentEditable = 'true';
+      el.spellcheck = false;
+      el.classList.add('editing');
+      // Remove fit-scaling so text is natural size during editing
+      el.style.transform = 'none';
+      el.style.fontSize = '';  // reset to blk value via _applyBlockStyle below
+      const pi = +el.dataset.pi, bi = +el.dataset.bi;
+      if (this.pages[pi]) this._applyBlockStyle(el, this.pages[pi].blocks[bi]);
+      document.getElementById('inline-edit-toggle').textContent = 'Done';
+      if (focusAtEnd) {
+        el.focus();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      this._positionInlineToolbar();
+      return;
+    }
+
+    if (el.isContentEditable) this.updateBlockText(el.textContent || '', { fromDom: true });
+    el.contentEditable = 'false';
+    el.classList.remove('editing');
+    document.getElementById('inline-edit-toggle').textContent = 'Edit Text';
+    // Re-apply fit-scaling now that editing is done
+    const pi2 = +el.dataset.pi, bi2 = +el.dataset.bi;
+    if (this.pages[pi2]) this._applyLegacyFit(el, this.pages[pi2].blocks[bi2]);
+    this._positionInlineToolbar();
+  },
+
+  _updateInlineToolbar(blk, el = null) {
+    const bar = document.getElementById('inline-toolbar');
+    bar.classList.add('open');
+
+    document.getElementById('inline-fontsize').value = blk.fontSize;
+    document.getElementById('inline-lineheight').value = +blk.lineHeight.toFixed(3);
+    document.getElementById('inline-left').value = Math.round(blk.left);
+    document.getElementById('inline-top').value = Math.round(blk.top);
+    document.getElementById('inline-width').value = Math.round(blk.width);
+    document.getElementById('inline-height').value = Math.round(blk.height);
+    document.getElementById('inline-dir-rtl').classList.toggle('active', blk.dir !== 'ltr');
+    document.getElementById('inline-dir-ltr').classList.toggle('active', blk.dir === 'ltr');
+    document.getElementById('inline-edit-toggle').textContent = (el || this._selectedBlockEl())?.isContentEditable ? 'Done' : 'Edit Text';
+    this._positionInlineToolbar();
+  },
+
+  _positionInlineToolbar() {
+    const bar = document.getElementById('inline-toolbar');
+    const el = this._selectedBlockEl();
+    if (!el || !bar.classList.contains('open')) return;
+
+    const host = document.getElementById('canvas-area');
+    const hostRect = host.getBoundingClientRect();
+    const blockRect = el.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
+
+    const minLeft = 8;
+    const maxLeft = host.clientWidth - barRect.width - 8;
+    const clampedMax = Math.max(minLeft, maxLeft);
+    const leftRaw = blockRect.left - hostRect.left + host.scrollLeft + (blockRect.width - barRect.width) / 2;
+    const left = Math.max(minLeft, Math.min(clampedMax, leftRaw));
+
+    const topAbove = blockRect.top - hostRect.top + host.scrollTop - barRect.height - 10;
+    const topBelow = blockRect.bottom - hostRect.top + host.scrollTop + 10;
+    const top = topAbove > host.scrollTop + 2 ? topAbove : topBelow;
+
+    bar.style.left = Math.round(left) + 'px';
+    bar.style.top = Math.round(top) + 'px';
+  },
+
+  _hideInlineToolbar() {
+    const bar = document.getElementById('inline-toolbar');
+    bar.classList.remove('open');
+  },
+
+  // ── Drag ───────────────────────────────────────────────────────────
+  _startDrag(e, pi, bi, el) {
+    if (e.button !== 0) return;
+    const sx = e.clientX, sy = e.clientY;
+    const blk = this.pages[pi].blocks[bi];
+    const sl = blk.left, st = blk.top;
+    let moved = false; const snap = this._snapshot();
+    const onMove = mv => {
+      const dx = (mv.clientX - sx) / this.zoom, dy = (mv.clientY - sy) / this.zoom;
+      if (!moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+      moved = true; blk.left = Math.round(sl+dx); blk.top = Math.round(st+dy);
+      el.style.left = blk.left + 'px'; el.style.top = blk.top + 'px';
+      if (this.selPage === pi && this.selBlock === bi) this._positionInlineToolbar();
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (moved) {
+        blk.modified = true; el.classList.add('modified');
+        this._pushHistory(snap); this._markDirty(); this._updateInlineToolbar(blk, el);
+        this._applyLegacyFit(el, blk);
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  },
+
+  // ── Resize ─────────────────────────────────────────────────────────
+  _startResize(e, pi, bi, dir, el) {
+    const blk = this.pages[pi].blocks[bi];
+    const sx = e.clientX, sy = e.clientY;
+    const sl = blk.left, st = blk.top, sw = blk.width, sh = blk.height;
+    const snap = this._snapshot();
+    const onMove = mv => {
+      const dx = (mv.clientX - sx) / this.zoom, dy = (mv.clientY - sy) / this.zoom;
+      if (dir.includes('e')) blk.width  = Math.max(20, sw + dx);
+      if (dir.includes('s')) blk.height = Math.max(10, sh + dy);
+      if (dir.includes('w')) { blk.left = sl + dx; blk.width  = Math.max(20, sw - dx); }
+      if (dir.includes('n')) { blk.top  = st + dy; blk.height = Math.max(10, sh - dy); }
+      el.style.left = Math.round(blk.left) + 'px'; el.style.top  = Math.round(blk.top)  + 'px';
+      el.style.width = Math.round(blk.width) + 'px'; el.style.height = Math.round(blk.height) + 'px';
+      if (this.selPage === pi && this.selBlock === bi) this._positionInlineToolbar();
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      ['left','top','width','height'].forEach(k => blk[k] = Math.round(blk[k]));
+      blk.modified = true; el.classList.add('modified');
+      this._pushHistory(snap); this._markDirty(); this._updateInlineToolbar(blk, el);
+      this._applyLegacyFit(el, blk);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  },
+
+  // ── Block CRUD ─────────────────────────────────────────────────────
+  addBlock(pi, x, y) {
+    const snap = this._snapshot();
+    const bi = this.pages[pi].blocks.length;
+    const blk = { id:'blk_'+Math.random().toString(36).slice(2), left:Math.round(x), top:Math.round(y), width:200, height:40, fontSize:16, lineHeight:1.5, dir:'rtl', fontFamily:"'Traditional Arabic','Noto Naskh Arabic','Amiri',serif", text:'', original:'', modified:true };
+    this.pages[pi].blocks.push(blk);
+    const pageEl = document.getElementById(`page-${pi}`);
+    if (pageEl) pageEl.appendChild(this._createBlockElement(blk, pi, bi));
+    this._pushHistory(snap); this._markDirty();
+    this.selectBlock(pi, bi); this._updateStatusBar();
+    this._setBlockEditing(true, true);
+  },
+
+  deleteSelectedBlock() {
+    if (this.selPage < 0 || this.selBlock < 0) return;
+    const snap = this._snapshot();
+    const pi = this.selPage, bi = this.selBlock;
+    const el = document.getElementById(`block-${pi}-${bi}`);
+    if (el) el.remove();
+    this.pages[pi].blocks.splice(bi, 1);
+    document.getElementById(`page-${pi}`)?.querySelectorAll('.editor-block').forEach((b, i) => {
+      b.id = `block-${pi}-${i}`; b.dataset.bi = i;
+    });
+    this.selPage = -1; this.selBlock = -1;
+    this._pushHistory(snap); this._markDirty(); this.deselect(); this._updateStatusBar();
+  },
+
+  updateBlockText(text, opts = {}) {
+    if (this.selPage < 0) return;
+    const blk = this.pages[this.selPage].blocks[this.selBlock];
+    const prev = blk.text;
+    blk.text = text; blk.modified = blk.text !== blk.original;
+    const el = document.getElementById(`block-${this.selPage}-${this.selBlock}`);
+    if (el) {
+      if (!opts.fromDom) el.textContent = text;
+      el.classList.toggle('modified', blk.modified);
+    }
+    if (prev === text) {
+      this._updateStatusBar();
+      this._updateInlineToolbar(blk, el);
+      return;
+    }
+    this._markDirty(); this._updateStatusBar();
+    this._updateInlineToolbar(blk, el);
+  },
+
+  updateBlockProp(prop, value) {
+    if (this.selPage < 0) return;
+    const snap = this._snapshot();
+    const blk = this.pages[this.selPage].blocks[this.selBlock];
+    if (prop === 'fontSize') value = Math.max(6, Math.min(72, value || blk.fontSize));
+    if (prop === 'lineHeight') value = Math.max(0.8, Math.min(3, value || 1.4));
+    if (prop === 'width') value = Math.max(20, Math.round(value || blk.width));
+    if (prop === 'height') value = Math.max(10, Math.round(value || blk.height));
+    if (prop === 'left' || prop === 'top') value = Math.round(value || blk[prop]);
+    if (blk[prop] === value) {
+      this._updateInlineToolbar(blk);
+      return;
+    }
+    blk[prop] = value; blk.modified = true;
+    const el = document.getElementById(`block-${this.selPage}-${this.selBlock}`);
+    if (el) { this._applyBlockStyle(el, blk); this._applyLegacyFit(el, blk); this._removeHandles(el); this._addHandles(el, this.selPage, this.selBlock); el.classList.add('modified'); }
+    this._updateInlineToolbar(blk, el); this._pushHistory(snap); this._markDirty();
+  },
+
+  _revertBlock() {
+    if (this.selPage < 0) return;
+    const snap = this._snapshot();
+    const blk = this.pages[this.selPage].blocks[this.selBlock];
+    if (blk.text === blk.original && !blk.modified) return;
+    blk.text = blk.original; blk.modified = false;
+    const el = document.getElementById(`block-${this.selPage}-${this.selBlock}`);
+    if (el) { el.textContent = blk.original; this._addHandles(el, this.selPage, this.selBlock); el.classList.remove('modified'); }
+    this._pushHistory(snap); this._updateInlineToolbar(blk, el); this._markDirty();
+  },
+
+  _nudgeBlock(dx, dy) {
+    const blk = this.pages[this.selPage].blocks[this.selBlock];
+    blk.left += dx; blk.top += dy; blk.modified = true;
+    const el = document.getElementById(`block-${this.selPage}-${this.selBlock}`);
+    if (el) { el.style.left = blk.left+'px'; el.style.top = blk.top+'px'; el.classList.add('modified'); }
+    this._updateInlineToolbar(blk, el); this._markDirty();
+  },
+
+  // ── Arabic insertion ───────────────────────────────────────────────
+  insertText(text) {
+    if (this.selPage < 0 || this.selBlock < 0) return;
+    const el = this._selectedBlockEl();
+    if (el && el.isContentEditable && document.activeElement === el) {
+      document.execCommand('insertText', false, text);
+      this.updateBlockText(el.textContent || '', { fromDom: true });
+      return;
+    }
+    const blk = this.pages[this.selPage].blocks[this.selBlock];
+    this.updateBlockText((blk.text || '') + text);
+  },
+
+  // ── History ────────────────────────────────────────────────────────
+  _snapshot() {
+    return this.pages.map(p => ({ ...p, blocks: p.blocks.map(b => ({...b})) }));
+  },
+  _pushHistory(snap) {
+    this.history = this.history.slice(0, this.histIdx + 1);
+    this.history.push(snap);
+    if (this.history.length > 100) this.history.shift();
+    this.histIdx = this.history.length - 1;
+    this._updateUndoRedo();
+  },
+  undo() {
+    if (this.histIdx <= 0) return;
+    this.histIdx--; this._restoreSnapshot(this.history[this.histIdx]); this._updateUndoRedo();
+  },
+  redo() {
+    if (this.histIdx >= this.history.length - 1) return;
+    this.histIdx++; this._restoreSnapshot(this.history[this.histIdx]); this._updateUndoRedo();
+  },
+  _restoreSnapshot(snap) {
+    this.pages = snap.map(p => ({ ...p, blocks: p.blocks.map(b => ({...b})) }));
+    this.deselect(); this._renderDocument(); this._updatePageList(); this._updateStats(); this._updateStatusBar();
+  },
+  _updateUndoRedo() {
+    document.getElementById('btn-undo').disabled = this.histIdx <= 0;
+    document.getElementById('btn-redo').disabled = this.histIdx >= this.history.length - 1;
+  },
+
+  _markDirty() {
+    this.dirty = true;
+    this.changeCount = this.pages.reduce((s, p) => s + p.blocks.filter(b => b.modified).length, 0);
+    this._updateStatusBar();
+  },
+
+  // ── Zoom ───────────────────────────────────────────────────────────
+  setZoom(level) {
+    this.zoom = Math.max(0.2, Math.min(3.0, level));
+    const w = document.getElementById('zoom-wrapper');
+    w.style.transform = `scale(${this.zoom})`;
+    w.style.transformOrigin = 'top center';
+    document.getElementById('zoom-val').value = Math.round(this.zoom * 100) + '%';
+    document.getElementById('zoom-slider').value = Math.round(this.zoom * 100);
+    this._positionInlineToolbar();
+  },
+
+  zoomFit() {
+    if (!this.pages.length) return;
+    const canvasW = document.getElementById('canvas-area').clientWidth - 64;
+    const maxW = Math.max(...this.pages.map(p => p.width));
+    this.setZoom(canvasW / maxW);
+  },
+
+  _toggleImage() {
+    this.imgVisible = !this.imgVisible;
+    document.querySelectorAll('.page-img').forEach(img => img.style.display = this.imgVisible ? '' : 'none');
+    document.getElementById('btn-toggle-img').classList.toggle('active', !this.imgVisible);
+  },
+
+  // ── Find & Replace ─────────────────────────────────────────────────
+  _toggleFR() { document.getElementById('fr-panel').classList.toggle('open'); if (document.getElementById('fr-panel').classList.contains('open')) document.getElementById('fr-find').focus(); },
+  _openFR()   { document.getElementById('fr-panel').classList.add('open'); document.getElementById('fr-find').focus(); },
+  _closeFR()  {
+    document.getElementById('fr-panel').classList.remove('open');
+    this.findMatches = []; document.querySelectorAll('.editor-block.found').forEach(el => el.classList.remove('found'));
+    document.getElementById('fr-count').textContent = '—';
+  },
+  _doFind() {
+    const q = document.getElementById('fr-find').value;
+    document.querySelectorAll('.editor-block.found').forEach(el => el.classList.remove('found'));
+    this.findMatches = []; this.findIdx = -1;
+    if (!q) { document.getElementById('fr-count').textContent = '—'; return; }
+    this.pages.forEach((p, pi) => p.blocks.forEach((b, bi) => {
+      if (b.text.includes(q)) {
+        this.findMatches.push({ pi, bi });
+        document.getElementById(`block-${pi}-${bi}`)?.classList.add('found');
+      }
+    }));
+    document.getElementById('fr-count').textContent = `${this.findMatches.length} found`;
+    if (this.findMatches.length) { this.findIdx = 0; this._scrollToMatch(0); }
+  },
+  findNext() { if (!this.findMatches.length) { this._doFind(); return; } this.findIdx = (this.findIdx+1) % this.findMatches.length; this._scrollToMatch(this.findIdx); },
+  findPrev() { if (!this.findMatches.length) return; this.findIdx = (this.findIdx-1+this.findMatches.length) % this.findMatches.length; this._scrollToMatch(this.findIdx); },
+  _scrollToMatch(idx) {
+    const m = this.findMatches[idx]; this.selectBlock(m.pi, m.bi);
+    document.getElementById(`block-${m.pi}-${m.bi}`)?.scrollIntoView({ behavior:'smooth', block:'center' });
+  },
+  replaceOne() {
+    if (this.selPage < 0 || !this.findMatches.length) return;
+    const q = document.getElementById('fr-find').value, r = document.getElementById('fr-repl').value;
+    const blk = this.pages[this.selPage].blocks[this.selBlock];
+    blk.text = blk.text.replaceAll(q, r); blk.modified = true;
+    this.updateBlockText(blk.text); this._doFind();
+  },
+  replaceAll() {
+    const q = document.getElementById('fr-find').value, r = document.getElementById('fr-repl').value;
+    if (!q) return; const snap = this._snapshot(); let count = 0;
+    this.pages.forEach((p, pi) => p.blocks.forEach((b, bi) => {
+      if (b.text.includes(q)) {
+        b.text = b.text.replaceAll(q, r); b.modified = true; count++;
+        const el = document.getElementById(`block-${pi}-${bi}`);
+        if (el) { el.textContent = b.text; el.classList.add('modified'); }
+        if (this.selPage === pi && this.selBlock === bi) this._updateInlineToolbar(b, el);
+      }
+    }));
+    this._pushHistory(snap); this._markDirty(); this._doFind();
+    document.getElementById('fr-count').textContent = `Replaced ${count}`;
+  },
+
+  // ── Page list & stats ──────────────────────────────────────────────
+  _updatePageList() {
+    const list = document.getElementById('page-list'); list.innerHTML = '';
+    this.pages.forEach((p, pi) => {
+      const el = document.createElement('div');
+      el.className = 'page-thumb' + (pi === this.selPage ? ' active' : '');
+      el.innerHTML = `<span class="page-thumb-num">${pi+1}</span><span class="page-thumb-info">${p.blocks.length} blocks</span>`;
+      el.onclick = () => { document.getElementById(`page-${pi}`)?.scrollIntoView({ behavior:'smooth' }); this.selPage = pi; this._updatePageList(); };
+      list.appendChild(el);
+    });
+  },
+
+  _updateStats() {
+    const total = this.pages.reduce((s,p) => s+p.blocks.length, 0);
+    const mod   = this.pages.reduce((s,p) => s+p.blocks.filter(b=>b.modified).length, 0);
+    document.getElementById('stats-content').innerHTML = `
+      <div class="stat-row"><span>Pages</span><span class="stat-val">${this.pages.length}</span></div>
+      <div class="stat-row"><span>Total blocks</span><span class="stat-val">${total}</span></div>
+      <div class="stat-row"><span>Modified</span><span class="stat-val">${mod}</span></div>
+      <div class="stat-row"><span>Changes</span><span class="stat-val">${this.changeCount}</span></div>
+    `;
+  },
+
+  _updateStatusBar() {
+    const total = this.pages.reduce((s,p) => s+p.blocks.length, 0);
+    document.getElementById('sb-pages').textContent  = `${this.pages.length} page${this.pages.length!==1?'s':''}`;
+    document.getElementById('sb-blocks').textContent = `${total} blocks`;
+    document.getElementById('sb-changes').textContent = `${this.changeCount} change${this.changeCount!==1?'s':''}${this.dirty?' *':''}`;
+    document.getElementById('sb-sel').textContent = this.selPage >= 0 && this.selBlock >= 0
+      ? `p${this.selPage+1} · block ${this.selBlock+1}`
+      : '—';
+    this._updateStats();
+  },
+
+  // ── Export ─────────────────────────────────────────────────────────
+  exportHtml() {
+    if (!this.pages.length) { alert('No document loaded.'); return; }
+    const html = this._buildExportHtml();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([html], { type:'text/html' }));
+    a.download = 'corrected.html'; a.click(); URL.revokeObjectURL(a.href);
+    this.dirty = false; this._updateStatusBar();
+  },
+
+  _buildExportHtml() {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(this._rawOriginalHtml, 'text/html');
+
+    doc.querySelectorAll('.page').forEach((pageDiv, pi) => {
+      const page = this.pages[pi]; if (!page) return;
+      const twEls = pageDiv.querySelectorAll('.tw');
+
+      twEls.forEach((tw, bi) => {
+        const blk = page.blocks[bi];
+        if (!blk) { tw.remove(); return; }
+        tw.textContent = blk.text;
+        tw.style.left       = blk.left       + 'px';
+        tw.style.top        = blk.top        + 'px';
+        tw.style.width      = blk.width      + 'px';
+        tw.style.height     = blk.height     + 'px';
+        tw.style.fontSize   = blk.fontSize   + 'px';
+        tw.style.lineHeight = (blk.lineHeight * blk.fontSize).toFixed(2) + 'px';
+        tw.style.direction  = blk.dir;
+        tw.style.color      = '#000';
+      });
+
+      // New blocks added by user
+      for (let bi = twEls.length; bi < page.blocks.length; bi++) {
+        const blk = page.blocks[bi];
+        const tw = doc.createElement('div'); tw.className = 'tw';
+        tw.textContent = blk.text;
+        Object.assign(tw.style, {
+          position:'absolute', left:blk.left+'px', top:blk.top+'px',
+          width:blk.width+'px', height:blk.height+'px',
+          fontSize:blk.fontSize+'px', lineHeight:(blk.lineHeight * blk.fontSize).toFixed(2)+'px',
+          direction:blk.dir, color:'#000',
+          fontFamily: blk.fontFamily || "'Traditional Arabic','Noto Naskh Arabic','Amiri',serif",
+        });
+        (pageDiv.querySelector('.text-layer') || pageDiv).appendChild(tw);
+      }
+    });
+
+    return '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+  },
+};
+
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>

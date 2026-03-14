@@ -8,6 +8,8 @@ Consolidated Gemini/Mistral OCR stack used by the project.
   Gemini-based semantic extraction and HTML rendering pipeline.
 - `mistral_ocr_pipeline.py`
   Two-pass Mistral OCR pipeline (OCR -> structuring -> optional HTML).
+- `mistral_fidelity_pipeline.py`
+  Fidelity-first Mistral OCR pipeline (OCR only -> canonical JSON + markdown + deterministic HTML).
 - `mistral_batch_ocr.py`
   Batch OCR submission/polling/retrieval for Mistral API.
 - `batch_to_structured.py`
@@ -25,7 +27,7 @@ Consolidated Gemini/Mistral OCR stack used by the project.
 
 - `webapp/ocr_service.py` imports:
   - `llm_pipelines.pdf_to_html` for `semantic_html`
-  - `llm_pipelines.mistral_ocr_pipeline` for `markdown`
+  - `llm_pipelines.mistral_fidelity_pipeline` for `markdown` (+ JSON/HTML sidecars)
 - `tasks.py` imports `llm_pipelines.pdf_to_html` models/processor.
 
 ## CLI Usage
@@ -35,6 +37,7 @@ Preferred (module form):
 ```bash
 python3 -m llm_pipelines.pdf_to_html input.pdf output.html
 python3 -m llm_pipelines.mistral_ocr_pipeline input.pdf --output-dir outputs
+python3 -m llm_pipelines.mistral_fidelity_pipeline input.pdf --output-dir outputs
 python3 -m llm_pipelines.mistral_batch_ocr --pdfs-dir ./pdfs --output-dir ./batch_out
 ```
 

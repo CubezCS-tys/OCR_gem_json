@@ -17,13 +17,15 @@ Based on Google's document processing and structured output best practices:
 import pathlib
 import os
 import json
+import csv
 import logging
 import time
 import base64
 import io
 import re
-from typing import Optional, Literal
-from dataclasses import dataclass, field
+import threading
+from typing import Optional, Literal, Any
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
 try:
@@ -81,6 +83,15 @@ class ProcessingConfig:
     image_dpi: int = 300  # DPI for rendering pages when extracting images (increased for better fidelity)
     request_timeout: int = 300  # Timeout for API requests in seconds (5 minutes)
     experimental_gemini_html: bool = False  # Also request HTML directly from Gemini for comparison
+    use_direct_html_mode: bool = False  # Use direct HTML generation (no JSON schema)
+    direct_html_workers: int = 8  # Max concurrent per-page HTML calls in dual-page mode
+    use_dual_page_processing: bool = False  # Split into single-page PDFs and run dual calls per page
+    dual_page_workers: int = 8  # Max concurrent per-page API calls (shared pool for structured + transcript)
+    dual_page_enable_transcript: bool = True  # Run second freeform transcript call per page
+    dual_page_min_transcript_chars: int = 200  # Minimum transcript size before using it as raw_text fallback
+    # Cost tracking (USD per 1M tokens). Defaults match Gemini 3 Flash Preview paid-tier text pricing.
+    input_price_per_million: float = 0.50
+    output_price_per_million: float = 3.00
     
     def __post_init__(self):
         """Validate configuration parameters."""
@@ -104,6 +115,23 @@ class ProcessingConfig:
         
         if self.request_timeout < 10 or self.request_timeout > 3600:
             raise ValueError(f"request_timeout must be between 10 and 3600 seconds, got {self.request_timeout}")
+        
+        if self.direct_html_workers < 1 or self.direct_html_workers > 64:
+            raise ValueError(f"direct_html_workers must be between 1 and 64, got {self.direct_html_workers}")
+        
+        if self.dual_page_workers < 1 or self.dual_page_workers > 64:
+            raise ValueError(f"dual_page_workers must be between 1 and 64, got {self.dual_page_workers}")
+        
+        if self.dual_page_min_transcript_chars < 0 or self.dual_page_min_transcript_chars > 100000:
+            raise ValueError(
+                f"dual_page_min_transcript_chars must be between 0 and 100000, got {self.dual_page_min_transcript_chars}"
+            )
+        
+        if self.input_price_per_million < 0:
+            raise ValueError(f"input_price_per_million must be >= 0, got {self.input_price_per_million}")
+        
+        if self.output_price_per_million < 0:
+            raise ValueError(f"output_price_per_million must be >= 0, got {self.output_price_per_million}")
 
 
 # =============================================================================
@@ -153,6 +181,11 @@ class Table(BaseModel):
     reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow")
     column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
     multi_column_group_id: Optional[str] = Field(default=None, description="ID for grouping elements that form an inline multi-column section")
+    # Optional geometry for recovery and ordering
+    bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage (0-100)")
+    bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage (0-100)")
+    bbox_width: Optional[float] = Field(default=None, description="Width as percentage (0-100)")
+    bbox_height: Optional[float] = Field(default=None, description="Height as percentage (0-100)")
 
 
 class TextBlock(BaseModel):
@@ -194,6 +227,11 @@ class TextBlock(BaseModel):
     reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow (1, 2, 3...)")
     column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
     multi_column_group_id: Optional[str] = Field(default=None, description="ID for grouping elements that form an inline multi-column section (e.g., 'group1', 'group2')")
+    # Optional geometry for recovery and ordering
+    bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage (0-100)")
+    bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage (0-100)")
+    bbox_width: Optional[float] = Field(default=None, description="Width as percentage (0-100)")
+    bbox_height: Optional[float] = Field(default=None, description="Height as percentage (0-100)")
 
 
 class Image(BaseModel):
@@ -207,6 +245,11 @@ class Image(BaseModel):
     reading_order: Optional[int] = Field(default=None, description="Sequence number on page for proper flow")
     column_number: Optional[int] = Field(default=None, description="Which column (1, 2, 3...) in multi-column layout")
     multi_column_group_id: Optional[str] = Field(default=None, description="ID for grouping elements that form an inline multi-column section")
+    # Optional geometry used for physical image extraction from the source PDF
+    bbox_top: Optional[float] = Field(default=None, description="Top edge as percentage (0-100)")
+    bbox_left: Optional[float] = Field(default=None, description="Left edge as percentage (0-100)")
+    bbox_width: Optional[float] = Field(default=None, description="Width as percentage (0-100)")
+    bbox_height: Optional[float] = Field(default=None, description="Height as percentage (0-100)")
     # Alignment within flow
     alignment: Optional[Literal["left", "center", "right", "full-width"]] = Field(default="center", description="Horizontal alignment within text flow")
     # Actual dimensions
@@ -464,6 +507,56 @@ window.addEventListener('load', () => {
       MathJax.typesetPromise().catch((err) => console.error('MathJax error:', err));
     }
   }, 200);
+	});
+	</script>"""
+    
+    @staticmethod
+    def _get_page_structure_fix_script() -> str:
+        """Repair page DOM: wrap stray top-level nodes and flatten nested pages."""
+        return """<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var container = document.querySelector('.document-container');
+  if (!container) return;
+  
+  // 1) Wrap stray top-level nodes (that are not `.page`) into a page shell.
+  (function wrapStrayTopLevelNodes() {
+    var children = Array.prototype.slice.call(container.childNodes);
+    var run = [];
+    function flushRun() {
+      if (!run.length) return;
+      var page = document.createElement('div');
+      page.className = 'page';
+      var content = document.createElement('div');
+      content.className = 'page-content';
+      page.appendChild(content);
+      var anchor = run[0];
+      container.insertBefore(page, anchor);
+      run.forEach(function(node) { content.appendChild(node); });
+      run = [];
+    }
+    children.forEach(function(node) {
+      if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) return;
+      var isPage = node.nodeType === Node.ELEMENT_NODE &&
+                   node.classList && node.classList.contains('page');
+      if (isPage) {
+        flushRun();
+        return;
+      }
+      run.push(node);
+    });
+    flushRun();
+  })();
+  
+  // 2) Flatten accidentally nested pages.
+  var guard = 0;
+  while (guard < 500) {
+    var nested = container.querySelector('.page .page');
+    if (!nested) break;
+    var parentPage = nested.parentElement ? nested.parentElement.closest('.page') : null;
+    if (!parentPage) break;
+    parentPage.insertAdjacentElement('afterend', nested);
+    guard += 1;
+  }
 });
 </script>"""
     
@@ -841,6 +934,13 @@ window.addEventListener('load', () => {
         unicode-bidi: embed;
     }}
     
+    .equation-inline {{
+        display: inline-block;
+        margin: 0 0.1em;
+        direction: ltr;
+        unicode-bidi: embed;
+    }}
+    
     /* Equation caption for Arabic explanations */
     .equation-caption {{
         text-align: center;
@@ -981,6 +1081,119 @@ window.addEventListener('load', () => {
         body {{ padding: 10px; }}
         .page {{ padding: 20px; }}
         .has-multi-column, .has-multi-column-3, .has-multi-column-4 {{ column-count: 1; }}
+    }}
+</style>"""
+    
+    @staticmethod
+    def _get_plain_text_styles(is_rtl: bool = False) -> str:
+        """Minimal no-frills stylesheet for direct HTML mode (text/tables/images only)."""
+        if is_rtl:
+            font_family = "'Noto Naskh Arabic', 'Amiri', serif"
+        else:
+            font_family = "serif"
+        
+        return f"""<style>
+    * {{ box-sizing: border-box; }}
+    html, body {{
+        margin: 0;
+        padding: 0;
+        font-family: {font_family};
+        line-height: 1.6;
+        background: #ececec;
+        color: #111;
+    }}
+    .document-container {{
+        max-width: 940px;
+        margin: 0 auto;
+        padding: 18px 10px 26px;
+    }}
+    .document-container > .page {{
+        background: #fff;
+        border: 1px solid #cfcfcf;
+        margin: 0 auto 1.3rem;
+        padding: 22px 18px;
+        page-break-after: always;
+    }}
+    .document-container > .page:last-child {{
+        page-break-after: auto;
+        margin-bottom: 0;
+    }}
+    .document-container > .page > .page-content {{
+        width: 100%;
+    }}
+    /* If malformed fragments ever nest pages, neutralize nested page framing. */
+    .page .page {{
+        background: transparent;
+        border: 0;
+        margin: 0;
+        padding: 0;
+        page-break-after: auto;
+    }}
+    h1, h2, h3, h4, h5, h6 {{
+        margin: 0.7em 0 0.4em;
+        font-weight: 700;
+    }}
+    p {{
+        margin: 0.45em 0;
+    }}
+    ul, ol {{
+        margin: 0.45em 0 0.45em 1.2em;
+        padding: 0;
+    }}
+    table {{
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.8em 0;
+    }}
+    th, td {{
+        border: 1px solid currentColor;
+        padding: 6px 8px;
+        vertical-align: top;
+    }}
+    figure {{
+        margin: 0.9em 0;
+    }}
+    figure img, img {{
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+    }}
+    figcaption {{
+        margin-top: 0.35em;
+        font-size: 0.95em;
+    }}
+    .equation {{
+        text-align: center;
+        direction: ltr;
+        unicode-bidi: embed;
+        margin: 0.6em 0;
+    }}
+    .equation-inline {{
+        direction: ltr;
+        unicode-bidi: embed;
+    }}
+    .image-placeholder {{
+        text-align: center;
+    }}
+    @media print {{
+        html, body {{
+            background: #fff;
+        }}
+        .document-container {{
+            max-width: none;
+            padding: 0;
+        }}
+        .document-container > .page {{
+            background: #fff;
+            border: 0;
+            margin: 0;
+            padding: 18px 10px;
+            page-break-after: always;
+        }}
+        .document-container > .page:last-child {{
+            page-break-after: auto;
+        }}
     }}
 </style>"""
     
@@ -1183,6 +1396,19 @@ window.addEventListener('load', () => {
         # Remove duplicate header/footer from text_blocks
         page = HTMLRenderer._deduplicate_header_footer(page)
         
+        # If structured elements are missing but transcript exists, hydrate minimal blocks.
+        if not page.text_blocks and not page.tables and not page.images and page.raw_text:
+            page.text_blocks = HTMLRenderer._fallback_blocks_from_raw_text(
+                page.raw_text,
+                page.page_direction or ("rtl" if is_rtl else "ltr"),
+            )
+        
+        for block in page.text_blocks:
+            HTMLRenderer._infer_block_alignment(
+                block,
+                page.page_direction or ("rtl" if is_rtl else "ltr"),
+            )
+        
         parts = []
         page_class = "page"
         content_class = "page-content"
@@ -1191,8 +1417,11 @@ window.addEventListener('load', () => {
         page_text = " ".join(block.content for block in page.text_blocks)
         is_english_page = HTMLRenderer._detect_english_content(page_text)
 
-        # Override RTL for English pages
-        page_dir = "ltr" if is_english_page else (page.page_direction if hasattr(page, 'page_direction') else ("rtl" if is_rtl else "ltr"))
+        base_page_dir = page.page_direction if hasattr(page, 'page_direction') and page.page_direction else ("rtl" if is_rtl else "ltr")
+        page_dir = base_page_dir
+        # Only apply English-direction override when page direction is not explicitly RTL.
+        if is_english_page and base_page_dir != "rtl":
+            page_dir = "ltr"
 
         # Add multi-column class to content, not page container
         if page.has_multi_column:
@@ -1214,7 +1443,7 @@ window.addEventListener('load', () => {
                 page._column_styles = None
 
         # Add english-text class for English pages
-        if is_english_page:
+        if is_english_page and page_dir == "ltr":
             page_class += " english-text"
         
         # Build page style with dimensions if available
@@ -1501,7 +1730,7 @@ window.addEventListener('load', () => {
             
             # Check for inline sub-list in content
             main_content, sub_items = HTMLRenderer._parse_inline_sublist(item.content)
-            escaped_main = HTMLRenderer._escape(main_content)
+            rendered_main = HTMLRenderer._render_inline_math_text(main_content)
             
             # Detect item direction
             item_dir = ""
@@ -1509,6 +1738,10 @@ window.addEventListener('load', () => {
                 item_dir = ' dir="ltr"'
             elif HTMLRenderer._has_arabic(item.content):
                 item_dir = ' dir="rtl"'
+            
+            item_style = ""
+            if getattr(item, "text_align", None):
+                item_style = f' style="text-align: {item.text_align}"'
             
             # Open lists as needed to reach target level
             while current_level < item_level:
@@ -1528,17 +1761,17 @@ window.addEventListener('load', () => {
             # Add the list item with potential sub-list
             if sub_items:
                 # Item has inline sub-list - render with nested <ul>
-                parts.append(f'<li{item_dir}>')
-                parts.append(escaped_main)
+                parts.append(f'<li{item_dir}{item_style}>')
+                parts.append(rendered_main)
                 parts.append('<ul>')
                 for sub_item in sub_items:
-                    escaped_sub = HTMLRenderer._escape(sub_item)
-                    parts.append(f'<li{item_dir}>{escaped_sub}</li>')
+                    rendered_sub = HTMLRenderer._render_inline_math_text(sub_item)
+                    parts.append(f'<li{item_dir}{item_style}>{rendered_sub}</li>')
                 parts.append('</ul>')
                 parts.append('</li>')
             else:
                 # Regular list item
-                parts.append(f'<li{item_dir}>{escaped_main}</li>')
+                parts.append(f'<li{item_dir}{item_style}>{rendered_main}</li>')
         
         # Close all remaining open lists
         while current_level > 0:
@@ -1606,18 +1839,281 @@ window.addEventListener('load', () => {
         
         # Count Latin alphabet characters
         latin_chars = sum(1 for c in text if 'A' <= c <= 'Z' or 'a' <= c <= 'z')
+        arabic_chars = len(re.findall(r'[\u0600-\u06FF]', text))
         total_alpha = sum(1 for c in text if c.isalpha())
         
         if total_alpha == 0:
             return False
         
-        # If more than 70% Latin characters, it's English
-        return (latin_chars / total_alpha) > 0.7
+        latin_words = re.findall(r'\b[A-Za-z]{2,}\b', text)
+        arabic_words = re.findall(r'[\u0600-\u06FF]{2,}', text)
+        
+        # Avoid misclassifying Arabic pages that contain many math variables.
+        if arabic_chars > 0:
+            if len(arabic_words) >= max(2, len(latin_words)):
+                return False
+            if len(latin_words) < 3:
+                return False
+        
+        # If more than 70% Latin characters with enough lexical signal, treat as English.
+        return (latin_chars / total_alpha) > 0.7 and len(latin_words) >= 2
     
     @staticmethod
     def _has_arabic(text: str) -> bool:
         """Check if text contains Arabic characters."""
         return bool(re.search(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]', text))
+    
+    @staticmethod
+    def _looks_like_math_line(text: str) -> bool:
+        """Heuristic detector for standalone math/equation lines."""
+        s = (text or "").strip()
+        if not s:
+            return False
+        
+        if (s.startswith("$$") and s.endswith("$$")) or (s.startswith("\\[") and s.endswith("\\]")):
+            return True
+        if (s.startswith("$") and s.endswith("$")) and len(s) > 2:
+            return True
+        
+        if re.search(r'\\(frac|sum|int|nabla|theta|lambda|sin|cos|tan|sqrt|partial|mathcal|bar|Delta|Gamma)', s):
+            return True
+        
+        arabic_count = len(re.findall(r'[\u0600-\u06FF]', s))
+        if "=" in s and re.search(r"[A-Za-z]", s) and arabic_count <= 4:
+            return True
+        
+        if re.match(r'^[A-Za-z0-9\\_{}^().,+\-*/= \[\]]+$', s) and any(op in s for op in ("=", "+", "-", "*", "/", "^")):
+            return True
+        
+        return False
+    
+    @staticmethod
+    def _fallback_blocks_from_raw_text(raw_text: Optional[str], page_direction: str = "ltr") -> list[TextBlock]:
+        """Create minimal flow blocks from raw transcript when structured blocks are missing."""
+        if not raw_text:
+            return []
+        
+        blocks: list[TextBlock] = []
+        order = 1
+        
+        for raw_line in raw_text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line == "---" or line.startswith("## PAGE"):
+                continue
+            
+            arabic_count = len(re.findall(r'[\u0600-\u06FF]', line))
+            starts_math = line.startswith(("$$", "\\[", "$"))
+            looks_math = HTMLRenderer._looks_like_math_line(line)
+            mostly_math = looks_math and (arabic_count == 0 or starts_math)
+            
+            if mostly_math:
+                blocks.append(TextBlock(
+                    block_type="equation",
+                    content=line,
+                    is_display_math=(
+                        line.startswith("$$")
+                        or line.startswith("\\[")
+                        or len(line) > 40
+                    ),
+                    reading_order=order,
+                    text_direction="ltr",
+                    text_align="center",
+                ))
+            else:
+                if page_direction == "rtl" and HTMLRenderer._has_arabic(line):
+                    text_direction = "rtl"
+                elif HTMLRenderer._detect_english_content(line):
+                    text_direction = "ltr"
+                else:
+                    text_direction = "auto"
+                
+                blocks.append(TextBlock(
+                    block_type="paragraph",
+                    content=line,
+                    reading_order=order,
+                    text_direction=text_direction,
+                ))
+            
+            order += 1
+        
+        return blocks
+    
+    @staticmethod
+    def _infer_block_alignment(block: TextBlock, page_direction: str) -> None:
+        """Infer left/center/right alignment from bbox when model omitted text_align."""
+        left = getattr(block, "bbox_left", None)
+        width = getattr(block, "bbox_width", None)
+        if left is None or width is None:
+            return
+        
+        existing_align = (getattr(block, "text_align", None) or "").strip().lower()
+        right = left + width
+        center = left + (width / 2.0)
+        inferred = None
+        
+        # Narrow-ish centered blocks are typically centered formulas/headings.
+        if width <= 72 and abs(center - 50.0) <= 10.0:
+            inferred = "center"
+        else:
+            if page_direction == "rtl":
+                if right >= 68:
+                    inferred = "right"
+                elif left <= 20:
+                    inferred = "left"
+                else:
+                    inferred = "right"
+            else:
+                if left <= 20:
+                    inferred = "left"
+                elif right >= 80:
+                    inferred = "right"
+                else:
+                    inferred = "left"
+        
+        if not inferred:
+            return
+        
+        if not existing_align:
+            block.text_align = inferred
+            return
+        
+        if existing_align == "justify":
+            return
+        
+        if existing_align not in {"left", "right", "center"}:
+            block.text_align = inferred
+            return
+        
+        if existing_align == "center":
+            # Wide blocks that are far from center are rarely truly centered.
+            if width >= 82 and abs(center - 50.0) > 12.0:
+                block.text_align = inferred
+            return
+        
+        if existing_align != inferred:
+            # Strong edge anchoring means the declared alignment is probably noisy.
+            if left <= 12.0 or right >= 88.0:
+                block.text_align = inferred
+    
+    @staticmethod
+    def _has_unbalanced_math_delimiters(content: str) -> bool:
+        """Detect malformed math delimiters to avoid corrupting mixed text."""
+        if not content:
+            return False
+        
+        if content.count("\\(") != content.count("\\)"):
+            return True
+        if content.count("\\[") != content.count("\\]"):
+            return True
+        if content.count("$$") % 2 != 0:
+            return True
+        
+        single_dollar_count = len(re.findall(r'(?<!\\)\$(?!\$)', content))
+        if single_dollar_count % 2 != 0:
+            return True
+        
+        return False
+    
+    @staticmethod
+    def _has_balanced_braces(content: str) -> bool:
+        """Check for balanced curly braces in LaTeX-like snippets."""
+        depth = 0
+        for ch in content:
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth < 0:
+                    return False
+        return depth == 0
+    
+    @staticmethod
+    def _wrap_bare_inline_math(content: str) -> str:
+        """Wrap undelimited inline equations with MathJax inline delimiters."""
+        if not content:
+            return content
+        
+        if HTMLRenderer._has_unbalanced_math_delimiters(content):
+            return content
+        
+        delimited_pattern = re.compile(r'(\\\(.+?\\\)|\\\[.+?\\\]|\$\$.+?\$\$|\$[^$\n]+\$)', re.DOTALL)
+        protected: list[str] = []
+        
+        def _protect(match: re.Match) -> str:
+            idx = len(protected)
+            protected.append(match.group(0))
+            return f"__MATH_SEG_{idx}__"
+        
+        content = delimited_pattern.sub(_protect, content)
+        
+        def _wrap_candidate(match: re.Match) -> str:
+            expr = match.group(1).strip()
+            if not expr:
+                return match.group(0)
+            if "__MATH_SEG_" in expr:
+                return match.group(0)
+            if not HTMLRenderer._has_balanced_braces(expr):
+                return match.group(0)
+            return f'\\({expr}\\)'
+        
+        # Capture equation expressions starting with LaTeX commands: \frac{du}{dt} = 0
+        command_pattern = re.compile(
+            r'(?<!\S)'
+            r'((?:\\[A-Za-z]+[A-Za-z0-9\\_{}^().\']*)\s*=\s*[A-Za-z0-9\\_{}^().+\-\']+(?:\s*[+\-*/]\s*[A-Za-z0-9\\_{}^().+\-\']+)*)'
+            r'(?![\w\\}])'
+        )
+        content = command_pattern.sub(_wrap_candidate, content)
+        
+        # Protect newly wrapped command-based segments from the generic matcher below.
+        content = delimited_pattern.sub(_protect, content)
+        
+        # Capture expressions like: u_t = u_{xx}, nabla^2 v = 0, x^2 + y^2 = r^2
+        bare_pattern = re.compile(
+            r'(?<![\w\\{])'
+            r'([A-Za-z][A-Za-z0-9\\_{}^().\']*(?:\s*[=+\-*/]\s*[A-Za-z0-9\\_{}^().+\-\']+)+(?:\s+[A-Za-z0-9\\_{}^().\']+)*)'
+            r'(?![\w\\}])'
+        )
+        content = bare_pattern.sub(_wrap_candidate, content)
+        
+        for idx, seg in enumerate(protected):
+            content = content.replace(f"__MATH_SEG_{idx}__", seg)
+        
+        return content
+    
+    @staticmethod
+    def _render_inline_math_text(content: str) -> str:
+        """Render text with inline MathJax segments while escaping normal text."""
+        if not content:
+            return ""
+        
+        content = HTMLRenderer._wrap_bare_inline_math(content)
+        pattern = re.compile(r'(\\\(.+?\\\)|\\\[.+?\\\]|\$\$.+?\$\$|\$[^$\n]+\$)', re.DOTALL)
+        
+        parts: list[str] = []
+        last = 0
+        
+        for match in pattern.finditer(content):
+            plain = content[last:match.start()]
+            if plain:
+                parts.append(HTMLRenderer._escape(plain))
+            
+            math_seg = match.group(0)
+            math_seg = (
+                math_seg
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            )
+            parts.append(f'<span class="equation-inline">{math_seg}</span>')
+            last = match.end()
+        
+        tail = content[last:]
+        if tail:
+            parts.append(HTMLRenderer._escape(tail))
+        
+        return "".join(parts)
     
     @staticmethod
     def _clean_equation_content(content: str) -> tuple[str, str]:
@@ -1669,7 +2165,7 @@ window.addEventListener('load', () => {
         """Render a list of TextSpan objects as HTML with inline formatting."""
         parts = []
         for span in spans:
-            text = HTMLRenderer._escape(span.text)
+            text = HTMLRenderer._render_inline_math_text(span.text)
             
             # Build inline styles for this span
             styles = []
@@ -1723,11 +2219,13 @@ window.addEventListener('load', () => {
                 return '<hr class="content-divider" />'
             return ""  # Skip empty blocks
         
+        raw_content = block.content
+        
         # Handle rich text spans if present
         if hasattr(block, 'spans') and block.spans:
             content = HTMLRenderer._render_text_spans(block.spans)
         else:
-            content = HTMLRenderer._escape(block.content)
+            content = HTMLRenderer._render_inline_math_text(block.content)
         
         # Build inline style for typography
         inline_styles = []
@@ -1812,7 +2310,7 @@ window.addEventListener('load', () => {
             return f"<blockquote>{content}</blockquote>"
         
         elif block.block_type == "code":
-            return f"<pre><code>{content}</code></pre>"
+            return f"<pre><code>{HTMLRenderer._escape(raw_content)}</code></pre>"
         
         elif block.block_type == "hyperlink":
             # Render hyperlink with validation
@@ -1864,7 +2362,7 @@ window.addEventListener('load', () => {
             
             return '\n'.join(result_parts)
         
-        return f"<p>{content}</p>"
+        return f"<p{class_attr}{dir_attr}{style_attr}>{content}</p>"
     
     @staticmethod
     def _render_table(table: Table) -> str:
@@ -1921,7 +2419,7 @@ window.addEventListener('load', () => {
         
         # Use th or td based on is_header or cell.is_header
         tag = "th" if (is_header or cell.is_header) else "td"
-        content = HTMLRenderer._escape(cell.content)
+        content = HTMLRenderer._render_inline_math_text(cell.content)
         
         return f"<{tag}{attr_str}{style_attr}>{content}</{tag}>"
     
@@ -2092,6 +2590,165 @@ class ImageExtractor:
                     logger.warning(f"Failed to extract image from page {page.page_number}: {e}")
         
         return doc
+
+    @staticmethod
+    def _union_rect(a: fitz.Rect, b: fitz.Rect) -> fitz.Rect:
+        """Return the bounding union of two rectangles."""
+        return fitz.Rect(
+            min(a.x0, b.x0),
+            min(a.y0, b.y0),
+            max(a.x1, b.x1),
+            max(a.y1, b.y1),
+        )
+
+    @staticmethod
+    def _rect_gap(a: fitz.Rect, b: fitz.Rect) -> tuple[float, float]:
+        """Return horizontal and vertical gap between two rectangles (0 means overlap/touch)."""
+        dx = max(0.0, max(a.x0 - b.x1, b.x0 - a.x1))
+        dy = max(0.0, max(a.y0 - b.y1, b.y0 - a.y1))
+        return dx, dy
+
+    @classmethod
+    def _merge_adjacent_rects(cls, rects: list[fitz.Rect], gap_points: float = 6.0) -> list[fitz.Rect]:
+        """
+        Merge overlapping/nearby rects so tiled image fragments become one logical figure region.
+        """
+        if not rects:
+            return []
+
+        merged: list[fitz.Rect] = []
+        for rect in rects:
+            rect_copy = fitz.Rect(rect)
+            matched_indices: list[int] = []
+
+            for idx, existing in enumerate(merged):
+                dx, dy = cls._rect_gap(rect_copy, existing)
+                if dx <= gap_points and dy <= gap_points:
+                    matched_indices.append(idx)
+
+            if not matched_indices:
+                merged.append(rect_copy)
+                continue
+
+            base_idx = matched_indices[0]
+            merged[base_idx] = cls._union_rect(merged[base_idx], rect_copy)
+            for idx in reversed(matched_indices[1:]):
+                merged[base_idx] = cls._union_rect(merged[base_idx], merged[idx])
+                merged.pop(idx)
+
+        # Second pass to resolve transitive adjacency after unions grow.
+        changed = True
+        while changed:
+            changed = False
+            i = 0
+            while i < len(merged):
+                j = i + 1
+                while j < len(merged):
+                    dx, dy = cls._rect_gap(merged[i], merged[j])
+                    if dx <= gap_points and dy <= gap_points:
+                        merged[i] = cls._union_rect(merged[i], merged[j])
+                        merged.pop(j)
+                        changed = True
+                    else:
+                        j += 1
+                i += 1
+
+        return merged
+    
+    def extract_embedded_images_by_page(
+        self,
+        min_area_ratio: float = 0.005,
+        skip_full_page: bool = True,
+    ) -> dict[int, list[str]]:
+        """
+        Extract embedded PDF images by page and return data URIs ordered top-to-bottom.
+        
+        Args:
+            min_area_ratio: Minimum image area as page-area ratio to keep.
+            skip_full_page: Skip images that occupy almost the entire page.
+        
+        Returns:
+            Dict mapping 1-based page numbers to ordered image data URI list.
+        """
+        page_images: dict[int, list[str]] = {}
+        
+        for page_index in range(len(self.doc)):
+            page = self.doc[page_index]
+            page_rect = page.rect
+            page_area = max(page_rect.width * page_rect.height, 1.0)
+            candidates: list[fitz.Rect] = []
+            seen_rects: set[tuple[float, float, float, float]] = set()
+            
+            for img in page.get_images(full=True):
+                xref = img[0]
+                try:
+                    rects = page.get_image_rects(xref)
+                except Exception:
+                    continue
+                
+                for rect in rects:
+                    clip = rect & page_rect
+                    if clip.is_empty:
+                        continue
+                    if clip.width < 8 or clip.height < 8:
+                        continue
+                    
+                    area_ratio = (clip.width * clip.height) / page_area
+                    if area_ratio < min_area_ratio:
+                        continue
+                    if skip_full_page and area_ratio > 0.92:
+                        continue
+                    
+                    key = (
+                        round(clip.x0, 1),
+                        round(clip.y0, 1),
+                        round(clip.x1, 1),
+                        round(clip.y1, 1),
+                    )
+                    if key in seen_rects:
+                        continue
+                    seen_rects.add(key)
+
+                    candidates.append(fitz.Rect(clip))
+            
+            if not candidates:
+                continue
+
+            merged_candidates = self._merge_adjacent_rects(candidates, gap_points=6.0)
+            ordered_clips: list[fitz.Rect] = []
+            for clip in merged_candidates:
+                area_ratio = (clip.width * clip.height) / page_area
+                if area_ratio < min_area_ratio:
+                    continue
+                if skip_full_page and area_ratio > 0.92:
+                    continue
+                ordered_clips.append(clip)
+
+            if not ordered_clips:
+                continue
+
+            ordered_clips.sort(key=lambda clip: (clip.y0, clip.x0))
+            data_uris: list[str] = []
+            zoom = self.dpi / 72.0
+            matrix = fitz.Matrix(zoom, zoom)
+            
+            for clip in ordered_clips:
+                try:
+                    pix = page.get_pixmap(matrix=matrix, clip=clip, alpha=False)
+                    png_bytes = pix.tobytes("png")
+                    b64 = base64.b64encode(png_bytes).decode("utf-8")
+                    data_uris.append(f"data:image/png;base64,{b64}")
+                except Exception as exc:
+                    logger.warning(
+                        "Failed embedded image crop on page %s: %s",
+                        page_index + 1,
+                        str(exc)[:160],
+                    )
+            
+            if data_uris:
+                page_images[page_index + 1] = data_uris
+        
+        return page_images
     
     def close(self):
         """Close the PDF document."""
@@ -2127,6 +2784,7 @@ class PDFProcessor:
         
         self.client = genai.Client(api_key=api_key)
         self._uploaded_file = None
+        self._usage_lock = threading.Lock()
         
         # Token usage tracking
         self._total_input_tokens = 0
@@ -2143,6 +2801,28 @@ class PDFProcessor:
             self.config.media_resolution,
             types.MediaResolution.MEDIA_RESOLUTION_MEDIUM
         )
+    
+    def _add_usage_from_response(self, response) -> None:
+        """Thread-safe token usage tracking from Gemini responses."""
+        usage = getattr(response, "usage_metadata", None)
+        if not usage:
+            return
+        input_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
+        output_tokens = int(getattr(usage, "candidates_token_count", 0) or 0)
+        with self._usage_lock:
+            self._total_input_tokens += input_tokens
+            self._total_output_tokens += output_tokens
+    
+    def _calculate_cost_from_tokens(self, input_tokens: int, output_tokens: int) -> dict[str, float]:
+        """Calculate USD cost from token counts using configured per-1M rates."""
+        input_cost_usd = (max(int(input_tokens), 0) / 1_000_000) * self.config.input_price_per_million
+        output_cost_usd = (max(int(output_tokens), 0) / 1_000_000) * self.config.output_price_per_million
+        total_cost_usd = input_cost_usd + output_cost_usd
+        return {
+            "input_cost_usd": round(input_cost_usd, 6),
+            "output_cost_usd": round(output_cost_usd, 6),
+            "total_cost_usd": round(total_cost_usd, 6),
+        }
     
     def _upload_pdf(self, pdf_path: str) -> types.File:
         """Upload PDF to Gemini Files API with retry logic."""
@@ -2199,6 +2879,7 @@ IMPORTANT:
                     ),
                 )
                 
+                self._add_usage_from_response(response)
                 metadata = DocumentMetadata.model_validate_json(response.text)
                 logger.info(f"Document has {metadata.total_pages} pages")
                 return metadata.total_pages, metadata
@@ -2244,14 +2925,9 @@ IMPORTANT:
         estimated_input_tokens = total_pages * avg_input_tokens_per_page
         estimated_output_tokens = total_pages * avg_output_tokens_per_page
         
-        # Gemini 3 Flash Preview pricing (as of January 2026):
-        # Paid Tier per 1M tokens:
-        # - Input: $0.50 (text/image/video), $1.00 (audio)
-        # - Output: $3.00 (including thinking tokens)
-        # - Context caching: $0.05 (text/image/video)
-        # Note: Free tier available with free input/output, but usage limits apply
-        input_cost = (estimated_input_tokens / 1_000_000) * 0.50
-        output_cost = (estimated_output_tokens / 1_000_000) * 3.00
+        # Pricing is configurable from ProcessingConfig to keep estimates explicit and auditable.
+        input_cost = (estimated_input_tokens / 1_000_000) * self.config.input_price_per_million
+        output_cost = (estimated_output_tokens / 1_000_000) * self.config.output_price_per_million
         total_cost = input_cost + output_cost
         
         # Time estimate: ~2-5 seconds per page with API overhead
@@ -2306,6 +2982,346 @@ IMPORTANT:
             "is_substantial": is_substantial,
             "multi_column": page.has_multi_column,
         }
+    
+    def _split_pdf_to_single_page_parts(self, pdf_path: str) -> tuple[list[dict], DocumentMetadata]:
+        """Split a source PDF into in-memory single-page PDFs."""
+        if not HAS_PYMUPDF:
+            raise RuntimeError(
+                "Dual-page processing requires PyMuPDF. Install with: pip install PyMuPDF"
+            )
+        
+        src_doc = fitz.open(pdf_path)
+        metadata_raw = src_doc.metadata or {}
+        page_parts: list[dict] = []
+        
+        try:
+            for idx in range(src_doc.page_count):
+                page = src_doc[idx]
+                single_doc = fitz.open()
+                try:
+                    single_doc.insert_pdf(src_doc, from_page=idx, to_page=idx)
+                    page_parts.append({
+                        "page_number": idx + 1,
+                        "pdf_bytes": single_doc.tobytes(),
+                        "width_pts": float(page.rect.width),
+                        "height_pts": float(page.rect.height),
+                    })
+                finally:
+                    single_doc.close()
+        finally:
+            src_doc.close()
+        
+        title = (metadata_raw.get("title") or "").strip() or pathlib.Path(pdf_path).stem
+        author = (metadata_raw.get("author") or "").strip() or None
+        doc_type = (metadata_raw.get("subject") or "").strip() or "document"
+        metadata = DocumentMetadata(
+            title=title,
+            author=author,
+            total_pages=len(page_parts),
+            language=None,
+            document_type=doc_type,
+            is_scanned=False,
+        )
+        return page_parts, metadata
+    
+    def _extract_single_page_structured(self, page_pdf_bytes: bytes, page_number: int) -> PageContent:
+        """Structured extraction for one page (schema-constrained)."""
+        prompt = f"""Extract this SINGLE PDF page into the target JSON schema.
+
+Rules:
+- This is exactly one page. Set page_number={page_number}.
+- Extract header/footer/page_number_text/page_number_position when present.
+- Do not duplicate header/footer text inside text_blocks.
+- Preserve reading flow exactly as humans read it.
+- Extract tables as structured headers/rows with row_span/col_span.
+- Extract figures/images separately from tables.
+- For text blocks, tables, and images include bbox_top/bbox_left/bbox_width/bbox_height (0-100) when possible.
+- Preserve numerals exactly as shown (Arabic-Indic stays Arabic-Indic).
+- Preserve equations exactly as shown (LaTeX, do not solve/simplify).
+- If the page is RTL, set page_direction='rtl'. Otherwise 'ltr'.
+- Populate raw_text with the fullest OCR transcript you can recover for this page.
+"""
+        temperatures = [0.2, 0.3, 0.5]
+        last_error = None
+        page_part = types.Part.from_bytes(data=page_pdf_bytes, mime_type="application/pdf")
+        
+        for temperature in temperatures:
+            try:
+                response = self.client.models.generate_content(
+                    model=self.config.model,
+                    contents=[page_part, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        response_json_schema=PageContent.model_json_schema(),
+                        system_instruction=(
+                            "You are an OCR + document understanding system for single-page extraction. "
+                            "Maximize textual completeness and preserve true document flow. "
+                            "Capture headers/footers/page numbers, tables, and figures. "
+                            "When available, include bbox coordinates as percentages. "
+                            "Ensure JSON output is valid and properly escaped."
+                        ),
+                        media_resolution=self._get_media_resolution(),
+                        max_output_tokens=min(self.config.max_output_tokens, 16384),
+                        temperature=temperature,
+                    ),
+                )
+                self._add_usage_from_response(response)
+                page = PageContent.model_validate_json(response.text)
+                page.page_number = page_number
+                return page
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Structured single-page extraction failed for page %s (temp=%.1f): %s",
+                    page_number, temperature, str(exc)[:200]
+                )
+        
+        raise RuntimeError(
+            f"Structured extraction failed for page {page_number}: {last_error}"
+        )
+    
+    def _extract_single_page_transcript(self, page_pdf_bytes: bytes, page_number: int) -> str:
+        """Freeform transcript extraction for one page (recall-oriented)."""
+        prompt = f"""Transcribe this SINGLE PDF page completely in natural reading order.
+
+Requirements:
+- This is page {page_number}.
+- Do not omit any visible text.
+- Preserve headers, footers, and page number text.
+- Preserve tables as markdown tables when possible; otherwise plain aligned text.
+- Preserve equations in LaTeX as written.
+- Preserve numeral systems exactly as shown.
+- Output only the transcript content (no explanations).
+"""
+        temperatures = [0.0, 0.2]
+        last_error = None
+        page_part = types.Part.from_bytes(data=page_pdf_bytes, mime_type="application/pdf")
+        
+        for temperature in temperatures:
+            try:
+                response = self.client.models.generate_content(
+                    model=self.config.model,
+                    contents=[page_part, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="text/plain",
+                        system_instruction=(
+                            "You are a high-recall OCR transcriber for a single PDF page. "
+                            "Return complete page text in correct reading order."
+                        ),
+                        media_resolution=self._get_media_resolution(),
+                        max_output_tokens=min(self.config.max_output_tokens, 12000),
+                        temperature=temperature,
+                    ),
+                )
+                self._add_usage_from_response(response)
+                return (response.text or "").strip()
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Transcript single-page extraction failed for page %s (temp=%.1f): %s",
+                    page_number, temperature, str(exc)[:200]
+                )
+        
+        raise RuntimeError(
+            f"Transcript extraction failed for page {page_number}: {last_error}"
+        )
+    
+    def _normalise_page_content(self, page: PageContent) -> PageContent:
+        """Fill missing reading order and transcript fallbacks for stable rendering."""
+        if not page.raw_text:
+            page.raw_text = "\n".join(
+                blk.content.strip()
+                for blk in page.text_blocks
+                if blk.content and blk.content.strip()
+            ) or None
+        
+        if not page.text_blocks and not page.tables and not page.images and page.raw_text:
+            page.text_blocks = HTMLRenderer._fallback_blocks_from_raw_text(
+                page.raw_text,
+                page.page_direction or "ltr",
+            )
+        
+        for block in page.text_blocks:
+            HTMLRenderer._infer_block_alignment(block, page.page_direction or "ltr")
+        
+        elements = []
+        
+        for idx, block in enumerate(page.text_blocks):
+            elements.append({
+                "obj": block,
+                "source_index": idx,
+                "reading_order": getattr(block, "reading_order", None),
+                "bbox_top": getattr(block, "bbox_top", None),
+                "bbox_left": getattr(block, "bbox_left", None),
+            })
+        
+        base_idx = len(elements)
+        for t_idx, table in enumerate(page.tables):
+            elements.append({
+                "obj": table,
+                "source_index": base_idx + t_idx,
+                "reading_order": getattr(table, "reading_order", None),
+                "bbox_top": getattr(table, "bbox_top", None),
+                "bbox_left": getattr(table, "bbox_left", None),
+            })
+        
+        base_idx = len(elements)
+        for i_idx, image in enumerate(page.images):
+            elements.append({
+                "obj": image,
+                "source_index": base_idx + i_idx,
+                "reading_order": getattr(image, "reading_order", None),
+                "bbox_top": getattr(image, "bbox_top", None),
+                "bbox_left": getattr(image, "bbox_left", None),
+            })
+        
+        existing_orders = [
+            int(el["reading_order"])
+            for el in elements
+            if isinstance(el["reading_order"], int) and el["reading_order"] > 0
+        ]
+        next_order = (max(existing_orders) + 1) if existing_orders else 1
+        
+        missing = [
+            el for el in elements
+            if not isinstance(el["reading_order"], int) or el["reading_order"] <= 0
+        ]
+        
+        if missing:
+            rtl = page.page_direction == "rtl"
+            
+            if any(el["bbox_top"] is not None for el in missing):
+                def _bbox_key(el):
+                    top = el["bbox_top"] if el["bbox_top"] is not None else 999.0
+                    if el["bbox_left"] is None:
+                        left = 0.0 if rtl else 999.0
+                    else:
+                        left = el["bbox_left"]
+                    return (top, -left if rtl else left, el["source_index"])
+                
+                ordered_missing = sorted(missing, key=_bbox_key)
+            else:
+                ordered_missing = sorted(missing, key=lambda el: el["source_index"])
+            
+            for assigned_order, el in enumerate(ordered_missing, start=next_order):
+                setattr(el["obj"], "reading_order", assigned_order)
+        
+        return HTMLRenderer._deduplicate_images(page)
+    
+    def _extract_dual_page(self, pdf_path: str) -> DocumentStructure:
+        """Dual-call, per-page extraction for high recall + stable structure."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        start_time = time.time()
+        page_parts, metadata = self._split_pdf_to_single_page_parts(pdf_path)
+        total_pages = len(page_parts)
+        
+        if total_pages == 0:
+            raise RuntimeError("No pages found in source PDF")
+        
+        logger.info(
+            "Dual-page mode: %d pages | workers=%d | transcript_call=%s",
+            total_pages,
+            self.config.dual_page_workers,
+            self.config.dual_page_enable_transcript,
+        )
+        
+        structured_results: dict[int, Optional[PageContent]] = {}
+        transcript_results: dict[int, str] = {}
+        page_errors: dict[int, list[str]] = {}
+        
+        total_calls = total_pages * (2 if self.config.dual_page_enable_transcript else 1)
+        max_workers = min(self.config.dual_page_workers, max(1, total_calls))
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            future_map = {}
+            for part in page_parts:
+                page_num = part["page_number"]
+                page_bytes = part["pdf_bytes"]
+                
+                future_map[
+                    pool.submit(self._extract_single_page_structured, page_bytes, page_num)
+                ] = ("structured", page_num)
+                
+                if self.config.dual_page_enable_transcript:
+                    future_map[
+                        pool.submit(self._extract_single_page_transcript, page_bytes, page_num)
+                    ] = ("transcript", page_num)
+            
+            completed = 0
+            for future in as_completed(future_map):
+                kind, page_num = future_map[future]
+                try:
+                    value = future.result()
+                except Exception as exc:
+                    msg = f"{kind} call failed: {exc}"
+                    page_errors.setdefault(page_num, []).append(msg)
+                    logger.error("Dual-page page %s %s failure: %s", page_num, kind, exc)
+                    value = "" if kind == "transcript" else None
+                
+                if kind == "structured":
+                    structured_results[page_num] = value
+                else:
+                    transcript_results[page_num] = value
+                
+                completed += 1
+                if completed == total_calls or completed % max(1, total_calls // 10) == 0:
+                    logger.info("Dual-page progress: %d/%d calls complete", completed, total_calls)
+        
+        pages: list[PageContent] = []
+        for part in page_parts:
+            page_num = part["page_number"]
+            page = structured_results.get(page_num)
+            
+            if page is None:
+                err = "; ".join(page_errors.get(page_num, ["structured call returned no page"]))
+                page = PageContent(
+                    page_number=page_num,
+                    text_blocks=[TextBlock(
+                        block_type="paragraph",
+                        content=f"[Page {page_num} extraction failed: {err}]"
+                    )],
+                    raw_text=None,
+                )
+            
+            transcript = (transcript_results.get(page_num) or "").strip()
+            if transcript:
+                min_chars = max(
+                    self.config.dual_page_min_transcript_chars,
+                    int(len(transcript) * 0.6),
+                )
+                if not page.raw_text or len(page.raw_text.strip()) < min_chars:
+                    page.raw_text = transcript
+            
+            if not page.width_pts:
+                page.width_pts = part["width_pts"]
+            if not page.height_pts:
+                page.height_pts = part["height_pts"]
+            
+            page.page_number = page_num
+            page = self._normalise_page_content(page)
+            pages.append(page)
+        
+        if pages and not metadata.language:
+            rtl_pages = sum(1 for p in pages if p.page_direction == "rtl")
+            metadata.language = "ar" if rtl_pages > (len(pages) / 2) else "en"
+        
+        metadata.total_pages = len(pages)
+        elapsed = time.time() - start_time
+        
+        error_count = sum(len(v) for v in page_errors.values())
+        extraction_notes = (
+            f"Dual-page mode (per-page structured + transcript fusion). "
+            f"Pages: {len(pages)}. "
+            f"Processing time: {elapsed:.1f}s ({elapsed / max(len(pages), 1):.2f}s/page). "
+            f"Errors: {error_count}."
+        )
+        
+        return DocumentStructure(
+            metadata=metadata,
+            pages=pages,
+            extraction_notes=extraction_notes,
+        )
     
     def _extract_page_range(self, uploaded_file: types.File, start_page: int, end_page: int) -> list[PageContent]:
         """Extract content from a specific range of pages."""
@@ -2452,9 +3468,7 @@ REMEMBER:
                 chunk = ChunkExtraction.model_validate_json(response.text)
                 
                 # Track token usage
-                if hasattr(response, 'usage_metadata'):
-                    self._total_input_tokens += getattr(response.usage_metadata, 'prompt_token_count', 0)
-                    self._total_output_tokens += getattr(response.usage_metadata, 'candidates_token_count', 0)
+                self._add_usage_from_response(response)
                 
                 logger.info(f"Extracted {len(chunk.pages)} pages from range {start_page}-{end_page}")
                 return chunk.pages
@@ -2605,9 +3619,13 @@ REMEMBER:
         total_images = sum(m["images"] for m in quality_metrics)
         pages_with_content = sum(1 for m in quality_metrics if m["has_content"])
         
-        # Calculate processing time and actual cost
+        # Calculate processing time and actual token-based cost
         elapsed_time = time.time() - start_time
-        actual_cost_usd = cost_estimate["estimated_cost_usd"]
+        cost_breakdown = self._calculate_cost_from_tokens(
+            self._total_input_tokens,
+            self._total_output_tokens,
+        )
+        actual_cost_usd = cost_breakdown["total_cost_usd"]
         cost_per_page = (actual_cost_usd / total_pages) if total_pages else 0.0
 
         logger.info(
@@ -2618,6 +3636,7 @@ REMEMBER:
         logger.info(
             f"💰 Cost summary: ${actual_cost_usd:.4f} total | "
             f"${cost_per_page:.5f}/page | "
+            f"{self._total_input_tokens:,} in / {self._total_output_tokens:,} out tokens | "
             f"{total_pages} pages | "
             f"{elapsed_time / total_pages:.1f}s/page"
         )
@@ -2761,6 +3780,7 @@ REMEMBER:
                 )
                 
                 # Parse and validate the response
+                self._add_usage_from_response(response)
                 doc = DocumentStructure.model_validate_json(response.text)
                 logger.info(f"Successfully extracted {len(doc.pages)} pages")
                 return doc
@@ -2781,36 +3801,476 @@ REMEMBER:
                 else:
                     raise RuntimeError(f"Failed to extract content after {self.config.max_retries} attempts") from e
     
-    def _direct_html_extraction(self, uploaded_file: types.File) -> str:
-        """Request HTML directly from Gemini (fallback method when structured extraction fails)."""
-        logger.info("Using direct HTML extraction as fallback")
+    @staticmethod
+    def _sanitize_html_response(html_text: str) -> str:
+        """Normalize Gemini HTML text into plain HTML (strip fences/wrappers/scripts/styles)."""
+        text = (html_text or "").strip()
+        if not text:
+            return ""
         
-        prompt = """Convert this entire PDF document into a single self-contained HTML document.
+        # Remove Markdown code fences if present.
+        text = re.sub(r'^\s*```(?:html)?\s*', "", text, flags=re.IGNORECASE)
+        text = re.sub(r'\s*```\s*$', "", text)
+        
+        # If full HTML was returned, keep body content only.
+        body_match = re.search(r"<body[^>]*>(.*)</body>", text, flags=re.IGNORECASE | re.DOTALL)
+        if body_match:
+            text = body_match.group(1).strip()
+        
+        # Remove remaining wrappers and embedded scripts/styles.
+        text = re.sub(r"(?is)<!doctype[^>]*>", "", text)
+        text = re.sub(r"(?is)<html[^>]*>", "", text)
+        text = re.sub(r"(?is)</html>", "", text)
+        text = re.sub(r"(?is)<head[^>]*>.*?</head>", "", text)
+        text = re.sub(r"(?is)<body[^>]*>", "", text)
+        text = re.sub(r"(?is)</body>", "", text)
+        text = re.sub(r"(?is)<script[^>]*>.*?</script>", "", text)
+        text = re.sub(r"(?is)<style[^>]*>.*?</style>", "", text)
+        text = re.sub(r"(?is)<link[^>]*>", "", text)
+        
+        # Remove visual-heavy inline attributes; keep semantic structure only.
+        text = re.sub(r'\sstyle\s*=\s*(".*?"|\'.*?\')', "", text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r'\s(?:bgcolor|color|face)\s*=\s*(".*?"|\'.*?\'|[^\s>]+)', "", text, flags=re.IGNORECASE | re.DOTALL)
+        
+        # Gemini occasionally truncates a tag at the fragment tail (e.g., "</p"), which can
+        # break page boundaries in the final document. Trim and rebalance fragment tags.
+        text = PDFProcessor._trim_dangling_partial_tag(text)
+        text = PDFProcessor._balance_fragment_html_tags(text)
+        
+        return text.strip()
+    
+    @staticmethod
+    def _trim_dangling_partial_tag(fragment_html: str) -> str:
+        """Remove trailing incomplete HTML tag chunks such as '<p' or '</div'."""
+        text = fragment_html or ""
+        while True:
+            updated = re.sub(r"<[^>\n\r]*$", "", text).rstrip()
+            if updated == text:
+                break
+            text = updated
+        return text
+    
+    @staticmethod
+    def _balance_fragment_html_tags(fragment_html: str) -> str:
+        """
+        Best-effort tag balancing for tolerant fragment repair.
+        Keeps semantic content while closing still-open non-void tags.
+        """
+        text = fragment_html or ""
+        if not text:
+            return text
+        
+        tag_re = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9:_-]*)([^>]*)>")
+        void_tags = {
+            "area", "base", "br", "col", "embed", "hr", "img", "input",
+            "link", "meta", "param", "source", "track", "wbr",
+        }
+        
+        output: list[str] = []
+        stack: list[str] = []
+        cursor = 0
+        
+        for match in tag_re.finditer(text):
+            start, end = match.span()
+            output.append(text[cursor:start])
+            token = match.group(0)
+            closing = match.group(1) == "/"
+            tag = match.group(2).lower()
+            attrs = (match.group(3) or "").strip()
+            self_closing = (not closing) and (tag in void_tags or attrs.endswith("/"))
+            
+            if closing:
+                if tag not in stack:
+                    # Stray closer: drop it to avoid corrupting fragment structure.
+                    cursor = end
+                    continue
+                while stack and stack[-1] != tag:
+                    output.append(f"</{stack.pop()}>")
+                if stack and stack[-1] == tag:
+                    stack.pop()
+                    output.append(token)
+            else:
+                output.append(token)
+                if not self_closing:
+                    stack.append(tag)
+            
+            cursor = end
+        
+        output.append(text[cursor:])
+        while stack:
+            output.append(f"</{stack.pop()}>")
+        
+        return "".join(output)
+    
+    @staticmethod
+    def _has_page_class_token(fragment_html: str) -> bool:
+        """Check whether fragment contains a container with class token exactly `page`."""
+        class_attr_re = re.compile(
+            r'<(?:section|div)\b[^>]*\bclass\s*=\s*(["\'])(.*?)\1',
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in class_attr_re.finditer(fragment_html or ""):
+            classes = re.split(r"\s+", (match.group(2) or "").strip())
+            if any(cls.strip().lower() == "page" for cls in classes if cls.strip()):
+                return True
+        return False
+    
+    @staticmethod
+    def _inject_page_id_into_existing_page_container(fragment_html: str, page_number: int) -> str:
+        """Add page id to first real page container if missing."""
+        tag_re = re.compile(r"<(section|div)\b([^>]*)>", re.IGNORECASE | re.DOTALL)
+        class_re = re.compile(r'\bclass\s*=\s*(["\'])(.*?)\1', re.IGNORECASE | re.DOTALL)
+        id_re = re.compile(r"\bid\s*=", re.IGNORECASE)
+        done = False
+        
+        def repl(match: re.Match) -> str:
+            nonlocal done
+            if done:
+                return match.group(0)
+            tag = match.group(1)
+            attrs = match.group(2) or ""
+            class_match = class_re.search(attrs)
+            if not class_match:
+                return match.group(0)
+            classes = re.split(r"\s+", (class_match.group(2) or "").strip())
+            has_page_token = any(cls.strip().lower() == "page" for cls in classes if cls.strip())
+            if not has_page_token:
+                return match.group(0)
+            if id_re.search(attrs):
+                done = True
+                return match.group(0)
+            done = True
+            return f'<{tag} id="page-{page_number}"{attrs}>'
+        
+        return tag_re.sub(repl, fragment_html, count=1)
+    
+    def _wrap_single_page_html(self, fragment_html: str, page_number: int) -> str:
+        """Ensure one page fragment has a stable page container and id."""
+        cleaned = self._sanitize_html_response(fragment_html)
+        if not cleaned:
+            cleaned = "<p>[Empty page extraction]</p>"
+        
+        # If Gemini already produced a page container, keep it and ensure an id exists.
+        if self._has_page_class_token(cleaned):
+            if not re.search(r'\bid=["\']page-\d+["\']', cleaned, re.IGNORECASE):
+                cleaned = self._inject_page_id_into_existing_page_container(cleaned, page_number)
+            return cleaned
+        
+        text_only = re.sub(r"<[^>]+>", " ", cleaned)
+        page_dir = "rtl" if HTMLRenderer._detect_rtl_text(text_only, threshold=0.4) else "ltr"
+        
+        return (
+            f'<div class="page" id="page-{page_number}" dir="{page_dir}">\n'
+            f'  <div class="page-content">\n{cleaned}\n  </div>\n'
+            "</div>"
+        )
+    
+    def _compose_direct_html_document(
+        self,
+        page_fragments: list[str],
+        metadata: Optional[DocumentMetadata] = None,
+    ) -> str:
+        """Compose sanitized page fragments into a full HTML document shell."""
+        metadata = metadata or DocumentMetadata(title="Document", total_pages=len(page_fragments))
+        
+        sample_text = " ".join(
+            re.sub(r"<[^>]+>", " ", frag)[:1000]
+            for frag in page_fragments[:5]
+        )
+        
+        is_rtl = False
+        if metadata.language:
+            is_rtl = HTMLRenderer._is_rtl_language(metadata.language)
+        elif sample_text:
+            is_rtl = HTMLRenderer._detect_rtl_text(sample_text, threshold=0.5)
+        
+        lang = metadata.language or ("ar" if is_rtl else "en")
+        title = HTMLRenderer._escape(metadata.title or "Document")
+        dir_attr = "rtl" if is_rtl else "ltr"
+        
+        parts = [
+            "<!DOCTYPE html>",
+            f'<html lang="{lang}" dir="{dir_attr}">',
+            "<head>",
+            '<meta charset="UTF-8">',
+            '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+            f"<title>{title}</title>",
+            HTMLRenderer._get_mathjax_config(),
+            HTMLRenderer._get_page_structure_fix_script(),
+            HTMLRenderer._get_plain_text_styles(is_rtl),
+            "</head>",
+            "<body>",
+            '<div class="document-container">',
+        ]
+        
+        parts.extend(page_fragments)
+        
+        parts.extend([
+            "</div>",
+            "</body>",
+            "</html>",
+        ])
+        return "\n".join(parts)
+    
+    @staticmethod
+    def _inject_extracted_images_into_fragment(fragment_html: str, page_image_uris: list[str]) -> tuple[str, int]:
+        """Replace Gemini image placeholders/src values using locally extracted images."""
+        if not fragment_html or not page_image_uris:
+            return fragment_html, 0
+        
+        html = fragment_html
+        index = 0
+        
+        def _next_uri() -> Optional[str]:
+            nonlocal index
+            if index >= len(page_image_uris):
+                return None
+            uri = page_image_uris[index]
+            index += 1
+            return uri
+        
+        img_tag_pattern = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+        src_pattern = re.compile(r'\bsrc\s*=\s*(".*?"|\'.*?\')', re.IGNORECASE | re.DOTALL)
+        
+        def _img_repl(match: re.Match) -> str:
+            tag = match.group(0)
+            src_match = src_pattern.search(tag)
+            if src_match:
+                raw_src = src_match.group(1).strip("\"'").strip()
+                if raw_src.startswith("data:"):
+                    return tag
+            new_uri = _next_uri()
+            if not new_uri:
+                return tag
+            cleaned_uri = normalise_data_uri(new_uri, default_mime="image/png")
+            if src_match:
+                tag = src_pattern.sub(f'src="{cleaned_uri}"', tag, count=1)
+            else:
+                tag = tag[:-1] + f' src="{cleaned_uri}">'
+            if re.search(r"\bloading\s*=", tag, flags=re.IGNORECASE) is None:
+                tag = tag[:-1] + ' loading="lazy">'
+            return tag
+        
+        html = img_tag_pattern.sub(_img_repl, html)
+        
+        placeholder_pattern = re.compile(
+            r'<div\b[^>]*class=["\'][^"\']*\bimage-placeholder\b[^"\']*["\'][^>]*>.*?</div>',
+            re.IGNORECASE | re.DOTALL,
+        )
+        
+        def _placeholder_repl(match: re.Match) -> str:
+            new_uri = _next_uri()
+            if not new_uri:
+                return match.group(0)
+            cleaned_uri = normalise_data_uri(new_uri, default_mime="image/png")
+            return f'<img src="{cleaned_uri}" alt="Extracted image" loading="lazy" />'
+        
+        html = placeholder_pattern.sub(_placeholder_repl, html)
+        
+        used = index
+        return html, used
+    
+    def _inject_extracted_images_globally(self, pdf_path: str, html_content: str) -> str:
+        """Fallback placeholder replacement for full-document HTML when page fragments are unavailable."""
+        if not html_content:
+            return html_content
+        if not self.config.extract_images or not HAS_PYMUPDF:
+            return html_content
+        
+        try:
+            with ImageExtractor(pdf_path, dpi=self.config.image_dpi) as extractor:
+                page_map = extractor.extract_embedded_images_by_page()
+        except Exception as exc:
+            logger.warning("Global local-image extraction failed: %s", exc)
+            return html_content
+        
+        flat_uris: list[str] = []
+        for page_num in sorted(page_map.keys()):
+            flat_uris.extend(page_map[page_num])
+        
+        if not flat_uris:
+            return html_content
+        
+        updated_html, used = self._inject_extracted_images_into_fragment(html_content, flat_uris)
+        if used:
+            logger.info("Injected %d local extracted image(s) into global direct-HTML placeholders", used)
+        return updated_html
+    
+    def _extract_single_page_html(self, page_pdf_bytes: bytes, page_number: int) -> str:
+        """Direct HTML extraction for one page (strict non-JSON mode)."""
+        prompt = f"""Convert this SINGLE PDF page to semantic HTML.
 
-Requirements:
-- Process ALL pages of the document completely - do not skip any
-- Output ONLY raw HTML (no Markdown fences, no explanations)
-- Preserve layout: headings, paragraphs, lists, tables with proper HTML tags
-- Maintain correct reading order for multi-column layouts
-- For MATHEMATICAL EQUATIONS: Preserve as LaTeX wrapped in <span class="equation">LaTeX code</span>
-  * Use LaTeX syntax: \\frac{}{}, \\sum, \\int, \\sqrt{}, ^{}, _{}, etc.
-  * TRANSCRIBE equations EXACTLY - do NOT solve, simplify, or manipulate them
-  * For display equations: wrap in <div class="equation">LaTeX</div>
-- For RTL text (Arabic, Hebrew): Add dir="rtl" to containing element (<p dir="rtl">, <div dir="rtl">)
-- PRESERVE NUMERAL SYSTEMS: Keep Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) exactly - do NOT convert to Western numerals
-- Include CSS in <head><style>...</style> for formatting and layout
-- Use .page-break { page-break-after: always; } for page breaks
-- Add <div class="page-break"></div> between pages
-- Use semantic HTML5 elements: <article>, <section>, <header>, <footer>, <figure>, <table>
-- OCR all scanned content accurately
-- Preserve all content, do not omit any text or tables"""
+Strict output contract:
+- Page number is {page_number}.
+- Return HTML only (no Markdown fences, no explanations).
+- Do NOT include <html>, <head>, <body>, <style>, or <script>.
+- Preserve ALL visible text in natural reading order.
+- Keep header/footer/page number content in the correct position when present.
+- Use semantic tags: <h1..h6>, <p>, <ul>/<ol>/<li>, <table>/<thead>/<tbody>, <figure>/<figcaption>.
+- Preserve equations exactly as written:
+  * Inline: <span class="equation-inline">\\(...\\)</span>
+  * Display: <div class="equation">\\[...\\]</div>
+- Preserve numeral systems exactly (Arabic-Indic numerals must stay Arabic-Indic).
+- Preserve RTL/LTR direction with dir="rtl"/"ltr" on blocks when needed.
+- Never omit table cell text.
+- No colors/backgrounds/decorative visuals and no inline style attributes.
+- For images/charts/diagrams include <figure class="image-block"> with descriptive figcaption.
+- For <img> tags use a simple placeholder src (e.g., "image-placeholder.png"), no external URLs/base64.
+"""
+        temperatures = [0.0, 0.1, 0.2]
+        last_error = None
+        page_part = types.Part.from_bytes(data=page_pdf_bytes, mime_type="application/pdf")
+        
+        for temperature in temperatures:
+            try:
+                response = self.client.models.generate_content(
+                    model=self.config.model,
+                    contents=[page_part, prompt],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="text/plain",
+                        system_instruction=(
+                            "You are a strict HTML transcription engine for a SINGLE PDF page. "
+                            "Return complete page content as valid semantic HTML fragment only. "
+                            "No markdown fences, no JSON, no commentary. "
+                            "Do not omit content. Preserve equations and numeral systems exactly. "
+                            "Use plain semantic HTML only; avoid colors and inline style attributes."
+                        ),
+                        media_resolution=self._get_media_resolution(),
+                        max_output_tokens=min(self.config.max_output_tokens, 20000),
+                        temperature=temperature,
+                    ),
+                )
+                self._add_usage_from_response(response)
+                cleaned = self._sanitize_html_response(response.text or "")
+                if not cleaned:
+                    raise ValueError("Empty HTML fragment")
+                return self._wrap_single_page_html(cleaned, page_number)
+            except Exception as exc:
+                last_error = exc
+                logger.warning(
+                    "Direct HTML single-page extraction failed for page %s (temp=%.1f): %s",
+                    page_number, temperature, str(exc)[:200]
+                )
+        
+        raise RuntimeError(f"Direct HTML extraction failed for page {page_number}: {last_error}")
+    
+    def _extract_dual_page_direct_html(self, pdf_path: str) -> tuple[str, int, str]:
+        """Per-page parallel direct-HTML extraction (no JSON schema)."""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        start_time = time.time()
+        page_parts, metadata = self._split_pdf_to_single_page_parts(pdf_path)
+        total_pages = len(page_parts)
+        if total_pages == 0:
+            raise RuntimeError("No pages found in source PDF")
+        
+        logger.info(
+            "Direct HTML dual-page mode: %d pages | workers=%d",
+            total_pages,
+            self.config.direct_html_workers,
+        )
+        
+        extracted_page_images: dict[int, list[str]] = {}
+        if self.config.extract_images and HAS_PYMUPDF:
+            try:
+                with ImageExtractor(pdf_path, dpi=self.config.image_dpi) as extractor:
+                    extracted_page_images = extractor.extract_embedded_images_by_page()
+                logger.info(
+                    "Locally extracted embedded images for %d/%d pages",
+                    len(extracted_page_images),
+                    total_pages,
+                )
+            except Exception as exc:
+                logger.warning("Local embedded image extraction failed: %s", exc)
+        elif self.config.extract_images and not HAS_PYMUPDF:
+            logger.warning("PyMuPDF not installed; cannot inject locally extracted images in direct HTML mode.")
+        
+        html_results: dict[int, str] = {}
+        page_errors: dict[int, list[str]] = {}
+        max_workers = min(self.config.direct_html_workers, max(1, total_pages))
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            future_map = {
+                pool.submit(self._extract_single_page_html, part["pdf_bytes"], part["page_number"]): part["page_number"]
+                for part in page_parts
+            }
+            
+            completed = 0
+            for future in as_completed(future_map):
+                page_num = future_map[future]
+                try:
+                    html_results[page_num] = future.result()
+                except Exception as exc:
+                    page_errors.setdefault(page_num, []).append(str(exc))
+                    logger.error("Direct HTML page %s failure: %s", page_num, exc)
+                completed += 1
+                if completed == total_pages or completed % max(1, total_pages // 10) == 0:
+                    logger.info("Direct HTML progress: %d/%d pages complete", completed, total_pages)
+        
+        ordered_fragments: list[str] = []
+        for part in page_parts:
+            page_num = part["page_number"]
+            fragment = html_results.get(page_num)
+            if not fragment:
+                err = "; ".join(page_errors.get(page_num, ["direct HTML call returned empty output"]))
+                safe_err = HTMLRenderer._escape(err)
+                fragment = (
+                    f'<div class="page" id="page-{page_num}">'
+                    f'<div class="page-content"><p>[Page {page_num} direct HTML extraction failed: {safe_err}]</p></div>'
+                    "</div>"
+                )
+            page_image_uris = extracted_page_images.get(page_num, [])
+            if page_image_uris:
+                fragment, used = self._inject_extracted_images_into_fragment(fragment, page_image_uris)
+                if used:
+                    logger.info(
+                        "Injected %d local extracted image(s) into page %d placeholder(s)",
+                        used,
+                        page_num,
+                    )
+            ordered_fragments.append(fragment)
+        
+        html_content = self._compose_direct_html_document(ordered_fragments, metadata)
+        elapsed = time.time() - start_time
+        error_count = sum(len(v) for v in page_errors.values())
+        extraction_notes = (
+            f"Direct HTML dual-page mode (per-page parallel HTML extraction). "
+            f"Pages: {total_pages}. "
+            f"Processing time: {elapsed:.1f}s ({elapsed / max(total_pages, 1):.2f}s/page). "
+            f"Errors: {error_count}."
+        )
+        
+        return html_content, total_pages, extraction_notes
+    
+    def _direct_html_extraction(self, uploaded_file: types.File) -> str:
+        """Request full-document HTML directly from Gemini (non-schema mode)."""
+        logger.info("Using direct HTML extraction (full-document mode)")
+        
+        prompt = """Convert this PDF into one complete HTML document.
 
-        # Use retry loop with temperature progression like other methods
+Strict requirements:
+- Output ONLY valid HTML (no Markdown fences, no explanations).
+- Include <!DOCTYPE html>, <html>, <head>, and <body>.
+- Preserve all pages and content in natural reading order.
+- Preserve headers, footers, page numbers, tables, list hierarchy, and figure captions.
+- Preserve equations exactly as written:
+  * inline with \\(...\\)
+  * display with \\[...\\]
+- Preserve numeral systems exactly (Arabic-Indic digits must remain unchanged).
+- Preserve RTL/LTR direction using dir attributes.
+- Do not omit text.
+- No colors/backgrounds/decorative visuals and no inline style attributes.
+- For image tags use placeholder src values (no external URLs/base64).
+"""
+
         for attempt in range(self.config.max_retries):
             try:
-                # Start with low temperature for accurate transcription
-                temperature = 0.3 + (attempt * 0.2)  # 0.3 -> 0.5 -> 0.7 on retries
-                logger.info(f"Direct HTML extraction (attempt {attempt + 1}, temperature={temperature})")
+                temperature = 0.2 + (attempt * 0.2)
+                logger.info(
+                    "Direct HTML extraction (attempt %d, temperature=%.1f)",
+                    attempt + 1,
+                    temperature,
+                )
                 
                 response = self.client.models.generate_content(
                     model=self.config.model,
@@ -2818,17 +4278,10 @@ Requirements:
                     config=types.GenerateContentConfig(
                         response_mime_type="text/plain",
                         system_instruction=(
-                            "You are an expert document transcription assistant. "
-                            "Convert documents to clean, semantic HTML5 preserving ALL content accurately. "
-                            "PRESERVE NUMERAL SYSTEMS: Keep Arabic-Indic numerals (٠١٢٣٤٥٦٧٨٩) exactly - do NOT convert to Western numerals (0123456789). "
-                            "For EQUATIONS: Wrap in <span class=\"equation\">LaTeX</span> or <div class=\"equation\">LaTeX</div>. "
-                            "TRANSCRIBE equations EXACTLY - do NOT solve or simplify them. "
-                            "For RTL text: Use <p dir=\"rtl\">, <div dir=\"rtl\">, or <span dir=\"rtl\"> attributes. "
-                            "Use semantic elements: <article>, <section>, <header>, <footer>, <figure>, <table>. "
-                            "Include <style> tag in <head> with CSS for layout and formatting. "
-                            "Add CSS: .page-break { page-break-after: always; } and use <div class=\"page-break\"></div> between pages. "
-                            "Ensure proper HTML escaping of special characters. "
-                            "Be accurate and thorough - preserve all content."
+                            "You are a strict HTML document transcriber. "
+                            "Return only valid HTML and preserve full document content accurately. "
+                            "Do not use markdown code fences. "
+                            "Use plain semantic HTML without color styling or decorative visual CSS."
                         ),
                         media_resolution=self._get_media_resolution(),
                         max_output_tokens=self.config.max_output_tokens,
@@ -2836,24 +4289,30 @@ Requirements:
                     ),
                 )
                 
-                html_content = response.text or ""
-                if not html_content.strip():
+                self._add_usage_from_response(response)
+                html_content = (response.text or "").strip()
+                if not html_content:
                     raise ValueError("Empty HTML response from Gemini")
                 
-                logger.info(f"Direct HTML extraction successful ({len(html_content)} chars)")
+                if "```" in html_content:
+                    html_content = self._sanitize_html_response(html_content)
+                    html_content = self._compose_direct_html_document(
+                        [self._wrap_single_page_html(html_content, 1)],
+                        DocumentMetadata(title="Document", total_pages=1),
+                    )
+                
+                logger.info("Direct HTML extraction successful (%d chars)", len(html_content))
                 return html_content
-                
             except Exception as e:
-                error_msg = str(e)
-                logger.warning(f"Direct HTML attempt {attempt + 1} failed: {error_msg[:200]}")
-                
+                logger.warning("Direct HTML attempt %d failed: %s", attempt + 1, str(e)[:200])
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.retry_delay * (attempt + 1)
-                    logger.info(f"Retrying in {delay}s with higher temperature...")
+                    logger.info("Retrying in %ss...", delay)
                     time.sleep(delay)
                 else:
-                    logger.error(f"All {self.config.max_retries} direct HTML attempts failed")
-                    raise RuntimeError(f"Direct HTML extraction failed after {self.config.max_retries} attempts") from e
+                    raise RuntimeError(
+                        f"Direct HTML extraction failed after {self.config.max_retries} attempts"
+                    ) from e
         
         return ""
     
@@ -2886,19 +4345,28 @@ Requirements:
         
         uploaded_file = None
         try:
-            # Upload the PDF
-            uploaded_file = self._upload_pdf(pdf_path)
-            self._uploaded_file = uploaded_file
-            
-            # Try structured extraction first
-            try:
-                if self.config.use_chunked_processing:
-                    logger.info("Using chunked processing for large document support")
-                    doc = self._extract_chunked(uploaded_file)
-                    result["method"] = "chunked"
+            if self.config.use_direct_html_mode:
+                if self.config.output_format in ("json", "both"):
+                    logger.warning(
+                        "Direct HTML mode does not produce structured JSON; JSON output will be skipped."
+                    )
+                
+                if self.config.use_dual_page_processing:
+                    html_content, page_count, extraction_notes = self._extract_dual_page_direct_html(pdf_path)
+                    result["method"] = "direct_html_dual_page"
+                    result["pages"] = page_count
+                    result["extraction_notes"] = extraction_notes
                 else:
-                    doc = self._extract_structured(uploaded_file)
-                    result["method"] = "structured"
+                    uploaded_file = self._upload_pdf(pdf_path)
+                    self._uploaded_file = uploaded_file
+                    html_content = self._direct_html_extraction(uploaded_file)
+                    html_content = self._inject_extracted_images_globally(pdf_path, html_content)
+                    result["method"] = "direct_html"
+            
+            elif self.config.use_dual_page_processing:
+                logger.info("Using dual-page processing mode (per-page structured + transcript fusion)")
+                doc = self._extract_dual_page(pdf_path)
+                result["method"] = "dual_page"
                 
                 # Extract actual images from PDF using bounding boxes
                 if self.config.extract_images and HAS_PYMUPDF:
@@ -2912,32 +4380,64 @@ Requirements:
                     logger.warning("PyMuPDF not installed. Images will be placeholders. Install with: pip install PyMuPDF")
                 
                 result["document"] = doc
-                
-                # Render to HTML from structured data
                 html_content = HTMLRenderer.render(doc)
                 
-                # EXPERIMENTAL: Also get HTML directly from Gemini if enabled
                 if self.config.experimental_gemini_html:
-                    try:
-                        logger.info("[EXPERIMENTAL] Requesting HTML directly from Gemini for comparison")
-                        gemini_html = self._direct_html_extraction(uploaded_file)
-                        
-                        # Save Gemini's HTML with _gemini suffix
-                        if self.config.output_format in ("html", "both"):
-                            gemini_html_path = f"{output_base}_gemini.html"
-                            pathlib.Path(gemini_html_path).write_text(gemini_html, encoding="utf-8")
-                            result["gemini_html_path"] = gemini_html_path
-                            logger.info(f"Wrote Gemini HTML: {gemini_html_path}")
-                    except Exception as gemini_err:
-                        logger.warning(f"Gemini direct HTML extraction failed: {gemini_err}")
-                
-            except Exception as e:
-                logger.warning(f"Structured extraction failed: {e}. Falling back to direct HTML.")
-                html_content = self._direct_html_extraction(uploaded_file)
-                result["method"] = "fallback"
+                    logger.warning("experimental_gemini_html is ignored in dual-page mode")
             
-            # Write HTML output
-            if self.config.output_format in ("html", "both"):
+            else:
+                # Upload the PDF
+                uploaded_file = self._upload_pdf(pdf_path)
+                self._uploaded_file = uploaded_file
+                
+                # Try structured extraction first
+                try:
+                    if self.config.use_chunked_processing:
+                        logger.info("Using chunked processing for large document support")
+                        doc = self._extract_chunked(uploaded_file)
+                        result["method"] = "chunked"
+                    else:
+                        doc = self._extract_structured(uploaded_file)
+                        result["method"] = "structured"
+                    
+                    # Extract actual images from PDF using bounding boxes
+                    if self.config.extract_images and HAS_PYMUPDF:
+                        try:
+                            with ImageExtractor(pdf_path, dpi=self.config.image_dpi) as extractor:
+                                doc = extractor.extract_images_for_document(doc)
+                                logger.info("Image extraction completed")
+                        except Exception as e:
+                            logger.warning(f"Image extraction failed: {e}. Images will be placeholders.")
+                    elif self.config.extract_images and not HAS_PYMUPDF:
+                        logger.warning("PyMuPDF not installed. Images will be placeholders. Install with: pip install PyMuPDF")
+                    
+                    result["document"] = doc
+                    
+                    # Render to HTML from structured data
+                    html_content = HTMLRenderer.render(doc)
+                    
+                    # EXPERIMENTAL: Also get HTML directly from Gemini if enabled
+                    if self.config.experimental_gemini_html:
+                        try:
+                            logger.info("[EXPERIMENTAL] Requesting HTML directly from Gemini for comparison")
+                            gemini_html = self._direct_html_extraction(uploaded_file)
+                            
+                            # Save Gemini's HTML with _gemini suffix
+                            if self.config.output_format in ("html", "both"):
+                                gemini_html_path = f"{output_base}_gemini.html"
+                                pathlib.Path(gemini_html_path).write_text(gemini_html, encoding="utf-8")
+                                result["gemini_html_path"] = gemini_html_path
+                                logger.info(f"Wrote Gemini HTML: {gemini_html_path}")
+                        except Exception as gemini_err:
+                            logger.warning(f"Gemini direct HTML extraction failed: {gemini_err}")
+                    
+                except Exception as e:
+                    logger.warning(f"Structured extraction failed: {e}. Falling back to direct HTML.")
+                    html_content = self._direct_html_extraction(uploaded_file)
+                    result["method"] = "fallback"
+            
+            # Write HTML output (always for direct HTML mode)
+            if self.config.output_format in ("html", "both") or self.config.use_direct_html_mode:
                 html_path = f"{output_base}.html"
                 pathlib.Path(html_path).write_text(html_content, encoding="utf-8")
                 result["html_path"] = html_path
@@ -2950,6 +4450,8 @@ Requirements:
                     json.dump(result["document"].model_dump(), f, indent=2, ensure_ascii=False)
                 result["json_path"] = json_path
                 logger.info(f"Wrote JSON: {json_path}")
+            elif self.config.output_format in ("json", "both") and self.config.use_direct_html_mode:
+                logger.warning("JSON output requested, but direct HTML mode does not generate structured JSON.")
             
             result["success"] = True
             
@@ -2967,10 +4469,24 @@ Requirements:
                     "total_output_tokens": self._total_output_tokens,
                     "total_tokens": self._total_input_tokens + self._total_output_tokens
                 }
+                cost = self._calculate_cost_from_tokens(
+                    self._total_input_tokens,
+                    self._total_output_tokens,
+                )
+                result["cost_metadata"] = {
+                    "model": self.config.model,
+                    "input_price_per_million": self.config.input_price_per_million,
+                    "output_price_per_million": self.config.output_price_per_million,
+                    **cost,
+                }
                 logger.info(
                     f"Token usage: {self._total_input_tokens:,} input, "
                     f"{self._total_output_tokens:,} output, "
                     f"{self._total_input_tokens + self._total_output_tokens:,} total"
+                )
+                logger.info(
+                    f"Cost: ${cost['total_cost_usd']:.6f} "
+                    f"(${cost['input_cost_usd']:.6f} in + ${cost['output_cost_usd']:.6f} out)"
                 )
             
         except FileNotFoundError as e:
@@ -3024,6 +4540,8 @@ def pdf_to_html(
     out_html: str = "out.html",
     output_json: bool = False,
     media_resolution: str = "medium",
+    dual_page_processing: bool = False,
+    direct_html_mode: bool = False,
 ) -> dict:
     """
     Convert a PDF to HTML using Gemini's document understanding.
@@ -3033,6 +4551,8 @@ def pdf_to_html(
         out_html: Path for the output HTML file
         output_json: Also output structured JSON data
         media_resolution: Resolution for PDF processing ('low', 'medium', 'high')
+        dual_page_processing: Use per-page dual-call extraction mode
+        direct_html_mode: Use direct HTML generation from Gemini (no JSON schema)
     
     Returns:
         dict with processing results
@@ -3040,6 +4560,8 @@ def pdf_to_html(
     config = ProcessingConfig(
         output_format="both" if output_json else "html",
         media_resolution=MediaResolution(media_resolution),
+        use_dual_page_processing=dual_page_processing,
+        use_direct_html_mode=direct_html_mode,
     )
     
     processor = PDFProcessor(config)
@@ -3057,6 +4579,234 @@ def pdf_to_html(
         return result
     finally:
         processor.cleanup()
+
+
+def process_pdf_directory_batch(
+    input_dir: str,
+    output_dir: str,
+    config: Optional[ProcessingConfig] = None,
+    batch_workers: int = 4,
+    recursive: bool = True,
+    skip_existing: bool = True,
+) -> dict[str, Any]:
+    """
+    Process all PDFs in a directory with file-level parallelism.
+    
+    Each PDF is processed by its own PDFProcessor instance to avoid state leakage
+    (usage counters, uploaded file references, and output paths stay isolated).
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    base_config = config or ProcessingConfig()
+    input_root = pathlib.Path(input_dir).expanduser().resolve()
+    output_root = pathlib.Path(output_dir).expanduser().resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    
+    if not input_root.exists() or not input_root.is_dir():
+        raise FileNotFoundError(f"Input directory not found: {input_root}")
+    
+    pattern = "**/*.pdf" if recursive else "*.pdf"
+    pdf_paths = sorted(p for p in input_root.glob(pattern) if p.is_file())
+    if not pdf_paths:
+        raise FileNotFoundError(f"No PDF files found in {input_root} (pattern: {pattern})")
+    
+    logger.info(
+        "Batch start: %d PDFs | model=%s | file_workers=%d | page_workers=%d",
+        len(pdf_paths),
+        base_config.model,
+        batch_workers,
+        base_config.direct_html_workers if base_config.use_direct_html_mode else base_config.dual_page_workers,
+    )
+    
+    start_time = time.time()
+    max_workers = min(max(1, batch_workers), len(pdf_paths))
+    
+    def _process_one(pdf_path: pathlib.Path) -> dict[str, Any]:
+        file_start = time.time()
+        rel = pdf_path.relative_to(input_root)
+        out_html = (output_root / rel).with_suffix(".html")
+        out_html.parent.mkdir(parents=True, exist_ok=True)
+        
+        if skip_existing and out_html.exists():
+            return {
+                "input_pdf": str(pdf_path),
+                "relative_pdf": str(rel),
+                "result": {
+                    "success": True,
+                    "method": "skipped_existing",
+                    "html_path": str(out_html),
+                    "pages": 0,
+                },
+                "usage_metadata": {
+                    "total_input_tokens": 0,
+                    "total_output_tokens": 0,
+                    "total_tokens": 0,
+                },
+                "cost_metadata": {
+                    "model": base_config.model,
+                    "input_price_per_million": base_config.input_price_per_million,
+                    "output_price_per_million": base_config.output_price_per_million,
+                    "input_cost_usd": 0.0,
+                    "output_cost_usd": 0.0,
+                    "total_cost_usd": 0.0,
+                },
+                "elapsed_seconds": round(time.time() - file_start, 3),
+            }
+        
+        # Isolated processor per file prevents cross-file mixing.
+        processor = PDFProcessor(replace(base_config))
+        try:
+            result = processor.process(str(pdf_path), str(out_html))
+        except Exception as exc:
+            result = {
+                "success": False,
+                "error": str(exc),
+                "error_type": "batch_worker_exception",
+                "html_path": str(out_html),
+            }
+        finally:
+            try:
+                processor.cleanup()
+            except Exception:
+                pass
+        
+        usage = result.get("usage_metadata", {}) or {}
+        cost = result.get("cost_metadata", {}) or {}
+        if usage and not cost:
+            in_toks = int(usage.get("total_input_tokens", 0) or 0)
+            out_toks = int(usage.get("total_output_tokens", 0) or 0)
+            in_cost = (in_toks / 1_000_000) * base_config.input_price_per_million
+            out_cost = (out_toks / 1_000_000) * base_config.output_price_per_million
+            cost = {
+                "model": base_config.model,
+                "input_price_per_million": base_config.input_price_per_million,
+                "output_price_per_million": base_config.output_price_per_million,
+                "input_cost_usd": round(in_cost, 6),
+                "output_cost_usd": round(out_cost, 6),
+                "total_cost_usd": round(in_cost + out_cost, 6),
+            }
+        
+        return {
+            "input_pdf": str(pdf_path),
+            "relative_pdf": str(rel),
+            "result": result,
+            "usage_metadata": usage,
+            "cost_metadata": cost,
+            "elapsed_seconds": round(time.time() - file_start, 3),
+        }
+    
+    file_results: list[dict[str, Any]] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_map = {pool.submit(_process_one, p): p for p in pdf_paths}
+        completed = 0
+        total = len(pdf_paths)
+        for fut in as_completed(future_map):
+            file_result = fut.result()
+            file_results.append(file_result)
+            completed += 1
+            if completed == total or completed % max(1, total // 10) == 0:
+                logger.info("Batch progress: %d/%d files complete", completed, total)
+    
+    file_results.sort(key=lambda item: item["relative_pdf"])
+    
+    total_input_tokens = 0
+    total_output_tokens = 0
+    total_cost_usd = 0.0
+    success_count = 0
+    total_pages = 0
+    
+    for item in file_results:
+        result = item.get("result", {}) or {}
+        usage = item.get("usage_metadata", {}) or {}
+        cost = item.get("cost_metadata", {}) or {}
+        
+        if result.get("success"):
+            success_count += 1
+        total_pages += int(result.get("pages", 0) or 0)
+        total_input_tokens += int(usage.get("total_input_tokens", 0) or 0)
+        total_output_tokens += int(usage.get("total_output_tokens", 0) or 0)
+        total_cost_usd += float(cost.get("total_cost_usd", 0.0) or 0.0)
+    
+    elapsed = round(time.time() - start_time, 3)
+    summary = {
+        "model": base_config.model,
+        "input_dir": str(input_root),
+        "output_dir": str(output_root),
+        "file_count": len(file_results),
+        "success_count": success_count,
+        "failure_count": len(file_results) - success_count,
+        "total_pages": total_pages,
+        "total_input_tokens": total_input_tokens,
+        "total_output_tokens": total_output_tokens,
+        "total_tokens": total_input_tokens + total_output_tokens,
+        "input_price_per_million": base_config.input_price_per_million,
+        "output_price_per_million": base_config.output_price_per_million,
+        "total_cost_usd": round(total_cost_usd, 6),
+        "elapsed_seconds": elapsed,
+        "batch_workers": max_workers,
+        "per_file_results": file_results,
+    }
+    
+    summary_json_path = output_root / "batch_summary.json"
+    summary_json_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    
+    summary_csv_path = output_root / "batch_costs.csv"
+    with summary_csv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "input_pdf",
+            "success",
+            "method",
+            "pages",
+            "input_tokens",
+            "output_tokens",
+            "total_tokens",
+            "input_cost_usd",
+            "output_cost_usd",
+            "total_cost_usd",
+            "elapsed_seconds",
+            "html_path",
+            "json_path",
+            "error_type",
+            "error",
+        ])
+        for item in file_results:
+            result = item.get("result", {}) or {}
+            usage = item.get("usage_metadata", {}) or {}
+            cost = item.get("cost_metadata", {}) or {}
+            writer.writerow([
+                item.get("input_pdf", ""),
+                bool(result.get("success", False)),
+                result.get("method", ""),
+                int(result.get("pages", 0) or 0),
+                int(usage.get("total_input_tokens", 0) or 0),
+                int(usage.get("total_output_tokens", 0) or 0),
+                int(usage.get("total_tokens", 0) or 0),
+                f"{float(cost.get('input_cost_usd', 0.0) or 0.0):.6f}",
+                f"{float(cost.get('output_cost_usd', 0.0) or 0.0):.6f}",
+                f"{float(cost.get('total_cost_usd', 0.0) or 0.0):.6f}",
+                item.get("elapsed_seconds", 0.0),
+                result.get("html_path", ""),
+                result.get("json_path", ""),
+                result.get("error_type", ""),
+                result.get("error", ""),
+            ])
+    
+    summary["batch_summary_json"] = str(summary_json_path)
+    summary["batch_costs_csv"] = str(summary_csv_path)
+    logger.info(
+        "Batch complete: %d/%d success | %d pages | %d tokens | $%.6f | %.1fs",
+        success_count,
+        len(file_results),
+        total_pages,
+        total_input_tokens + total_output_tokens,
+        total_cost_usd,
+        elapsed,
+    )
+    return summary
 
 
 def extract_document_structure(pdf_path: str) -> Optional[DocumentStructure]:
@@ -3095,11 +4845,21 @@ Examples:
   %(prog)s document.pdf -j                   # Also output JSON structure
   %(prog)s document.pdf -r high              # Use high resolution processing
   %(prog)s document.pdf --format both        # Output both HTML and JSON
+  %(prog)s document.pdf --direct-html --dual-page   # Per-page parallel direct HTML (no JSON schema)
         """
     )
     
-    parser.add_argument("input", help="Input PDF file path")
-    parser.add_argument("output", nargs="?", default=None, help="Output file path (default: <input>.html)")
+    parser.add_argument("input", nargs="?", default=None, help="Input PDF file path (single-file mode)")
+    parser.add_argument("output", nargs="?", default=None, help="Output file path (single-file) or output directory (batch)")
+    parser.add_argument("--input-dir", default=None, help="Batch mode: input directory containing PDFs")
+    parser.add_argument("--output-dir", default=None, help="Batch mode: output directory root")
+    parser.add_argument("--batch-workers", type=int, default=4,
+                        help="Batch mode: max concurrent PDF files to process (default: 4)")
+    parser.add_argument("--no-recursive", action="store_true",
+                        help="Batch mode: do not recursively scan subdirectories")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Batch mode: skip PDFs whose output HTML already exists")
+    parser.add_argument("--model", default=MODEL, help=f"Gemini model to use (default: {MODEL})")
     parser.add_argument("-j", "--json", action="store_true", help="Also output structured JSON")
     parser.add_argument("-r", "--resolution", choices=["low", "medium", "high"], default="medium",
                         help="Media resolution for processing (default: medium)")
@@ -3119,24 +4879,40 @@ Examples:
                         help="DPI for extracted images (default: 150)")
     parser.add_argument("--experimental-gemini-html", action="store_true",
                         help="[EXPERIMENTAL] Also request HTML directly from Gemini for comparison")
+    parser.add_argument("--direct-html", action="store_true",
+                        help="Use direct HTML generation from Gemini (skip JSON schema extraction)")
+    parser.add_argument("--direct-html-workers", type=int, default=8,
+                        help="Max concurrent per-page calls for direct HTML in dual-page mode (default: 8)")
+    parser.add_argument("--dual-page", action="store_true",
+                        help="Use per-page dual-call mode (structured JSON + transcript fusion)")
+    parser.add_argument("--dual-page-workers", type=int, default=8,
+                        help="Max concurrent per-page API calls in dual-page mode (default: 8)")
+    parser.add_argument("--no-transcript-call", action="store_true",
+                        help="Disable the second transcript call in dual-page mode")
+    parser.add_argument("--input-price-per-million", type=float, default=0.50,
+                        help="USD per 1M input tokens for cost tracking (default: 0.50)")
+    parser.add_argument("--output-price-per-million", type=float, default=3.00,
+                        help="USD per 1M output tokens for cost tracking (default: 3.00)")
     
     args = parser.parse_args()
     
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     
+    if bool(args.input) == bool(args.input_dir):
+        parser.error("Provide exactly one of positional <input> or --input-dir")
+    
     # Determine output format
     output_format = args.format
     if args.json and output_format == "html":
         output_format = "both"
-    
-    # Set output path
-    output_path = args.output
-    if not output_path:
-        output_path = str(pathlib.Path(args.input).with_suffix(".html"))
+    if args.direct_html and output_format in ("json", "both"):
+        logger.warning("--direct-html ignores JSON output; forcing output format to html")
+        output_format = "html"
     
     # Create config and process
     config = ProcessingConfig(
+        model=args.model,
         media_resolution=MediaResolution(args.resolution),
         output_format=output_format,
         max_retries=args.retries,
@@ -3146,29 +4922,75 @@ Examples:
         extract_images=not args.no_images,
         image_dpi=args.image_dpi,
         experimental_gemini_html=args.experimental_gemini_html,
+        use_direct_html_mode=args.direct_html,
+        direct_html_workers=args.direct_html_workers,
+        use_dual_page_processing=args.dual_page,
+        dual_page_workers=args.dual_page_workers,
+        dual_page_enable_transcript=not args.no_transcript_call,
+        input_price_per_million=args.input_price_per_million,
+        output_price_per_million=args.output_price_per_million,
     )
     
-    processor = PDFProcessor(config)
-    try:
-        result = processor.process(args.input, output_path)
-        
-        if result["success"]:
-            print(f"\n✓ Processing complete!")
-            print(f"  Method: {result.get('method', 'unknown')}")
-            if result.get("html_path"):
-                print(f"  HTML: {result['html_path']}")
-            if result.get("gemini_html_path"):
-                print(f"  Gemini HTML (experimental): {result['gemini_html_path']}")
-            if result.get("json_path"):
-                print(f"  JSON: {result['json_path']}")
-            if result.get("document"):
-                doc = result["document"]
-                print(f"  Pages: {len(doc.pages)}")
-                if doc.metadata.title:
-                    print(f"  Title: {doc.metadata.title}")
+    if args.input_dir:
+        input_dir = pathlib.Path(args.input_dir).expanduser().resolve()
+        if args.output_dir:
+            output_dir = pathlib.Path(args.output_dir).expanduser().resolve()
+        elif args.output:
+            output_dir = pathlib.Path(args.output).expanduser().resolve()
         else:
-            print(f"\n✗ Processing failed: {result.get('error', 'Unknown error')}")
-            raise SystemExit(1)
+            output_dir = pathlib.Path(f"{input_dir.name}_gemini_html_batch").resolve()
+        
+        summary = process_pdf_directory_batch(
+            input_dir=str(input_dir),
+            output_dir=str(output_dir),
+            config=config,
+            batch_workers=args.batch_workers,
+            recursive=not args.no_recursive,
+            skip_existing=args.skip_existing,
+        )
+        print("\n✓ Batch processing complete!")
+        print(f"  Model: {summary.get('model')}")
+        print(f"  Input Dir: {summary.get('input_dir')}")
+        print(f"  Output Dir: {summary.get('output_dir')}")
+        print(f"  Files: {summary.get('success_count')}/{summary.get('file_count')} succeeded")
+        print(f"  Pages: {summary.get('total_pages')}")
+        print(f"  Tokens: {summary.get('total_tokens'):,} total")
+        print(f"  Cost: ${summary.get('total_cost_usd', 0.0):.6f}")
+        print(f"  Summary JSON: {summary.get('batch_summary_json')}")
+        print(f"  Cost CSV: {summary.get('batch_costs_csv')}")
+    else:
+        output_path = args.output
+        if not output_path:
+            output_path = str(pathlib.Path(args.input).with_suffix(".html"))
+        
+        processor = PDFProcessor(config)
+        try:
+            result = processor.process(args.input, output_path)
             
-    finally:
-        processor.cleanup()
+            if result["success"]:
+                print(f"\n✓ Processing complete!")
+                print(f"  Model: {config.model}")
+                print(f"  Method: {result.get('method', 'unknown')}")
+                if result.get("html_path"):
+                    print(f"  HTML: {result['html_path']}")
+                if result.get("gemini_html_path"):
+                    print(f"  Gemini HTML (experimental): {result['gemini_html_path']}")
+                if result.get("json_path"):
+                    print(f"  JSON: {result['json_path']}")
+                if result.get("pages"):
+                    print(f"  Pages: {result['pages']}")
+                usage = result.get("usage_metadata", {}) or {}
+                if usage:
+                    print(
+                        f"  Tokens: {int(usage.get('total_input_tokens', 0)):,} in, "
+                        f"{int(usage.get('total_output_tokens', 0)):,} out"
+                    )
+                cost = result.get("cost_metadata", {}) or {}
+                if cost:
+                    print(f"  Cost: ${float(cost.get('total_cost_usd', 0.0)):.6f}")
+            else:
+                print(f"\n✗ Processing failed: {result.get('error', 'Unknown error')}")
+                raise SystemExit(1)
+                
+        finally:
+            processor.cleanup()
