@@ -281,6 +281,39 @@ def _sample_bg_color(
     return (m[0], m[1], m[2])
 
 
+def _contrast_text_color(bg: tuple[int, int, int]) -> str:
+    """Return '#000' or '#fff' to contrast with the given background RGB."""
+    # Relative luminance (ITU-R BT.709)
+    lum = 0.2126 * bg[0] + 0.7152 * bg[1] + 0.0722 * bg[2]
+    return "#fff" if lum < 140 else "#000"
+
+
+def _sample_line_colors(
+    img,
+    regions: list[dict],
+    scale_x: float,
+    scale_y: float,
+) -> list[str]:
+    """Sample background behind each line and return contrasting text colors."""
+    colors = []
+    for region in regions:
+        polygon = region.get("polygon", [])
+        if len(polygon) < 8:
+            colors.append("#000")
+            continue
+        lx, ly, lw, lh = _polygon_to_rect(polygon)
+        left = int(round(lx * scale_x))
+        top = int(round(ly * scale_y))
+        width = int(round(lw * scale_x))
+        height = int(round(lh * scale_y))
+        if width < 1 or height < 1:
+            colors.append("#000")
+            continue
+        bg = _sample_bg_color(img, left, top, width, height)
+        colors.append(_contrast_text_color(bg))
+    return colors
+
+
 def _erase_text_regions(
     img,
     regions: list[dict],
@@ -336,10 +369,10 @@ def _rasterise_and_erase(
     dpi: int = DEFAULT_DPI,
     image_format: str = DEFAULT_IMAGE_FORMAT,
     image_quality: int = DEFAULT_IMAGE_QUALITY,
-) -> list[PageRaster]:
+) -> tuple[list[PageRaster], list[list[str]]]:
     """
-    Rasterise each page, erase OCR text regions with background colour,
-    and return base64 data URIs.
+    Rasterise each page, sample text colors, erase OCR text regions,
+    and return base64 data URIs + per-page line color lists.
     """
     from PIL import Image as _PILImage
 
@@ -347,26 +380,30 @@ def _rasterise_and_erase(
     zoom = dpi / 72.0
     mat  = fitz.Matrix(zoom, zoom)
     data_uris: list[PageRaster] = []
+    all_line_colors: list[list[str]] = []
 
     for page_idx, page in enumerate(doc):
         pix = page.get_pixmap(matrix=mat, alpha=False)
         img = _PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
-        # Erase text from the raster
+        # Sample text colors + erase text from the raster
+        page_colors: list[str] = []
         if page_idx < len(ocr_pages):
-            # Use line regions for clean replacement coverage.
             page_data = ocr_pages[page_idx]
             scale_x, scale_y, _, _ = _compute_page_scale_and_size(
                 page_data, pix.width, pix.height, dpi,
             )
             regions = page_data.get("lines", [])
+            # Sample BEFORE erasing
+            page_colors = _sample_line_colors(img, regions, scale_x, scale_y)
             n = _erase_text_regions(img, regions, scale_x, scale_y, use_polygons=False)
             logger.debug("Page %d: erased %d text regions", page_idx + 1, n)
 
+        all_line_colors.append(page_colors)
         data_uris.append((_pil_to_data_uri(img, image_format, image_quality), pix.width, pix.height))
 
     doc.close()
-    return data_uris
+    return data_uris, all_line_colors
 
 
 # ── HTML builder ──────────────────────────────────────────────────────────────
@@ -406,6 +443,7 @@ def render_page_overlay(
     raster_height_px: float | None = None,
     dpi_fallback: int = DEFAULT_DPI,
     text_only: bool = False,
+    line_colors: list[str] | None = None,
 ) -> str:
     """Render one page in v1 mode: line-level axis-aligned overlays."""
 
@@ -414,14 +452,17 @@ def render_page_overlay(
     )
 
     lines_html = []
+    color_idx = 0
 
     for line in page_data.get("lines", []):
         polygon = line.get("polygon", [])
         if len(polygon) < 8:
+            color_idx += 1
             continue
 
         text = line.get("content", "").strip()
         if not text:
+            color_idx += 1
             continue
 
         lx, ly, lw, lh = _polygon_to_rect(polygon)
@@ -431,6 +472,7 @@ def render_page_overlay(
         height_px = lh * scale_y
 
         if width_px < 1 or height_px < 1:
+            color_idx += 1
             continue
 
         # Direction
@@ -439,6 +481,11 @@ def render_page_overlay(
         # Font size: match the line height
         font_size = max(0, height_px * 0.75)
 
+        # Text color from sampled background
+        color_style = ""
+        if line_colors and color_idx < len(line_colors):
+            color_style = f" color:{line_colors[color_idx]};"
+
         escaped = html_mod.escape(text)
 
         lines_html.append(
@@ -446,9 +493,10 @@ def render_page_overlay(
             f'data-fit="legacy" data-angle="0" '
             f'style="left:{left_px:.1f}px; top:{top_px:.1f}px; '
             f'width:{width_px:.1f}px; height:{height_px:.1f}px; '
-            f'font-size:{font_size:.1f}px; line-height:{height_px:.1f}px;">'
+            f'font-size:{font_size:.1f}px; line-height:{height_px:.1f}px;{color_style}">'
             f'{escaped}</div>'
         )
+        color_idx += 1
 
     page_dir = _first_strong_dir(
         " ".join(l.get("content", "") for l in page_data.get("lines", []))
@@ -500,17 +548,19 @@ def render_document(
     if text_only:
         logger.info("Text-only mode — skipping image rasterisation")
         page_images = None
+        all_line_colors: list[list[str]] = []
     elif replace_text:
         logger.info(
             "Replace-text mode — rasterising %s at %d DPI + erasing text …",
             pdf_path.name, dpi,
         )
-        page_images = _rasterise_and_erase(
+        page_images, all_line_colors = _rasterise_and_erase(
             pdf_path, pages, dpi, image_format, image_quality,
         )
     else:
         logger.info("Rasterising %s at %d DPI …", pdf_path.name, dpi)
         page_images = rasterise_pdf(pdf_path, dpi, image_format, image_quality)
+        all_line_colors = []
 
     if page_images is not None and len(pages) != len(page_images):
         logger.warning(
@@ -526,6 +576,7 @@ def render_document(
             img_uri, raster_w, raster_h = page_images[i]
         else:
             img_uri, raster_w, raster_h = None, None, None
+        page_colors = all_line_colors[i] if i < len(all_line_colors) else None
         pages_html.append(
             render_page_overlay(
                 page_data,
@@ -535,6 +586,7 @@ def render_document(
                 raster_height_px=raster_h,
                 dpi_fallback=dpi,
                 text_only=show_text_only,
+                line_colors=page_colors,
             )
         )
 
@@ -1087,7 +1139,7 @@ def render_document_structural(
             "Replace-text + structural mode — rasterising %s at %d DPI …",
             pdf_path.name, dpi,
         )
-        page_images = _rasterise_and_erase(
+        page_images, _line_colors2 = _rasterise_and_erase(
             pdf_path, pages, dpi, image_format, image_quality,
         )
     else:
@@ -1296,7 +1348,7 @@ def render_document_with_formulas(
             "Replace-text + formulas mode — rasterising %s at %d DPI + erasing text …",
             pdf_path.name, dpi,
         )
-        page_images = _rasterise_and_erase(
+        page_images, _line_colors = _rasterise_and_erase(
             pdf_path, pages, dpi, image_format, image_quality,
         )
     else:
@@ -1621,10 +1673,10 @@ body {{
   font-family: 'Noto Serif', 'Times New Roman', 'Georgia', serif;
 }}
 
-/* Text-only / replace-text mode: visible black text */
+/* Text-only / replace-text mode: visible text with sampled color */
 body.text-only .tw,
 body.replace-text .tw {{
-  color: #000 !important;
+  color: #000;
 }}
 body.text-only .tw::selection,
 body.text-only .tw *::selection,

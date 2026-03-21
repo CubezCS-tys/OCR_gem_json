@@ -104,3 +104,5 @@ batch1_flp/
 *.7z
 *.tar
 *.tar.gz
+batch01/
+viewer-frontend/
