@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """
-Process all PDFs in a batch01 subfolder using Azure-only fixed_layout_pipeline.
+Process all PDFs using Azure-only fixed_layout_pipeline.
 
 Outputs: searchable PDF, OCR JSON, replace-text HTML — all with clean names
 in per-document subfolders under output/.
 
 Usage:
-    python run_batch.py 0046
-    python run_batch.py 0046 --workers 6
+    python run_batch.py batch02
+    python run_batch.py batch02 --api-workers 16 --render-workers 16
 
-Runs in parallel with 4 workers by default.
+Runs a 2-stage pipeline:
+  Stage 1: Azure API calls  (network I/O bound) — controlled by --api-workers
+  Stage 2: HTML rendering   (CPU bound)         — controlled by --render-workers
+
+Defaults to 8 API workers and 8 render workers.
 """
 
 import argparse
@@ -43,8 +47,10 @@ MAX_RETRIES = 3
 RETRY_DELAY = 15  # seconds between retries
 
 # ── Thread-local Azure clients ──────────────────────────────────────────────
+# One client per thread — Azure SDK is not thread-safe across threads.
 
 _thread_clients: dict[int, object] = {}
+_clients_lock = threading.Lock()  # guards the dict itself
 
 
 def _get_client(endpoint: str, api_key: str):
@@ -53,48 +59,94 @@ def _get_client(endpoint: str, api_key: str):
 
     tid = threading.get_ident()
     if tid not in _thread_clients:
-        _thread_clients[tid] = DocumentIntelligenceClient(
-            endpoint=endpoint,
-            credential=AzureKeyCredential(api_key),
-        )
+        with _clients_lock:
+            # Double-checked locking
+            if tid not in _thread_clients:
+                _thread_clients[tid] = DocumentIntelligenceClient(
+                    endpoint=endpoint,
+                    credential=AzureKeyCredential(api_key),
+                )
     return _thread_clients[tid]
 
 
-# ── Single-document processing ──────────────────────────────────────────────
+# ── Per-file locks — prevents two workers ever touching the same stem ─────────
+# asyncio already dispatches each pdf_path once, but this is a safety net
+# in case the same folder is accidentally passed to two runs simultaneously.
 
-def process_one(pdf_path: Path, output_dir: Path, endpoint: str, api_key: str) -> dict:
+_file_locks: dict[str, threading.Lock] = {}
+_file_locks_lock = threading.Lock()
+
+
+def _get_file_lock(stem: str) -> threading.Lock:
+    with _file_locks_lock:
+        if stem not in _file_locks:
+            _file_locks[stem] = threading.Lock()
+        return _file_locks[stem]
+
+
+# ── Stage 1: Azure API only ──────────────────────────────────────────────────
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Write bytes to a temp file then atomically rename to avoid partial writes."""
+    tmp = path.with_suffix(".tmp")
+    try:
+        tmp.write_bytes(data)
+        tmp.replace(path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write text to a temp file then atomically rename to avoid partial writes."""
+    tmp = path.with_suffix(".tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(path)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def azure_only(pdf_path: Path, output_dir: Path, endpoint: str, api_key: str) -> dict:
+    """Fetch searchable PDF + OCR JSON from Azure. No HTML rendering."""
     from azure.ai.documentintelligence.models import (
         AnalyzeDocumentRequest,
         AnalyzeOutputOption,
     )
-    from fixed_layout_pipeline.overlay_renderer import render_document
 
     stem = pdf_path.stem
-    doc_folder = output_dir / stem
-    doc_folder.mkdir(parents=True, exist_ok=True)
-    out_pdf  = doc_folder / f"{stem}.pdf"
-    out_json = doc_folder / f"{stem}.json"
-    out_html = doc_folder / f"{stem}.html"
 
-    # Skip if all three outputs already exist
-    if (out_pdf.exists() and out_pdf.stat().st_size > 0
-            and out_json.exists() and out_json.stat().st_size > 0
-            and out_html.exists() and out_html.stat().st_size > 0):
-        logger.info("⏭  Skipping (exists): %s", stem)
-        return {"file": stem, "status": "skipped"}
+    # Per-file lock: only one worker can ever process this stem at a time
+    with _get_file_lock(stem):
+        doc_folder = output_dir / stem
+        doc_folder.mkdir(parents=True, exist_ok=True)
+        out_pdf  = doc_folder / f"{stem}.pdf"
+        out_json = doc_folder / f"{stem}.json"
+        out_html = doc_folder / f"{stem}.html"
 
-    start = time.time()
+        # Skip if all three outputs already exist
+        if (out_pdf.exists() and out_pdf.stat().st_size > 0
+                and out_json.exists() and out_json.stat().st_size > 0
+                and out_html.exists() and out_html.stat().st_size > 0):
+            logger.info("⏭  Skipping (exists): %s", stem)
+            return {"file": stem, "status": "skipped", "out_pdf": out_pdf, "out_json": out_json}
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            pdf_bytes = pdf_path.read_bytes()
-            client = _get_client(endpoint, api_key)
+        need_pdf  = not (out_pdf.exists()  and out_pdf.stat().st_size  > 0)
+        need_json = not (out_json.exists() and out_json.stat().st_size > 0)
 
-            # ── Single call: prebuilt-read → searchable PDF + OCR JSON ──
-            need_pdf  = not (out_pdf.exists()  and out_pdf.stat().st_size  > 0)
-            need_json = not (out_json.exists() and out_json.stat().st_size > 0)
+        if not need_pdf and not need_json:
+            # Both Azure outputs exist, only HTML is missing — pass through to render stage
+            ocr = json.loads(out_json.read_text(encoding="utf-8"))
+            n_pages = len(ocr.get("pages", []))
+            return {"file": stem, "status": "api_done", "pages": n_pages, "out_pdf": out_pdf, "out_json": out_json}
 
-            if need_pdf or need_json:
+        start = time.time()
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                pdf_bytes = pdf_path.read_bytes()
+                client = _get_client(endpoint, api_key)
+
                 logger.info("📤 %s → Azure prebuilt-read … [attempt %d]", stem, attempt)
                 poller = client.begin_analyze_document(
                     model_id="prebuilt-read",
@@ -108,56 +160,90 @@ def process_one(pdf_path: Path, output_dir: Path, endpoint: str, api_key: str) -
                     stream = client.get_analyze_result_pdf(
                         model_id=result.model_id, result_id=op_id,
                     )
-                    with open(out_pdf, "wb") as f:
-                        for chunk in stream:
-                            f.write(chunk)
+                    # Collect stream then atomic write — no partial PDFs
+                    pdf_data = b"".join(stream)
+                    _atomic_write_bytes(out_pdf, pdf_data)
 
                 if need_json:
                     n_pages = len(result.pages) if result.pages else 0
-                    with open(out_json, "w", encoding="utf-8") as f:
-                        json.dump(result.as_dict(), f, ensure_ascii=False, indent=2)
+                    _atomic_write_text(out_json, json.dumps(result.as_dict(), ensure_ascii=False, indent=2))
                 else:
                     ocr = json.loads(out_json.read_text(encoding="utf-8"))
                     n_pages = len(ocr.get("pages", []))
-            else:
-                ocr = json.loads(out_json.read_text(encoding="utf-8"))
-                n_pages = len(ocr.get("pages", []))
 
-            api_elapsed = time.time() - start
-            logger.info("✅ %s → %d pages, %.1fs API", stem, n_pages, api_elapsed)
-            break  # success
+                api_elapsed = time.time() - start
+                logger.info("✅ %s → %d pages, %.1fs API", stem, n_pages, api_elapsed)
+                return {"file": stem, "status": "api_done", "pages": n_pages, "out_pdf": out_pdf, "out_json": out_json}
 
-        except Exception as e:
-            if attempt < MAX_RETRIES:
-                logger.warning("⚠️  %s attempt %d failed: %s — retrying in %ds …", stem, attempt, e, RETRY_DELAY)
-                time.sleep(RETRY_DELAY)
-            else:
-                elapsed = time.time() - start
-                logger.error("❌ %s Azure failed after %d attempts (%.1fs): %s", stem, MAX_RETRIES, elapsed, e)
-                return {"file": stem, "status": "error", "error": str(e)}
+            except Exception as e:
+                if attempt < MAX_RETRIES:
+                    logger.warning("⚠️  %s attempt %d failed: %s — retrying in %ds …", stem, attempt, e, RETRY_DELAY)
+                    time.sleep(RETRY_DELAY)
+                else:
+                    elapsed = time.time() - start
+                    logger.error("❌ %s Azure failed after %d attempts (%.1fs): %s", stem, MAX_RETRIES, elapsed, e)
+                    return {"file": stem, "status": "error", "error": str(e)}
 
-    # ── Step 2: Render replace-text HTML (local) ─────────────────────
+
+# ── Stage 2: HTML render only ─────────────────────────────────────────────────
+
+_render_counter = 0
+_render_counter_lock = threading.Lock()
+_render_total = 0
+_render_start_time = 0.0
+
+
+def render_only(api_result: dict) -> dict:
+    """Render HTML from already-fetched PDF + JSON. Pure local CPU work."""
+    global _render_counter
+    from fixed_layout_pipeline.overlay_renderer import render_document
+
+    if api_result["status"] in ("skipped", "error"):
+        return api_result
+
+    stem     = api_result["file"]
+    out_pdf  = api_result["out_pdf"]
+    out_json = api_result["out_json"]
+    out_html = out_pdf.parent / f"{stem}.html"
+
+    if out_html.exists() and out_html.stat().st_size > 0:
+        logger.info("⏭  HTML exists, skipping render: %s", stem)
+        return {**api_result, "status": "success"}
+
     try:
-        render_start = time.time()
-        html_str = render_document(
-            out_pdf, out_json, dpi=DPI, replace_text=True,
-        )
-        out_html.write_text(html_str, encoding="utf-8")
-        render_elapsed = time.time() - render_start
-        logger.info("🖨  %s → HTML (%.1fs render)", stem, render_elapsed)
-
-    except Exception as e:
+        start = time.time()
+        html_str = render_document(out_pdf, out_json, dpi=DPI, replace_text=True)
+        _atomic_write_text(out_html, html_str)  # atomic — no partial HTML files
         elapsed = time.time() - start
-        logger.error("❌ %s HTML render failed (%.1fs): %s", stem, elapsed, e)
-        return {"file": stem, "status": "error", "error": f"render: {e}"}
 
-    elapsed = time.time() - start
-    return {"file": stem, "status": "success", "pages": n_pages, "elapsed_s": round(elapsed, 1)}
+        with _render_counter_lock:
+            _render_counter += 1
+            n = _render_counter
+            total = _render_total
+
+        # Log progress every 50 renders
+        if n % 50 == 0 or n == total:
+            pct = n / total * 100 if total else 0
+            elapsed_wall = time.time() - _render_start_time
+            rate = n / elapsed_wall if elapsed_wall > 0 else 0
+            eta_s = (total - n) / rate if rate > 0 else 0
+            eta_m = eta_s / 60
+            logger.info(
+                "🖨  Progress: %d / %d (%.1f%%)  rate=%.1f/s  ETA=%.1fmin",
+                n, total, pct, rate, eta_m,
+            )
+        else:
+            logger.info("🖨  %s → HTML (%.1fs render)", stem, elapsed)
+
+        return {**api_result, "status": "success"}
+    except Exception as e:
+        logger.error("❌ %s HTML render failed: %s", stem, e)
+        return {**api_result, "status": "error", "error": f"render: {e}"}
 
 
 # ── Parallel batch runner ───────────────────────────────────────────────────
 
-async def main(input_dir: Path, output_dir: Path, workers: int):
+async def main(input_dir: Path, output_dir: Path, api_workers: int, render_workers: int):
     endpoint = os.environ.get("AZURE_DI_ENDPOINT", "")
     api_key  = os.environ.get("AZURE_DI_API_KEY", "")
     if not endpoint or not api_key:
@@ -168,32 +254,86 @@ async def main(input_dir: Path, output_dir: Path, workers: int):
         sys.exit(f"No PDFs found in {input_dir}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    logger.info("📂 %d PDFs in %s → %s (%d workers)", len(pdf_files), input_dir, output_dir, workers)
+    logger.info(
+        "📂 %d PDFs in %s → %s (🌐 %d API workers | 🖨  %d render workers)",
+        len(pdf_files), input_dir, output_dir, api_workers, render_workers,
+    )
 
     loop = asyncio.get_running_loop()
-    sem = asyncio.Semaphore(workers)
+    t0 = time.time()
 
-    async def _bounded(p: Path) -> dict:
-        async with sem:
+    # ── Stage 1: Azure API ────────────────────────────────────────────
+    logger.info("━" * 60)
+    logger.info("🌐 Stage 1: Azure API  (%d workers)", api_workers)
+    logger.info("━" * 60)
+
+    api_sem = asyncio.Semaphore(api_workers)
+
+    async def _bounded_api(p: Path) -> dict:
+        async with api_sem:
             return await loop.run_in_executor(
-                executor, process_one, p, output_dir, endpoint, api_key,
+                api_executor, azure_only, p, output_dir, endpoint, api_key,
             )
 
-    t0 = time.time()
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        results = await asyncio.gather(*[_bounded(p) for p in pdf_files], return_exceptions=True)
+    with ThreadPoolExecutor(max_workers=api_workers) as api_executor:
+        api_results = await asyncio.gather(
+            *[_bounded_api(p) for p in pdf_files], return_exceptions=True
+        )
+
+    # Normalise exceptions from gather
+    api_final = []
+    for i, r in enumerate(api_results):
+        if isinstance(r, Exception):
+            api_final.append({"file": pdf_files[i].stem, "status": "error", "error": str(r)})
+        else:
+            api_final.append(r)
+
+    api_ok     = sum(1 for r in api_final if r["status"] == "api_done")
+    api_skip   = sum(1 for r in api_final if r["status"] == "skipped")
+    api_errors = sum(1 for r in api_final if r["status"] == "error")
+    logger.info("🌐 Stage 1 done — ✅ %d  ⏭ %d  ❌ %d", api_ok, api_skip, api_errors)
+
+    # Only pass docs that need rendering to stage 2
+    to_render = [r for r in api_final if r["status"] in ("api_done", "skipped")]
+
+    # ── Stage 2: HTML rendering ───────────────────────────────────────
+    logger.info("━" * 60)
+    logger.info("🖨  Stage 2: HTML render (%d workers)", render_workers)
+    logger.info("━" * 60)
+
+    # Reset progress counter for this run
+    global _render_counter, _render_total, _render_start_time
+    _render_counter = 0
+    _render_total   = len(to_render)
+    _render_start_time = time.time()
+
+    render_sem = asyncio.Semaphore(render_workers)
+
+    async def _bounded_render(r: dict) -> dict:
+        async with render_sem:
+            return await loop.run_in_executor(render_executor, render_only, r)
+
+    with ThreadPoolExecutor(max_workers=render_workers) as render_executor:
+        render_results = await asyncio.gather(
+            *[_bounded_render(r) for r in to_render], return_exceptions=True
+        )
+
+    # Merge all results
+    rendered_final = []
+    for i, r in enumerate(render_results):
+        if isinstance(r, Exception):
+            rendered_final.append({"file": to_render[i]["file"], "status": "error", "error": str(r)})
+        else:
+            rendered_final.append(r)
+
+    # Add back any docs that errored in stage 1
+    stage1_errors = [r for r in api_final if r["status"] == "error"]
+    results = rendered_final + stage1_errors
 
     # ── Summary ──────────────────────────────────────────────────────
-    final = []
-    for i, r in enumerate(results):
-        if isinstance(r, Exception):
-            final.append({"file": pdf_files[i].stem, "status": "error", "error": str(r)})
-        else:
-            final.append(r)
-
-    ok      = [r for r in final if r["status"] == "success"]
-    skipped = [r for r in final if r["status"] == "skipped"]
-    errors  = [r for r in final if r["status"] == "error"]
+    ok      = [r for r in results if r["status"] == "success"]
+    skipped = [r for r in results if r["status"] == "skipped"]
+    errors  = [r for r in results if r["status"] == "error"]
 
     total_pages = sum(r.get("pages", 0) for r in ok)
     wall_time = time.time() - t0
@@ -202,13 +342,14 @@ async def main(input_dir: Path, output_dir: Path, workers: int):
         "",
         "=" * 60,
         f"  Input: {input_dir}",
-        f"  Documents: {len(final)}",
+        f"  Documents: {len(results)}",
         f"  ✅ Success: {len(ok)}  ⏭ Skipped: {len(skipped)}  ❌ Failed: {len(errors)}",
         f"  📄 Pages: {total_pages}",
     ]
     if errors:
         for e in errors:
             summary_lines.append(f"     ❌ {e['file']}: {e.get('error', '?')}")
+    summary_lines.append(f"  🌐 API workers: {api_workers}  🖨  Render workers: {render_workers}")
     summary_lines.append(f"  Wall time: {wall_time:.1f}s")
     summary_lines.append("=" * 60)
 
@@ -224,9 +365,16 @@ async def main(input_dir: Path, output_dir: Path, workers: int):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Azure-only batch OCR pipeline")
-    parser.add_argument("folder", help="Subfolder name inside batch01/ (e.g. 0046), or 'all' to run all remaining")
-    parser.add_argument("--workers", type=int, default=4, help="Parallel workers (default: 4)")
+    parser.add_argument("folder", help="Folder of PDFs to process (e.g. batch02), or 'all' to run all remaining")
+    parser.add_argument("--api-workers",    type=int, default=8,  help="Azure API workers (default: 8)")
+    parser.add_argument("--render-workers", type=int, default=8,  help="HTML render workers (default: 8)")
+    # Legacy --workers flag maps to both stages equally
+    parser.add_argument("--workers",        type=int, default=None, help="Set both api and render workers (legacy)")
     args = parser.parse_args()
+
+    if args.workers is not None:
+        args.api_workers    = args.workers
+        args.render_workers = args.workers
 
     if args.folder == "all":
         batch_dir = ROOT / "batch01"
@@ -259,11 +407,16 @@ if __name__ == "__main__":
             logger.info("━" * 60)
             input_dir = batch_dir / fname
             output_dir = output_root / f"output_{fname}"
-            asyncio.run(main(input_dir, output_dir, args.workers))
+            asyncio.run(main(input_dir, output_dir, args.api_workers, args.render_workers))
     else:
-        input_dir = ROOT / "batch01" / args.folder
-        output_dir = ROOT / "output" / f"output_{args.folder}"
+        # Check if it's a root-level folder first (like batch02)
+        input_dir = ROOT / args.folder
+        if not input_dir.exists():
+            # Fall back to batch01 subfolder
+            input_dir = ROOT / "batch01" / args.folder
+        
         if not input_dir.exists():
             sys.exit(f"Input directory not found: {input_dir}")
-
-        asyncio.run(main(input_dir, output_dir, args.workers))
+        
+        output_dir = ROOT / "output" / f"output_{args.folder}"
+        asyncio.run(main(input_dir, output_dir, args.api_workers, args.render_workers))
