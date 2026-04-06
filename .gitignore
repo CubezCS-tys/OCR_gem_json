@@ -44,8 +44,6 @@ logs/
 examples/output/*.html
 output/
 *.html
-outputs_2_prompt_audit/
-2026/
 
 # Testing
 .pytest_cache/
@@ -60,51 +58,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 temp/
-
-# ocr_editor
-ocr_editor/dist/
-ocr_editor/__pycache__/
-
-# ocr-viewer (Next.js)
-ocr-viewer/node_modules/
-ocr-viewer/.next/
-
-# webapp
-webapp/uploads/
-webapp/*.db
-webapp/__pycache__/
-!webapp/static/*.html
-!webapp/*.html
-output_searchable/
-output_final/
-
-# frontend (Next.js)
-frontend/node_modules/
-frontend/.next/
-frontend/.env.local
-
-# Celery
-celerybeat-schedule
-celerybeat.pid
-*.pid
-
-# === Large OCR artefacts / datasets ===
-pdfs/
-new_pipeline/
-output_with_figures/
-output_final.zip
-batch1_flp/
-
-# Large generated JSONs
-*_canonical.json
-*_ocr.json
-
-# Archives
-*.zip
-*.7z
-*.tar
-*.tar.gz
-batch01/
+batch*/
+batch*.zip
 viewer-frontend/
-batch02/
-batch03/
