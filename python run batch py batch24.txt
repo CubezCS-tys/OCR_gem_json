@@ -1,0 +1,1 @@
+python run_batch.py batch24 --api-workers 15 --render-workers 16
