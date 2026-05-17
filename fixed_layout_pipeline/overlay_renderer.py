@@ -1999,11 +1999,8 @@ function legacyFit(el, targetW, targetH) {{
   el.style.lineHeight = targetH.toFixed(1) + "px";
   el.style.width = "auto";  /* one final measurement */
   const finalNatural = el.scrollWidth;
-  /* Clamp scaleX to 1.0: never expand text wider than its natural width.
-     Expanding (scaleX > 1) with transform-origin anchored to one edge
-     causes the other edge to overflow its OCR box in Chrome. */
   if (finalNatural > 0 && targetW > 0) {{
-    const scaleX = Math.min(1.0, targetW / finalNatural);
+    const scaleX = Math.min(1.5, targetW / finalNatural);
     el.style.transform = "scaleX(" + scaleX.toFixed(6) + ")";
   }} else {{
     el.style.transform = "none";
