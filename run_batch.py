@@ -84,6 +84,46 @@ def _get_file_lock(stem: str) -> threading.Lock:
         return _file_locks[stem]
 
 
+# ── Fast completion scan ─────────────────────────────────────────────────────
+
+def _scan_completed(output_dir: Path, require_html: bool = True) -> frozenset[str]:
+    """
+    Walk output_dir once with os.scandir() and return stems that already have
+    all required outputs.  When require_html=False, only pdf+json are checked
+    (used by --force-html to find docs that can skip the Azure call entirely).
+
+    os.scandir() reads all entries in a single getdents64 syscall and caches
+    stat info in each DirEntry — far cheaper than calling Path.exists() +
+    Path.stat() per file for every document in the batch.
+    """
+    if not output_dir.exists():
+        return frozenset()
+
+    done: set[str] = set()
+    try:
+        with os.scandir(output_dir) as top:
+            subdirs = [(e.name, e.path) for e in top if e.is_dir()]
+    except OSError:
+        return frozenset()
+
+    for stem, doc_path in subdirs:
+        required = {f"{stem}.pdf", f"{stem}.json"}
+        if require_html:
+            required.add(f"{stem}.html")
+        try:
+            with os.scandir(doc_path) as inner:
+                present = {
+                    f.name for f in inner
+                    if f.name in required and f.stat(follow_symlinks=False).st_size > 0
+                }
+        except OSError:
+            continue
+        if required.issubset(present):
+            done.add(stem)
+
+    return frozenset(done)
+
+
 # ── Stage 1: Azure API only ──────────────────────────────────────────────────
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -108,7 +148,8 @@ def _atomic_write_text(path: Path, text: str) -> None:
         raise
 
 
-def azure_only(pdf_path: Path, output_dir: Path, endpoint: str, api_key: str) -> dict:
+def azure_only(pdf_path: Path, output_dir: Path, endpoint: str, api_key: str,
+               force_html: bool = False, done_stems: frozenset = frozenset()) -> dict:
     """Fetch searchable PDF + OCR JSON from Azure. No HTML rendering."""
     from azure.ai.documentintelligence.models import (
         AnalyzeDocumentRequest,
@@ -123,20 +164,22 @@ def azure_only(pdf_path: Path, output_dir: Path, endpoint: str, api_key: str) ->
         doc_folder.mkdir(parents=True, exist_ok=True)
         out_pdf  = doc_folder / f"{stem}.pdf"
         out_json = doc_folder / f"{stem}.json"
-        out_html = doc_folder / f"{stem}.html"
 
-        # Skip if all three outputs already exist
-        if (out_pdf.exists() and out_pdf.stat().st_size > 0
-                and out_json.exists() and out_json.stat().st_size > 0
-                and out_html.exists() and out_html.stat().st_size > 0):
-            logger.info("⏭  Skipping (exists): %s", stem)
-            return {"file": stem, "status": "skipped", "out_pdf": out_pdf, "out_json": out_json}
+        # Fast O(1) pre-scan check — avoids stat() calls for already-done docs
+        if stem in done_stems:
+            if force_html:
+                # pdf+json confirmed by pre-scan; skip Azure, go straight to render
+                return {"file": stem, "status": "api_done", "out_pdf": out_pdf, "out_json": out_json}
+            else:
+                # all three outputs confirmed; nothing to do
+                logger.info("⏭  Skipping (exists): %s", stem)
+                return {"file": stem, "status": "skipped", "out_pdf": out_pdf, "out_json": out_json}
 
         need_pdf  = not (out_pdf.exists()  and out_pdf.stat().st_size  > 0)
         need_json = not (out_json.exists() and out_json.stat().st_size > 0)
 
         if not need_pdf and not need_json:
-            # Both Azure outputs exist, only HTML is missing — pass through to render stage
+            # pdf+json exist but weren't caught by pre-scan (e.g. html missing, no --force-html)
             ocr = json.loads(out_json.read_text(encoding="utf-8"))
             n_pages = len(ocr.get("pages", []))
             return {"file": stem, "status": "api_done", "pages": n_pages, "out_pdf": out_pdf, "out_json": out_json}
@@ -193,7 +236,7 @@ _render_total = 0
 _render_start_time = 0.0
 
 
-def render_only(api_result: dict) -> dict:
+def render_only(api_result: dict, force_html: bool = False) -> dict:
     """Render HTML from already-fetched PDF + JSON. Pure local CPU work."""
     global _render_counter
     from fixed_layout_pipeline.overlay_renderer import render_document
@@ -206,9 +249,11 @@ def render_only(api_result: dict) -> dict:
     out_json = api_result["out_json"]
     out_html = out_pdf.parent / f"{stem}.html"
 
-    if out_html.exists() and out_html.stat().st_size > 0:
+    if not force_html and out_html.exists() and out_html.stat().st_size > 0:
         logger.info("⏭  HTML exists, skipping render: %s", stem)
         return {**api_result, "status": "success"}
+
+    replacing = out_html.exists() and out_html.stat().st_size > 0
 
     try:
         start = time.time()
@@ -233,7 +278,8 @@ def render_only(api_result: dict) -> dict:
                 n, total, pct, rate, eta_m,
             )
         else:
-            logger.info("🖨  %s → HTML (%.1fs render)", stem, elapsed)
+            action = "🔄  replacing" if replacing else "🖨  new"
+            logger.info("%s %s → HTML (%.1fs render)", action, stem, elapsed)
 
         return {**api_result, "status": "success"}
     except Exception as e:
@@ -243,7 +289,7 @@ def render_only(api_result: dict) -> dict:
 
 # ── Parallel batch runner ───────────────────────────────────────────────────
 
-async def main(input_dir: Path, output_dir: Path, api_workers: int, render_workers: int):
+async def main(input_dir: Path, output_dir: Path, api_workers: int, render_workers: int, force_html: bool = False):
     endpoint = os.environ.get("AZURE_DI_ENDPOINT", "")
     api_key  = os.environ.get("AZURE_DI_API_KEY", "")
     if not endpoint or not api_key:
@@ -259,6 +305,16 @@ async def main(input_dir: Path, output_dir: Path, api_workers: int, render_worke
         len(pdf_files), input_dir, output_dir, api_workers, render_workers,
     )
 
+    # Pre-scan output dir once — builds a frozenset of already-complete stems so
+    # each worker does an O(1) set lookup instead of stat() calls per document.
+    # With --force-html we scan for pdf+json only (html will be re-rendered).
+    done_stems = _scan_completed(output_dir, require_html=not force_html)
+    if done_stems:
+        if force_html:
+            logger.info("⚡ Pre-scan: %d / %d docs have Azure outputs — jumping straight to render", len(done_stems), len(pdf_files))
+        else:
+            logger.info("⚡ Pre-scan: %d / %d docs already complete — skipping", len(done_stems), len(pdf_files))
+
     loop = asyncio.get_running_loop()
     t0 = time.time()
 
@@ -272,7 +328,7 @@ async def main(input_dir: Path, output_dir: Path, api_workers: int, render_worke
     async def _bounded_api(p: Path) -> dict:
         async with api_sem:
             return await loop.run_in_executor(
-                api_executor, azure_only, p, output_dir, endpoint, api_key,
+                api_executor, azure_only, p, output_dir, endpoint, api_key, force_html, done_stems,
             )
 
     with ThreadPoolExecutor(max_workers=api_workers) as api_executor:
@@ -311,7 +367,7 @@ async def main(input_dir: Path, output_dir: Path, api_workers: int, render_worke
 
     async def _bounded_render(r: dict) -> dict:
         async with render_sem:
-            return await loop.run_in_executor(render_executor, render_only, r)
+            return await loop.run_in_executor(render_executor, render_only, r, force_html)
 
     with ThreadPoolExecutor(max_workers=render_workers) as render_executor:
         render_results = await asyncio.gather(
@@ -370,6 +426,7 @@ if __name__ == "__main__":
     parser.add_argument("--render-workers", type=int, default=8,  help="HTML render workers (default: 8)")
     # Legacy --workers flag maps to both stages equally
     parser.add_argument("--workers",        type=int, default=None, help="Set both api and render workers (legacy)")
+    parser.add_argument("--force-html", action="store_true", help="Re-render HTML even if it already exists (skips Azure API)")
     args = parser.parse_args()
 
     if args.workers is not None:
@@ -381,20 +438,14 @@ if __name__ == "__main__":
         output_root = ROOT / "output"
         folders = sorted(d.name for d in batch_dir.iterdir() if d.is_dir())
 
-        # Determine which folders are already fully done (output dir exists and
-        # every input PDF has all 3 output files: .pdf, .json, .html)
+        # Determine which folders are already fully done using a fast scandir
+        # pass rather than per-file Path.exists() calls.
         remaining = []
         for fname in folders:
             out_dir = output_root / f"output_{fname}"
-            if out_dir.exists():
-                input_pdfs = list((batch_dir / fname).glob("*.pdf"))
-                all_done = input_pdfs and all(
-                    (out_dir / p.stem / f"{p.stem}.pdf").exists()
-                    and (out_dir / p.stem / f"{p.stem}.json").exists()
-                    and (out_dir / p.stem / f"{p.stem}.html").exists()
-                    for p in input_pdfs
-                )
-                if all_done:
+            if not args.force_html and out_dir.exists():
+                input_stems = {p.stem for p in (batch_dir / fname).glob("*.pdf")}
+                if input_stems and input_stems.issubset(_scan_completed(out_dir, require_html=True)):
                     logger.info("⏭  Folder %s already complete — skipping", fname)
                     continue
             remaining.append(fname)
@@ -407,16 +458,16 @@ if __name__ == "__main__":
             logger.info("━" * 60)
             input_dir = batch_dir / fname
             output_dir = output_root / f"output_{fname}"
-            asyncio.run(main(input_dir, output_dir, args.api_workers, args.render_workers))
+            asyncio.run(main(input_dir, output_dir, args.api_workers, args.render_workers, args.force_html))
     else:
         # Check if it's a root-level folder first (like batch02)
         input_dir = ROOT / args.folder
         if not input_dir.exists():
             # Fall back to batch01 subfolder
             input_dir = ROOT / "batch01" / args.folder
-        
+
         if not input_dir.exists():
             sys.exit(f"Input directory not found: {input_dir}")
-        
+
         output_dir = ROOT / "output" / f"output_{args.folder}"
-        asyncio.run(main(input_dir, output_dir, args.api_workers, args.render_workers))
+        asyncio.run(main(input_dir, output_dir, args.api_workers, args.render_workers, args.force_html))
