@@ -1658,10 +1658,12 @@ body {{
 
 .tw[dir="rtl"] {{
   transform-origin: right top;
+  text-align: right;
 }}
 
 .tw[dir="ltr"] {{
   transform-origin: left top;
+  text-align: left;
 }}
 
 .tw-ar {{
@@ -1984,7 +1986,7 @@ function legacyFit(el, targetW, targetH) {{
   for (let i = 0; i < maxIter; i++) {{
     el.style.fontSize = fontSize.toFixed(2) + "px";
     el.style.lineHeight = targetH.toFixed(1) + "px";
-    el.style.width = "auto";
+    el.style.width = "auto";  /* measure natural width */
     const natural = el.scrollWidth;
     if (natural <= 0) break;
     const ratio = targetW / natural;
@@ -1995,14 +1997,21 @@ function legacyFit(el, targetW, targetH) {{
 
   el.style.fontSize = fontSize.toFixed(2) + "px";
   el.style.lineHeight = targetH.toFixed(1) + "px";
-  el.style.width = "auto";
+  el.style.width = "auto";  /* one final measurement */
   const finalNatural = el.scrollWidth;
+  /* Clamp scaleX to 1.0: never expand text wider than its natural width.
+     Expanding (scaleX > 1) with transform-origin anchored to one edge
+     causes the other edge to overflow its OCR box in Chrome. */
   if (finalNatural > 0 && targetW > 0) {{
-    const scaleX = targetW / finalNatural;
+    const scaleX = Math.min(1.0, targetW / finalNatural);
     el.style.transform = "scaleX(" + scaleX.toFixed(6) + ")";
   }} else {{
     el.style.transform = "none";
   }}
+  /* Restore the declared box width so layout matches the OCR polygon.
+     Leaving width:auto lets the element grow to naturalWidth in Chrome,
+     which (combined with the transform) causes words to overflow the page. */
+  el.style.width = targetW.toFixed(1) + "px";
 }}
 
 function fitAllWords() {{
