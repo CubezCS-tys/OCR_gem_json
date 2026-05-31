@@ -1,16 +1,29 @@
 #!/usr/bin/env python3
 """
-process_large_pdf.py — Handle PDFs too large for Azure DI's 500 MB limit.
+process_large_pdf.py — Handle PDFs >= 100 MB by splitting into individual pages.
 
-Splits the PDF into chunks, sends each to Azure prebuilt-read,
-then merges the searchable PDFs and OCR JSONs back into single files.
+Approach
+--------
+1.  Split the PDF into single-page PDFs, one at a time.
+2.  Send each page to Azure prebuilt-read, save the searchable PDF and JSON
+    result to a checkpoint folder immediately.
+3.  Merge all per-page searchable PDFs into one combined PDF.
+4.  Merge all per-page OCR JSONs into one combined JSON.
+    (HTML rendering happens downstream via run_batch_large.py as normal.)
 
-Usage:
-    python process_large_pdf.py path/to/big.pdf --output-dir output/output_bigdoc/
+Checkpoint folder — safe to restart at any point, finished pages are skipped:
+    <output_dir>/<stem>/
+        pages/
+            page_NNNN.pdf       ← single page input (deleted after Azure succeeds)
+            result_NNNN.pdf     ← searchable PDF from Azure
+            result_NNNN.json    ← OCR JSON from Azure
+        <stem>.pdf              ← final merged searchable PDF
+        <stem>.json             ← final merged OCR JSON
 
-Outputs (same structure as run_batch.py):
-    output/output_bigdoc/<stem>/<stem>.pdf
-    output/output_bigdoc/<stem>/<stem>.json
+Usage
+-----
+    python process_large_pdf.py path/to/big.pdf
+    python process_large_pdf.py path/to/big.pdf --output-dir output/output_large/
 """
 
 import argparse
@@ -18,7 +31,6 @@ import json
 import logging
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -35,251 +47,235 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-AZURE_MAX_BYTES = 45 * 1024 * 1024  # 45 MB — small enough to upload before the gateway 408-timeout
-MAX_RETRIES = 3
-RETRY_DELAY = 15
+LARGE_PDF_MB    = 100   # files at or above this threshold belong here
+MAX_RETRIES     = 5
+RETRY_BASE_WAIT = 20    # seconds; doubles each attempt (20, 40, 80, 160, 320)
+
+AZURE_CONNECT_TIMEOUT = 30
+AZURE_READ_TIMEOUT    = 300   # per-page results are small, 5 min is plenty
 
 
-# ── PDF splitting ─────────────────────────────────────────────────────────────
+# ── Azure ─────────────────────────────────────────────────────────────────────
 
-def split_pdf_chunks(pdf_path: Path, max_bytes: int = AZURE_MAX_BYTES) -> list[Path]:
-    """
-    Split a PDF into temp files each under max_bytes.
-    Returns a list of temp paths — caller is responsible for deleting them.
-
-    Uses an estimate of bytes-per-page from the actual file size, with a
-    10 % safety margin. If a chunk still overshoots (pages with embedded
-    images vary a lot), the page count is halved and retried.
-    """
-    import fitz
-
-    doc = fitz.open(str(pdf_path))
-    total_pages = len(doc)
-    file_bytes = pdf_path.stat().st_size
-    bytes_per_page = file_bytes / max(total_pages, 1)
-    pages_per_chunk = max(1, int(max_bytes / bytes_per_page * 0.90))
-
-    logger.info(
-        "Splitting %s (%d MB, %d pages) — ~%d pages/chunk",
-        pdf_path.name,
-        file_bytes // (1024 * 1024),
-        total_pages,
-        pages_per_chunk,
+def _make_client(endpoint: str, api_key: str):
+    from azure.ai.documentintelligence import DocumentIntelligenceClient
+    from azure.core.credentials import AzureKeyCredential
+    return DocumentIntelligenceClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(api_key),
+        connection_timeout=AZURE_CONNECT_TIMEOUT,
+        read_timeout=AZURE_READ_TIMEOUT,
     )
 
-    chunks: list[Path] = []
-    tmp_dir = Path(tempfile.gettempdir())
-    start = 0
 
-    while start < total_pages:
-        end = min(start + pages_per_chunk, total_pages)
-        chunk_doc = fitz.open()
-        chunk_doc.insert_pdf(doc, from_page=start, to_page=end - 1)
-        chunk_path = tmp_dir / f"{pdf_path.stem}_chunk{len(chunks)}.pdf"
-        chunk_doc.save(str(chunk_path))
-        chunk_doc.close()
-
-        chunk_mb = chunk_path.stat().st_size // (1024 * 1024)
-
-        # If still too large and more than one page, halve chunk size and retry
-        if chunk_path.stat().st_size > max_bytes and end - start > 1:
-            chunk_path.unlink(missing_ok=True)
-            pages_per_chunk = max(1, (end - start) // 2)
-            logger.warning(
-                "Chunk too large (%d MB), retrying with %d pages/chunk",
-                chunk_mb, pages_per_chunk,
-            )
-            continue
-
-        logger.info(
-            "  Chunk %d: pages %d–%d (%d MB) → %s",
-            len(chunks), start + 1, end, chunk_mb, chunk_path.name,
-        )
-        chunks.append(chunk_path)
-        start = end
-
-    doc.close()
-    return chunks
-
-
-# ── Azure call (single chunk) ─────────────────────────────────────────────────
-
-def _call_azure(chunk_path: Path, endpoint: str, api_key: str) -> tuple[bytes | None, dict | None]:
+def _send_page(page_path: Path, client, result_pdf_path: Path, result_json_path: Path) -> None:
     """
-    Send one chunk to Azure prebuilt-read.
-    Returns (searchable_pdf_bytes, ocr_json_dict) or raises on failure.
+    Send a single-page PDF to Azure prebuilt-read.
+    Writes searchable PDF and OCR JSON directly to disk.
+    Raises after MAX_RETRIES with exponential backoff.
     """
-    from azure.ai.documentintelligence import DocumentIntelligenceClient
     from azure.ai.documentintelligence.models import AnalyzeDocumentRequest, AnalyzeOutputOption
-    from azure.core.credentials import AzureKeyCredential
 
-    client = DocumentIntelligenceClient(endpoint=endpoint, credential=AzureKeyCredential(api_key))
-    pdf_bytes = chunk_path.read_bytes()
+    pdf_bytes = page_path.read_bytes()
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            logger.info("  📤 %s → Azure [attempt %d] …", chunk_path.name, attempt)
+            logger.info("  📤 %s → Azure [attempt %d/%d] …", page_path.name, attempt, MAX_RETRIES)
             poller = client.begin_analyze_document(
                 model_id="prebuilt-read",
                 body=AnalyzeDocumentRequest(bytes_source=pdf_bytes),
                 output=[AnalyzeOutputOption.PDF],
             )
             result = poller.result()
-            op_id = poller.details["operation_id"]
+            op_id  = poller.details["operation_id"]
 
             stream = client.get_analyze_result_pdf(model_id=result.model_id, result_id=op_id)
-            searchable_pdf = b"".join(stream)
-            ocr_dict = result.as_dict()
-
-            logger.info(
-                "  ✅ %s → %d pages",
-                chunk_path.name,
-                len(result.pages) if result.pages else 0,
+            result_pdf_path.write_bytes(b"".join(stream))
+            result_json_path.write_text(
+                json.dumps(result.as_dict(), ensure_ascii=False, indent=2),
+                encoding="utf-8",
             )
-            return searchable_pdf, ocr_dict
+            logger.info("  ✅ %s done", page_path.name)
+            return
 
         except Exception as e:
             if attempt < MAX_RETRIES:
-                logger.warning("  ⚠️  attempt %d failed: %s — retrying in %ds …", attempt, e, RETRY_DELAY)
-                time.sleep(RETRY_DELAY)
+                wait = RETRY_BASE_WAIT * (2 ** (attempt - 1))
+                logger.warning("  ⚠️  attempt %d failed: %s — retrying in %ds …", attempt, e, wait)
+                time.sleep(wait)
             else:
+                logger.error("  ❌ all %d attempts failed for %s", MAX_RETRIES, page_path.name)
                 raise
 
 
-# ── Merge helpers ─────────────────────────────────────────────────────────────
+# ── Merge ─────────────────────────────────────────────────────────────────────
 
-def merge_ocr_jsons(chunk_jsons: list[dict]) -> dict:
-    """
-    Merge multiple Azure prebuilt-read JSON dicts into one.
-    Adjusts pageNumber offsets so the merged result looks like a single document.
-    Only fields consumed by the rendering pipeline (pages, content) are merged.
-    """
-    if len(chunk_jsons) == 1:
-        return chunk_jsons[0]
-
-    merged_pages: list[dict] = []
-    content_parts: list[str] = []
-    page_offset = 0
-
-    for chunk in chunk_jsons:
-        pages = chunk.get("pages", [])
-        for page in pages:
-            adjusted = dict(page)
-            # pageNumber is 1-based in Azure responses
-            adjusted["pageNumber"] = page_offset + page.get("pageNumber", len(merged_pages) + 1)
-            merged_pages.append(adjusted)
-        page_offset += len(pages)
-        if chunk.get("content"):
-            content_parts.append(chunk["content"])
-
-    return {
-        "pages": merged_pages,
-        "content": "\n".join(content_parts),
-        "modelId": chunk_jsons[0].get("modelId", "prebuilt-read"),
-        "apiVersion": chunk_jsons[0].get("apiVersion", ""),
-    }
-
-
-def merge_pdfs(chunk_pdf_bytes_list: list[bytes], out_path: Path) -> None:
-    """Concatenate multiple PDF byte strings into one file using PyMuPDF."""
+def _merge_pdfs(result_pdf_paths: list[Path], out_path: Path) -> None:
+    """Concatenate per-page searchable PDFs into one file."""
     import fitz
     merged = fitz.open()
-    for pdf_bytes in chunk_pdf_bytes_list:
-        src = fitz.open(stream=pdf_bytes, filetype="pdf")
+    for p in result_pdf_paths:
+        src = fitz.open(str(p))
         merged.insert_pdf(src)
         src.close()
     merged.save(str(out_path))
     merged.close()
 
 
-# ── Atomic write helpers (same as run_batch.py) ───────────────────────────────
+def _merge_jsons(result_json_paths: list[Path]) -> dict:
+    """
+    Merge per-page Azure OCR JSONs into one document.
+    Fixes pageNumber so the result looks like a single document.
+    """
+    merged_pages: list[dict] = []
+    content_parts: list[str] = []
+    first: dict | None = None
 
-def _atomic_write_bytes(path: Path, data: bytes) -> None:
-    tmp = path.with_suffix(".tmp")
-    try:
-        tmp.write_bytes(data)
-        tmp.replace(path)
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        raise
+    for page_num, path in enumerate(result_json_paths, start=1):
+        chunk = json.loads(path.read_text(encoding="utf-8"))
+        if first is None:
+            first = chunk
+        for page in chunk.get("pages", []):
+            adjusted = dict(page)
+            adjusted["pageNumber"] = page_num
+            merged_pages.append(adjusted)
+        if chunk.get("content"):
+            content_parts.append(chunk["content"])
+
+    return {
+        "pages":      merged_pages,
+        "content":    "\n".join(content_parts),
+        "modelId":    (first or {}).get("modelId", "prebuilt-read"),
+        "apiVersion": (first or {}).get("apiVersion", ""),
+    }
 
 
-def _atomic_write_text(path: Path, text: str) -> None:
-    tmp = path.with_suffix(".tmp")
-    try:
-        tmp.write_text(text, encoding="utf-8")
-        tmp.replace(path)
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        raise
-
-
-# ── Main entry point ──────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def process_large_pdf(pdf_path: Path, output_dir: Path, endpoint: str, api_key: str) -> dict:
     """
-    Split, OCR, and merge a PDF that exceeds Azure's size limit.
-    Returns the same dict shape as run_batch.py's azure_only() so it can
-    be dropped in as a direct replacement later.
+    Split PDF into pages, OCR each page via Azure, merge results.
+    Checkpoints every page so a restart skips already-finished pages.
+    Returns a dict compatible with run_batch.py / run_batch_large.py.
     """
-    stem = pdf_path.stem
-    doc_folder = output_dir / stem
-    doc_folder.mkdir(parents=True, exist_ok=True)
-    out_pdf  = doc_folder / f"{stem}.pdf"
-    out_json = doc_folder / f"{stem}.json"
+    import fitz
 
-    # Skip if already done
+    stem       = pdf_path.stem
+    doc_folder = output_dir / stem
+    page_dir   = doc_folder / "pages"
+    out_pdf    = doc_folder / f"{stem}.pdf"
+    out_json   = doc_folder / f"{stem}.json"
+
+    doc_folder.mkdir(parents=True, exist_ok=True)
+    page_dir.mkdir(exist_ok=True)
+
+    # Already fully done
     if out_pdf.exists() and out_pdf.stat().st_size > 0 \
             and out_json.exists() and out_json.stat().st_size > 0:
-        logger.info("⏭  Already exists, skipping: %s", stem)
+        logger.info("⏭  Already done, skipping: %s", stem)
         ocr = json.loads(out_json.read_text(encoding="utf-8"))
-        return {"file": stem, "status": "api_done", "pages": len(ocr.get("pages", [])),
-                "out_pdf": out_pdf, "out_json": out_json}
+        return {
+            "file": stem, "status": "api_done",
+            "pages": len(ocr.get("pages", [])),
+            "out_pdf": out_pdf, "out_json": out_json,
+        }
 
     file_mb = pdf_path.stat().st_size // (1024 * 1024)
-    logger.info("📂 Processing large PDF: %s (%d MB)", stem, file_mb)
+    doc     = fitz.open(str(pdf_path))
+    total   = len(doc)
+    logger.info("📂 %s (%d MB, %d pages)", stem, file_mb, total)
 
-    chunk_paths: list[Path] = []
+    client = _make_client(endpoint, api_key)
+
+    result_pdfs : list[Path] = []
+    result_jsons: list[Path] = []
+
     try:
-        chunk_paths = split_pdf_chunks(pdf_path)
-        logger.info("Split into %d chunks", len(chunk_paths))
+        for i in range(total):
+            result_pdf_p  = page_dir / f"result_{i:04d}.pdf"
+            result_json_p = page_dir / f"result_{i:04d}.json"
+            page_input_p  = page_dir / f"page_{i:04d}.pdf"
 
-        chunk_pdfs: list[bytes] = []
-        chunk_jsons: list[dict] = []
+            # Resume: page already processed in a previous run
+            if result_pdf_p.exists() and result_pdf_p.stat().st_size > 0 \
+                    and result_json_p.exists() and result_json_p.stat().st_size > 0:
+                logger.info("  ⏭  page %04d already done, skipping", i)
+                result_pdfs.append(result_pdf_p)
+                result_jsons.append(result_json_p)
+                continue
 
-        for i, chunk_path in enumerate(chunk_paths):
-            logger.info("Processing chunk %d/%d …", i + 1, len(chunk_paths))
-            pdf_bytes, ocr_dict = _call_azure(chunk_path, endpoint, api_key)
-            chunk_pdfs.append(pdf_bytes)
-            chunk_jsons.append(ocr_dict)
+            # Extract this single page to its own PDF
+            page_doc = fitz.open()
+            page_doc.insert_pdf(doc, from_page=i, to_page=i)
+            page_doc.save(str(page_input_p))
+            page_doc.close()
 
-        logger.info("Merging %d chunks …", len(chunk_paths))
-        merged_json = merge_ocr_jsons(chunk_jsons)
-        n_pages = len(merged_json.get("pages", []))
+            page_mb = page_input_p.stat().st_size // (1024 * 1024) or "<1"
+            logger.info("  Page %04d / %04d (%s MB)", i + 1, total, page_mb)
 
-        merge_pdfs(chunk_pdfs, out_pdf)
-        _atomic_write_text(out_json, json.dumps(merged_json, ensure_ascii=False, indent=2))
+            # Send to Azure; always delete the input page after (pass or fail)
+            try:
+                _send_page(page_input_p, client, result_pdf_p, result_json_p)
+            finally:
+                page_input_p.unlink(missing_ok=True)
 
-        logger.info("✅ %s → %d pages merged", stem, n_pages)
-        return {"file": stem, "status": "api_done", "pages": n_pages,
-                "out_pdf": out_pdf, "out_json": out_json}
-
-    except Exception as e:
-        logger.error("❌ %s failed: %s", stem, e)
-        return {"file": stem, "status": "error", "error": str(e)}
+            result_pdfs.append(result_pdf_p)
+            result_jsons.append(result_json_p)
 
     finally:
-        for p in chunk_paths:
+        doc.close()
+
+    logger.info("All %d pages done. Merging …", total)
+
+    try:
+        _merge_pdfs(result_pdfs, out_pdf)
+        merged_json = _merge_jsons(result_jsons)
+        n_pages     = len(merged_json.get("pages", []))
+
+        tmp = out_json.with_suffix(".tmp")
+        try:
+            tmp.write_text(
+                json.dumps(merged_json, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            tmp.replace(out_json)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
+
+        logger.info("✅ %s — %d pages merged", stem, n_pages)
+
+        # Clean up page checkpoint folder
+        for p in result_pdfs + result_jsons:
             p.unlink(missing_ok=True)
+        try:
+            page_dir.rmdir()
+        except OSError:
+            pass
+
+        return {
+            "file": stem, "status": "api_done", "pages": n_pages,
+            "out_pdf": out_pdf, "out_json": out_json,
+        }
+
+    except Exception as e:
+        logger.error("❌ %s merge failed: %s", stem, e)
+        # Leave page results intact as checkpoints for the next run
+        return {"file": stem, "status": "error", "error": str(e)}
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process a PDF too large for Azure DI's 500 MB limit")
-    parser.add_argument("pdf", type=Path, help="Path to the oversized PDF")
-    parser.add_argument("--output-dir", type=Path, default=ROOT / "output" / "output_large",
-                        help="Output directory (default: output/output_large/)")
+    parser = argparse.ArgumentParser(
+        description=f"Process a PDF >= {LARGE_PDF_MB} MB by splitting into pages and OCR-ing each"
+    )
+    parser.add_argument("pdf", type=Path, help="Path to the large PDF")
+    parser.add_argument(
+        "--output-dir", type=Path,
+        default=ROOT / "output" / "output_large",
+        help="Output directory (default: output/output_large/)",
+    )
     args = parser.parse_args()
 
     endpoint = os.environ.get("AZURE_DI_ENDPOINT", "")
@@ -291,10 +287,10 @@ if __name__ == "__main__":
         sys.exit(f"File not found: {args.pdf}")
 
     file_mb = args.pdf.stat().st_size // (1024 * 1024)
-    if file_mb < 400:
+    if file_mb < LARGE_PDF_MB:
         logger.warning(
-            "%s is only %d MB — you probably don't need this script. "
-            "Use run_batch.py directly.", args.pdf.name, file_mb
+            "%s is only %d MB (threshold %d MB) — consider run_batch.py instead.",
+            args.pdf.name, file_mb, LARGE_PDF_MB,
         )
 
     result = process_large_pdf(args.pdf, args.output_dir, endpoint, api_key)

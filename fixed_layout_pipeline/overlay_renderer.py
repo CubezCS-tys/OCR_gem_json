@@ -129,7 +129,17 @@ def rasterise_pdf(
     data_uris: list[PageRaster] = []
 
     for page in doc:
-        pix = page.get_pixmap(matrix=mat, alpha=False)
+        try:
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+        except Exception as e:
+            logger.warning(
+                "Page %d render error (%s) — substituting blank page",
+                page.number + 1, e,
+            )
+            w = max(1, int(page.rect.width * zoom))
+            h = max(1, int(page.rect.height * zoom))
+            pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, w, h))
+            pix.set_rect(pix.irect, (255, 255, 255))
         data_uris.append((_pixmap_to_data_uri(pix, image_format, image_quality), pix.width, pix.height))
 
     doc.close()
@@ -383,7 +393,17 @@ def _rasterise_and_erase(
     all_line_colors: list[list[str]] = []
 
     for page_idx, page in enumerate(doc):
-        pix = page.get_pixmap(matrix=mat, alpha=False)
+        try:
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+        except Exception as e:
+            logger.warning(
+                "Page %d render error (%s) — substituting blank page",
+                page_idx + 1, e,
+            )
+            w = max(1, int(page.rect.width * zoom))
+            h = max(1, int(page.rect.height * zoom))
+            pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, w, h))
+            pix.set_rect(pix.irect, (255, 255, 255))
         img = _PILImage.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
         # Sample text colors + erase text from the raster
